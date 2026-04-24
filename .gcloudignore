@@ -1,0 +1,11 @@
+.git/
+.gitignore
+.gcloudignore
+.dockerignore
+infra/
+Makefile
+*.tfstate*
+*.tfplan
+.DS_Store
+.idea/
+.vscode/
