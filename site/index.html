@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AC Transit Performance</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <header>
+    <h1>AC Transit performance</h1>
+    <div id="meta" class="muted"></div>
+  </header>
+
+  <section>
+    <h2>System summary</h2>
+    <p class="muted defn">
+      <strong>On time</strong> = arrived at the scheduled time, up to 3 min late
+      (<code>0&nbsp;≤&nbsp;delay&nbsp;≤&nbsp;3&nbsp;min</code>).
+      <strong>Early</strong> = before scheduled time (<code>delay&nbsp;&lt;&nbsp;0</code>).
+      <strong>Late</strong> = more than 3 min after schedule (<code>delay&nbsp;&gt;&nbsp;3&nbsp;min</code>).
+    </p>
+    <div id="system-cards" class="cards"></div>
+    <h3 class="sub-h">Cumulative on-time at looser thresholds</h3>
+    <p class="muted defn">
+      Same numerator (arrived at-or-after schedule), but counting anyone who arrived within
+      the larger window. <strong>Within 5 min</strong> = <code>0&nbsp;≤&nbsp;delay&nbsp;≤&nbsp;5&nbsp;min</code>.
+      <strong>Within 7 min</strong> = <code>0&nbsp;≤&nbsp;delay&nbsp;≤&nbsp;7&nbsp;min</code>.
+    </p>
+    <div id="system-secondary" class="cards small-cards"></div>
+  </section>
+
+  <section>
+    <h2>Schedule compliance</h2>
+    <p class="muted defn">
+      <strong>Service delivered</strong> = percent of trips scheduled today
+      that we observed running (≥1 stop arrival recorded). 99%+ is good,
+      under 90% is concerning. Dropped trips are scheduled trips with no
+      observed arrivals.
+    </p>
+    <div id="schedule-cards" class="cards"></div>
+    <details>
+      <summary id="dropped-summary">Sample of dropped trip IDs</summary>
+      <ul id="dropped-list"></ul>
+    </details>
+  </section>
+
+  <section>
+    <h2>Delay distribution</h2>
+    <p class="muted">Per stop arrival, delay = actual − scheduled. On-time = within ±1 min.</p>
+    <canvas id="histogram-chart" width="800" height="320"></canvas>
+  </section>
+
+  <section>
+    <h2>Per-route</h2>
+    <p class="muted">Click a column header to sort.</p>
+    <table id="routes-table">
+      <thead>
+        <tr>
+          <th data-key="route_id">Route</th>
+          <th>Δ distribution</th>
+          <th data-key="trips_observed">Trips</th>
+          <th data-key="observations">Stops</th>
+          <th data-key="service_delivered_pct">Service delivered %</th>
+          <th data-key="on_time_pct">On time % (≤3 min)</th>
+          <th data-key="late_pct">Late % (&gt;3 min)</th>
+          <th data-key="p50_delay_minutes">p50 delay (min)</th>
+          <th data-key="p95_delay_minutes">p95 delay (min)</th>
+          <th data-key="avg_speed_mph">Speed (mph)</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <script src="app.js"></script>
+</body>
+</html>

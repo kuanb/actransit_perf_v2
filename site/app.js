@@ -1,0 +1,261 @@
+const STATS_URL = "data/stats.json";
+
+const fmt = (v, d = 1) =>
+  v === null || v === undefined ? "—" : Number(v).toFixed(d);
+const intFmt = (v) =>
+  v === null || v === undefined ? "—" : Number(v).toLocaleString();
+
+// gradeColor maps t (0=worst, 1=best) to a {bg, fg} CSS color via a 3-stop
+// gradient: dark red → orange → green. Text flips to white when bg is darkest.
+function gradeColor(t) {
+  t = Math.max(0, Math.min(1, t));
+  const stops = [
+    { t: 0,   rgb: [173,  30,  35] },  // dark red
+    { t: 0.5, rgb: [232, 140,  35] },  // orange
+    { t: 1,   rgb: [160, 200, 130] },  // green
+  ];
+  let lo = stops[0], hi = stops[1];
+  for (let i = 0; i < stops.length - 1; i++) {
+    if (t <= stops[i + 1].t) {
+      lo = stops[i];
+      hi = stops[i + 1];
+      break;
+    }
+  }
+  const f = (t - lo.t) / (hi.t - lo.t);
+  const r = Math.round(lo.rgb[0] + (hi.rgb[0] - lo.rgb[0]) * f);
+  const g = Math.round(lo.rgb[1] + (hi.rgb[1] - lo.rgb[1]) * f);
+  const b = Math.round(lo.rgb[2] + (hi.rgb[2] - lo.rgb[2]) * f);
+  return {
+    bg: `rgb(${r},${g},${b})`,
+    fg: t < 0.3 ? "#ffffff" : "#1a1a1a",
+  };
+}
+
+// On-time: 98%+ = green, 80%- = dark red, linear in between.
+function gradeOnTime(pct) {
+  return gradeColor((pct - 80) / (98 - 80));
+}
+
+// Late: 2%- = green, 20%+ = dark red, linear in between (inverted).
+function gradeLate(pct) {
+  return gradeColor(1 - (pct - 2) / (20 - 2));
+}
+
+// Service delivered: 99%+ = green, 90%- = dark red, linear in between.
+function gradeServiceDelivered(pct) {
+  return gradeColor((pct - 90) / (99 - 90));
+}
+
+function routeBadge(r) {
+  const bg = r.color || "FFFFFF";
+  const fg = r.text_color || "000000";
+  return `<span class="route-badge" style="background:#${bg};color:#${fg}">${r.route_id}</span>`;
+}
+
+// Inline horizontal box plot of delay (minutes), x-axis fixed at -3 to +15 min
+// for cross-route comparability. Whiskers are p5/p95 (not min/max) to keep the
+// plot readable when a route has tail outliers.
+function routeBoxPlot(r) {
+  if (r.p50_delay_minutes === null || r.p50_delay_minutes === undefined) return "";
+  const W = 140, H = 22;
+  const xMin = -3, xMax = 15;
+  const xScale = (m) => {
+    const c = Math.max(xMin, Math.min(xMax, m));
+    return ((c - xMin) / (xMax - xMin)) * W;
+  };
+  const x_p5  = xScale(r.p5_delay_minutes);
+  const x_p25 = xScale(r.p25_delay_minutes);
+  const x_p50 = xScale(r.p50_delay_minutes);
+  const x_p75 = xScale(r.p75_delay_minutes);
+  const x_p95 = xScale(r.p95_delay_minutes);
+  const x0    = xScale(0);
+  const tip = `delay (min) — p5: ${fmt(r.p5_delay_minutes)}  p25: ${fmt(r.p25_delay_minutes)}  p50: ${fmt(r.p50_delay_minutes)}  p75: ${fmt(r.p75_delay_minutes)}  p95: ${fmt(r.p95_delay_minutes)}`;
+  return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" class="boxplot">
+    <title>${tip}</title>
+    <line x1="${x0}"  x2="${x0}"  y1="0" y2="${H}" stroke="#1971c2" stroke-width="1" stroke-dasharray="2,2"/>
+    <line x1="${x_p5}"  x2="${x_p95}" y1="${H/2}" y2="${H/2}" stroke="#888"/>
+    <line x1="${x_p5}"  x2="${x_p5}"  y1="${H/2 - 4}" y2="${H/2 + 4}" stroke="#888"/>
+    <line x1="${x_p95}" x2="${x_p95}" y1="${H/2 - 4}" y2="${H/2 + 4}" stroke="#888"/>
+    <rect x="${x_p25}" y="${H/2 - 6}" width="${Math.max(1, x_p75 - x_p25)}" height="12" fill="#e7eef5" stroke="#5b7eaa" stroke-width="1"/>
+    <line x1="${x_p50}" x2="${x_p50}" y1="${H/2 - 6}" y2="${H/2 + 6}" stroke="#1f3a5f" stroke-width="1.5"/>
+  </svg>`;
+}
+
+async function load() {
+  try {
+    const res = await fetch(STATS_URL);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    render(data);
+  } catch (e) {
+    document.body.insertAdjacentHTML(
+      "afterbegin",
+      `<div style="padding:16px;background:#fee;color:#900;">
+        Couldn't load ${STATS_URL}: ${e.message}.
+        Run <code>python3 scripts/generate_stats.py</code> first.
+      </div>`
+    );
+  }
+}
+
+function render(data) {
+  document.getElementById("meta").textContent =
+    `Service date: ${data.service_date} · generated ${data.generated_at}`;
+
+  // ---- system cards ----
+  const s = data.system;
+  const renderCards = (selector, items) => {
+    document.querySelector(selector).innerHTML = items
+      .map(({ label, val, grade }) => {
+        const style = grade
+          ? `background:${grade.bg};color:${grade.fg};border-color:transparent;`
+          : "";
+        return `
+          <div class="card" style="${style}">
+            <div class="label">${label}</div>
+            <div class="val">${val}</div>
+          </div>`;
+      })
+      .join("");
+  };
+
+  renderCards("#system-cards", [
+    { label: "Total trips",      val: intFmt(s.total_trips) },
+    { label: "Stops observed",   val: intFmt(s.total_observations) },
+    { label: "Vehicles seen",    val: intFmt(s.vehicles_observed) },
+    { label: "On time (≤3 min)", val: `${fmt(s.on_time_pct)}%`, grade: gradeOnTime(s.on_time_pct) },
+    { label: "Late (>3 min)",    val: `${fmt(s.late_pct)}%`,    grade: gradeLate(s.late_pct) },
+    { label: "Early",            val: `${fmt(s.early_pct)}%` },
+    { label: "p50 delay",        val: `${fmt(s.p50_delay_minutes)} min` },
+    { label: "p95 delay",        val: `${fmt(s.p95_delay_minutes)} min` },
+    { label: "Avg speed",        val: `${fmt(s.avg_speed_mph)} mph` },
+  ]);
+
+  renderCards("#system-secondary", [
+    { label: "Within 5 min", val: `${fmt(s.within_5min_pct)}%`, grade: gradeOnTime(s.within_5min_pct) },
+    { label: "Within 7 min", val: `${fmt(s.within_7min_pct)}%`, grade: gradeOnTime(s.within_7min_pct) },
+  ]);
+
+  // ---- schedule compliance ----
+  const sc = data.schedule_compliance;
+  const sdPct = sc.scheduled_trips
+    ? (100 * sc.ran_trips) / sc.scheduled_trips
+    : 0;
+  const droppedPct = 100 - sdPct;
+
+  renderCards("#schedule-cards", [
+    { label: "Scheduled trips",        val: intFmt(sc.scheduled_trips) },
+    { label: "Observed running",       val: intFmt(sc.ran_trips) },
+    { label: "Service delivered",      val: `${fmt(sdPct)}%`,
+      grade: gradeServiceDelivered(sdPct) },
+    { label: "Dropped / not observed", val: `${intFmt(sc.dropped_trips)} (${fmt(droppedPct)}%)` },
+  ]);
+
+  document.getElementById("dropped-summary").textContent =
+    `Sample of dropped trip IDs (showing first ${sc.dropped_trip_ids_sample.length})`;
+  document.getElementById("dropped-list").innerHTML = sc.dropped_trip_ids_sample
+    .map((id) => `<li>${id}</li>`)
+    .join("");
+
+  // ---- histogram ----
+  const ctx = document.getElementById("histogram-chart").getContext("2d");
+  const colors = ["#92c5de", "#c6dbef", "#a1d99b", "#fdae6b", "#fd8d3c", "#d62728"];
+  const counts = data.delay_histogram.counts;
+  const total = counts.reduce((a, b) => a + b, 0);
+  const pcts = counts.map((c) => (total > 0 ? (c / total) * 100 : 0));
+  new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: data.delay_histogram.labels,
+      datasets: [{
+        label: "% of stop arrivals",
+        data: pcts,
+        backgroundColor: colors,
+      }],
+    },
+    options: {
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const pct = ctx.raw;
+              const cnt = counts[ctx.dataIndex];
+              return `${pct.toFixed(1)}%  (${cnt.toLocaleString()} stops of ${total.toLocaleString()})`;
+            },
+          },
+        },
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          title: { display: true, text: "% of stop arrivals" },
+          ticks: { callback: (v) => `${v}%` },
+        },
+      },
+    },
+  });
+
+  // ---- routes table ----
+  const tbody = document.querySelector("#routes-table tbody");
+  let sortKey = "trips_observed";
+  let sortDir = -1; // descending
+
+  function renderRoutes() {
+    const rows = [...data.routes].sort((a, b) => {
+      const av = a[sortKey];
+      const bv = b[sortKey];
+      if (av === null || av === undefined) return 1;
+      if (bv === null || bv === undefined) return -1;
+      if (typeof av === "string") return sortDir * av.localeCompare(bv);
+      return sortDir * (av - bv);
+    });
+
+    const cellGrade = (pct, fn) => {
+      if (pct === null || pct === undefined) return "";
+      const g = fn(pct);
+      return `style="background:${g.bg};color:${g.fg};"`;
+    };
+
+    tbody.innerHTML = rows
+      .map((r) => {
+        const sd = r.service_delivered_pct;
+        const sdTitle = `ran ${intFmt(r.ran_trips)} of ${intFmt(r.scheduled_trips)} scheduled`;
+        return `
+      <tr>
+        <td>${routeBadge(r)}</td>
+        <td>${routeBoxPlot(r)}</td>
+        <td>${intFmt(r.trips_observed)}</td>
+        <td>${intFmt(r.observations)}</td>
+        <td ${cellGrade(sd, gradeServiceDelivered)} title="${sdTitle}">${sd === null ? "—" : fmt(sd)}</td>
+        <td ${cellGrade(r.on_time_pct, gradeOnTime)}>${fmt(r.on_time_pct)}</td>
+        <td ${cellGrade(r.late_pct, gradeLate)}>${fmt(r.late_pct)}</td>
+        <td>${fmt(r.p50_delay_minutes)}</td>
+        <td>${fmt(r.p95_delay_minutes)}</td>
+        <td>${fmt(r.avg_speed_mph)}</td>
+      </tr>`;
+      })
+      .join("");
+
+    document.querySelectorAll("#routes-table th").forEach((th) => {
+      th.classList.remove("sorted-asc", "sorted-desc");
+      if (th.dataset.key === sortKey) {
+        th.classList.add(sortDir > 0 ? "sorted-asc" : "sorted-desc");
+      }
+    });
+  }
+
+  document.querySelectorAll("#routes-table th").forEach((th) => {
+    th.addEventListener("click", () => {
+      const k = th.dataset.key;
+      if (k === sortKey) sortDir = -sortDir;
+      else { sortKey = k; sortDir = -1; }
+      renderRoutes();
+    });
+  });
+
+  renderRoutes();
+}
+
+load();

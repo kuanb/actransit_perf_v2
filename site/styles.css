@@ -1,0 +1,123 @@
+* { box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  margin: 0;
+  padding: 24px;
+  max-width: 1100px;
+  margin: 0 auto;
+  color: #222;
+  line-height: 1.5;
+}
+
+header {
+  border-bottom: 1px solid #e5e5e5;
+  padding-bottom: 12px;
+  margin-bottom: 24px;
+}
+
+h1 { margin: 0 0 4px; font-size: 28px; }
+h2 { margin: 0 0 12px; font-size: 18px; }
+section { margin-top: 32px; }
+
+.muted {
+  color: #6b6b6b;
+  font-size: 13px;
+}
+.defn {
+  margin-top: 0;
+  margin-bottom: 12px;
+  line-height: 1.6;
+}
+.defn code {
+  background: #eef2f7;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+.sub-h {
+  margin-top: 24px;
+  margin-bottom: 4px;
+  font-size: 14px;
+  color: #444;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.small-cards .card .val { font-size: 20px; }
+.small-cards .card { padding: 10px 12px; }
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+.card {
+  border: 1px solid #e5e5e5;
+  border-radius: 6px;
+  padding: 14px 16px;
+  background: #fafafa;
+}
+.card .label {
+  font-size: 11px;
+  color: inherit;
+  opacity: 0.7;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.card .val {
+  font-size: 26px;
+  font-weight: 600;
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+#dropped-summary {
+  margin-top: 12px;
+  cursor: pointer;
+}
+#dropped-list {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  columns: 3;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 8px;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+th, td {
+  padding: 6px 10px;
+  text-align: left;
+  border-bottom: 1px solid #eee;
+}
+th {
+  background: #f4f4f4;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+th.sorted-asc::after  { content: " ▲"; opacity: 0.5; }
+th.sorted-desc::after { content: " ▼"; opacity: 0.5; }
+tbody tr:hover { background: #fafafa; }
+
+.route-badge {
+  display: inline-block;
+  min-width: 36px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 13px;
+  text-align: center;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.boxplot {
+  display: block;
+  vertical-align: middle;
+}
+
+canvas { max-width: 100%; height: auto !important; }
