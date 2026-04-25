@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,29 +28,62 @@ const (
 	latestObjectKey     = "latest.json"
 	historyObjectKey    = "history.json"
 	routeStopsObjectKey = "route_stops.json"
+	gtfsCurrentKey      = "gtfs/current.zip"
+	gtfsHashMetaKey     = "feed-hash"
 	feedURLTemplate     = "https://api.actransit.org/transit/gtfsrt/vehicles?token=%s"
 	allStopsURLTemplate = "https://api.actransit.org/transit/actrealtime/allstops?rt=%s&token=%s"
+	gtfsURLTemplate     = "https://api.actransit.org/transit/gtfs/download?token=%s"
 )
 
 var (
 	gcsClient  *storage.Client
 	bucketName string
-	secretName string
 
-	secretOnce  sync.Once
-	secretValue string
-	secretErr   error
+	apiToken  *tokenCache
+	gtfsToken *tokenCache
 )
+
+type tokenCache struct {
+	name  string
+	once  sync.Once
+	value string
+	err   error
+}
+
+func (t *tokenCache) Get(ctx context.Context) (string, error) {
+	t.once.Do(func() {
+		c, err := secretmanager.NewClient(ctx)
+		if err != nil {
+			t.err = err
+			return
+		}
+		defer c.Close()
+		resp, err := c.AccessSecretVersion(ctx, &secretmanagerpb.AccessSecretVersionRequest{Name: t.name})
+		if err != nil {
+			t.err = fmt.Errorf("access %s: %w", t.name, err)
+			return
+		}
+		t.value = string(resp.Payload.Data)
+	})
+	return t.value, t.err
+}
 
 func main() {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 
 	bucketName = os.Getenv("CACHE_BUCKET")
-	secretName = os.Getenv("SECRET_NAME")
-	if bucketName == "" || secretName == "" {
-		slog.Error("missing required env", "CACHE_BUCKET", bucketName, "SECRET_NAME", secretName)
+	apiSecretName := os.Getenv("SECRET_NAME")
+	gtfsSecretName := os.Getenv("GTFS_SECRET_NAME")
+	if bucketName == "" || apiSecretName == "" || gtfsSecretName == "" {
+		slog.Error("missing required env",
+			"CACHE_BUCKET", bucketName,
+			"SECRET_NAME", apiSecretName,
+			"GTFS_SECRET_NAME", gtfsSecretName,
+		)
 		os.Exit(1)
 	}
+	apiToken = &tokenCache{name: apiSecretName}
+	gtfsToken = &tokenCache{name: gtfsSecretName}
 
 	ctx := context.Background()
 	c, err := storage.NewClient(ctx)
@@ -66,6 +101,7 @@ func main() {
 
 	http.HandleFunc("/scrape", handleScrape)
 	http.HandleFunc("/refresh-stops", handleRefreshStops)
+	http.HandleFunc("/refresh-gtfs", handleRefreshGTFS)
 	http.HandleFunc("/", handleHealth)
 
 	slog.Info("listening", "port", port)
@@ -106,8 +142,33 @@ func handleRefreshStops(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintln(w, "ok")
 }
 
+func handleRefreshGTFS(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	stats, err := refreshGTFS(r.Context())
+	if err != nil {
+		slog.Error("refresh-gtfs failed", "err", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if stats.Changed {
+		slog.Info("refresh-gtfs updated",
+			"duration_ms", time.Since(start).Milliseconds(),
+			"bytes", stats.Bytes,
+			"new_hash", stats.NewHash[:12],
+			"archive_key", stats.ArchiveKey,
+		)
+	} else {
+		slog.Info("refresh-gtfs unchanged",
+			"duration_ms", time.Since(start).Milliseconds(),
+			"bytes", stats.Bytes,
+			"hash", stats.NewHash[:12],
+		)
+	}
+	fmt.Fprintln(w, "ok")
+}
+
 func scrape(ctx context.Context) error {
-	token, err := getToken(ctx)
+	token, err := apiToken.Get(ctx)
 	if err != nil {
 		return fmt.Errorf("get token: %w", err)
 	}
@@ -156,7 +217,7 @@ type routeStopsEntry struct {
 func refreshStops(ctx context.Context) (refreshStats, error) {
 	var stats refreshStats
 
-	token, err := getToken(ctx)
+	token, err := apiToken.Get(ctx)
 	if err != nil {
 		return stats, fmt.Errorf("get token: %w", err)
 	}
@@ -218,22 +279,65 @@ func refreshStops(ctx context.Context) (refreshStats, error) {
 	return stats, nil
 }
 
-func getToken(ctx context.Context) (string, error) {
-	secretOnce.Do(func() {
-		c, err := secretmanager.NewClient(ctx)
-		if err != nil {
-			secretErr = err
-			return
+type gtfsStats struct {
+	Bytes      int
+	PrevHash   string
+	NewHash    string
+	Changed    bool
+	ArchiveKey string
+}
+
+func refreshGTFS(ctx context.Context) (gtfsStats, error) {
+	var stats gtfsStats
+
+	token, err := gtfsToken.Get(ctx)
+	if err != nil {
+		return stats, fmt.Errorf("get gtfs token: %w", err)
+	}
+
+	body, err := httpGet(ctx, fmt.Sprintf(gtfsURLTemplate, token))
+	if err != nil {
+		return stats, fmt.Errorf("download gtfs: %w", err)
+	}
+	stats.Bytes = len(body)
+
+	sum := sha256.Sum256(body)
+	stats.NewHash = hex.EncodeToString(sum[:])
+
+	attrs, err := gcsClient.Bucket(bucketName).Object(gtfsCurrentKey).Attrs(ctx)
+	switch {
+	case err == nil:
+		stats.PrevHash = attrs.Metadata[gtfsHashMetaKey]
+		if stats.PrevHash == stats.NewHash {
+			return stats, nil
 		}
-		defer c.Close()
-		resp, err := c.AccessSecretVersion(ctx, &secretmanagerpb.AccessSecretVersionRequest{Name: secretName})
-		if err != nil {
-			secretErr = fmt.Errorf("access %s: %w", secretName, err)
-			return
-		}
-		secretValue = string(resp.Payload.Data)
-	})
-	return secretValue, secretErr
+	case errors.Is(err, storage.ErrObjectNotExist):
+		// first run: nothing to compare
+	default:
+		return stats, fmt.Errorf("get current attrs: %w", err)
+	}
+
+	stats.Changed = true
+	stats.ArchiveKey = fmt.Sprintf("gtfs/%s.zip", time.Now().UTC().Format("20060102T150405Z"))
+
+	if err := writeGTFSObject(ctx, stats.ArchiveKey, body, stats.NewHash); err != nil {
+		return stats, fmt.Errorf("write archive: %w", err)
+	}
+	if err := writeGTFSObject(ctx, gtfsCurrentKey, body, stats.NewHash); err != nil {
+		return stats, fmt.Errorf("write current: %w", err)
+	}
+	return stats, nil
+}
+
+func writeGTFSObject(ctx context.Context, key string, data []byte, hash string) error {
+	w := gcsClient.Bucket(bucketName).Object(key).NewWriter(ctx)
+	w.ContentType = "application/zip"
+	w.Metadata = map[string]string{gtfsHashMetaKey: hash}
+	if _, err := w.Write(data); err != nil {
+		_ = w.Close()
+		return err
+	}
+	return w.Close()
 }
 
 func httpGet(ctx context.Context, url string) ([]byte, error) {

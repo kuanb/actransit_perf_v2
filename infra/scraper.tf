@@ -34,6 +34,11 @@ resource "google_cloud_run_v2_service" "scraper" {
         name  = "SECRET_NAME"
         value = "${data.google_secret_manager_secret.actransit_token.id}/versions/latest"
       }
+
+      env {
+        name  = "GTFS_SECRET_NAME"
+        value = "${data.google_secret_manager_secret.actransit_gtfs_token.id}/versions/latest"
+      }
     }
   }
 }

@@ -7,8 +7,18 @@ data "google_secret_manager_secret" "actransit_token" {
   secret_id = "actransit-token"
 }
 
+data "google_secret_manager_secret" "actransit_gtfs_token" {
+  secret_id = "actransit-gtfs-token"
+}
+
 resource "google_secret_manager_secret_iam_member" "scraper_token_access" {
   secret_id = data.google_secret_manager_secret.actransit_token.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.scraper.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "scraper_gtfs_token_access" {
+  secret_id = data.google_secret_manager_secret.actransit_gtfs_token.id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.scraper.email}"
 }
