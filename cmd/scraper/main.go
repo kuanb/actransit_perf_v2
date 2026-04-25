@@ -156,6 +156,7 @@ func handleRefreshGTFS(w http.ResponseWriter, r *http.Request) {
 			"bytes", stats.Bytes,
 			"new_hash", stats.NewHash[:12],
 			"archive_key", stats.ArchiveKey,
+			"routes_processed", stats.RoutesProcessed,
 		)
 	} else {
 		slog.Info("refresh-gtfs unchanged",
@@ -280,11 +281,12 @@ func refreshStops(ctx context.Context) (refreshStats, error) {
 }
 
 type gtfsStats struct {
-	Bytes      int
-	PrevHash   string
-	NewHash    string
-	Changed    bool
-	ArchiveKey string
+	Bytes           int
+	PrevHash        string
+	NewHash         string
+	Changed         bool
+	ArchiveKey      string
+	RoutesProcessed int
 }
 
 func refreshGTFS(ctx context.Context) (gtfsStats, error) {
@@ -320,11 +322,20 @@ func refreshGTFS(ctx context.Context) (gtfsStats, error) {
 	stats.Changed = true
 	stats.ArchiveKey = fmt.Sprintf("gtfs/%s.zip", time.Now().UTC().Format("20060102T150405Z"))
 
+	routes, err := processGTFS(body, stats.NewHash)
+	if err != nil {
+		return stats, fmt.Errorf("process gtfs: %w", err)
+	}
+	stats.RoutesProcessed = len(routes)
+
 	if err := writeGTFSObject(ctx, stats.ArchiveKey, body, stats.NewHash); err != nil {
 		return stats, fmt.Errorf("write archive: %w", err)
 	}
 	if err := writeGTFSObject(ctx, gtfsCurrentKey, body, stats.NewHash); err != nil {
 		return stats, fmt.Errorf("write current: %w", err)
+	}
+	if err := writePerRouteJSONs(ctx, routes); err != nil {
+		return stats, fmt.Errorf("write per-route: %w", err)
 	}
 	return stats, nil
 }
