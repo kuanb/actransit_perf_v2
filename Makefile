@@ -33,7 +33,8 @@ release:
 	$(MAKE) deploy TAG=$(TAG)
 
 logs:
-	gcloud logging read 'resource.labels.service_name="actransit-scraper"' --limit 50 --freshness=15m
+	gcloud logging read 'resource.labels.service_name="actransit-scraper" AND jsonPayload.msg!=""' --limit 50 --freshness=15m \
+		--format='value(timestamp,severity,jsonPayload.msg,jsonPayload.in_flight,jsonPayload.duration_ms,jsonPayload.err)'
 
 invoke:
 	curl -H "Authorization: Bearer $$(gcloud auth print-identity-token)" \
