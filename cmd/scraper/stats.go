@@ -58,10 +58,11 @@ type systemStats struct {
 }
 
 type scheduleCompliance struct {
-	ScheduledTrips        int      `json:"scheduled_trips"`
-	RanTrips              int      `json:"ran_trips"`
-	DroppedTrips          int      `json:"dropped_trips"`
-	DroppedTripIDsSample  []string `json:"dropped_trip_ids_sample"`
+	ScheduledTrips       int      `json:"scheduled_trips"`
+	RanTrips             int      `json:"ran_trips"`
+	DroppedTrips         int      `json:"dropped_trips"`
+	TripsNotCompleted    int      `json:"trips_not_completed"`
+	DroppedTripIDsSample []string `json:"dropped_trip_ids_sample"`
 }
 
 type routeStats struct {
@@ -126,6 +127,10 @@ func generateDailyStats(ctx context.Context, serviceDate civil.Date) (*dailyStat
 	ranTrips, err := queryRanTrips(ctx, serviceDate)
 	if err != nil {
 		return nil, fmt.Errorf("query ran trips: %w", err)
+	}
+	notCompleted, err := queryTripsNotCompleted(ctx, serviceDate)
+	if err != nil {
+		return nil, fmt.Errorf("query trips not completed: %w", err)
 	}
 
 	ranByRoute := make(map[string]int)
@@ -218,6 +223,7 @@ func generateDailyStats(ctx context.Context, serviceDate civil.Date) (*dailyStat
 			ScheduledTrips:       len(scheduled),
 			RanTrips:             ranInSchedule,
 			DroppedTrips:         len(dropped),
+			TripsNotCompleted:    notCompleted,
 			DroppedTripIDsSample: sample,
 		},
 		DistortionHistogram:  distHist,
@@ -485,6 +491,40 @@ func queryRanTrips(ctx context.Context, serviceDate civil.Date) (map[string]stru
 		out[row.TripID] = struct{}{}
 	}
 	return out, nil
+}
+
+// queryTripsNotCompleted counts trips that ran (had ≥1 stop arrival
+// observed) but never reached their final scheduled stop. Per trip:
+// compare MAX(stop_sequence with actual_arrival NOT NULL) against
+// MAX(stop_sequence). If less, the bus broke down mid-route, was
+// reassigned mid-trip, or we lost GPS before completion.
+func queryTripsNotCompleted(ctx context.Context, serviceDate civil.Date) (int, error) {
+	q := bqClient.Query(fmt.Sprintf(`
+		WITH per_trip AS (
+		  SELECT
+		    trip_id,
+		    MAX(stop_sequence) AS final_seq,
+		    MAX(IF(actual_arrival IS NOT NULL, stop_sequence, NULL)) AS last_observed_seq
+		  FROM `+"`%s.actransit.trip_observations`"+`
+		  WHERE service_date = "%s"
+		  GROUP BY trip_id
+		)
+		SELECT COUNT(*) AS n
+		FROM per_trip
+		WHERE last_observed_seq IS NOT NULL
+		  AND last_observed_seq < final_seq
+	`, projectID, serviceDate))
+	it, err := q.Read(ctx)
+	if err != nil {
+		return 0, err
+	}
+	var row struct {
+		N int64 `bigquery:"n"`
+	}
+	if err := it.Next(&row); err != nil {
+		return 0, err
+	}
+	return int(row.N), nil
 }
 
 func queryStatsSystem(ctx context.Context, serviceDate civil.Date) (*systemStats, error) {

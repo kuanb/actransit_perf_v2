@@ -106,6 +106,12 @@ function gradeServiceDelivered(pct) {
   return gradeColor((pct - 90) / (99 - 90));
 }
 
+// Trips not completed (as % of running trips): 0% = green, 25%+ = dark red.
+// Higher means more buses didn't finish their route.
+function gradeNotCompleted(pct) {
+  return gradeColor(1 - pct / 25);
+}
+
 // distortionColor: blue (very early, -100%) → light gray (around 0) → red (very
 // late, +100%). Used to color the 42 bars in the distortion histogram.
 function distortionColor(centerPct) {
@@ -297,12 +303,20 @@ function render(data) {
     : 0;
   const droppedPct = 100 - sdPct;
 
+  // Trips that ran but never reached their final scheduled stop, as a
+  // percent of trips that ran. Counts buses that broke down mid-route,
+  // were reassigned mid-trip, or lost GPS before completion.
+  const notCompleted = sc.trips_not_completed || 0;
+  const notCompletedPct = sc.ran_trips ? (100 * notCompleted) / sc.ran_trips : 0;
+
   renderCards("#schedule-cards", [
     { label: "Scheduled trips",        val: intFmt(sc.scheduled_trips) },
     { label: "Observed running",       val: intFmt(sc.ran_trips) },
     { label: "Service delivered",      val: `${fmt(sdPct)}%`,
       grade: gradeServiceDelivered(sdPct) },
     { label: "Dropped / not observed", val: `${intFmt(sc.dropped_trips)} (${fmt(droppedPct)}%)` },
+    { label: "Trips not completed",    val: `${intFmt(notCompleted)} (${fmt(notCompletedPct)}%)`,
+      grade: gradeNotCompleted(notCompletedPct) },
   ]);
 
   // ---- distortion histogram (42 buckets: under, 40 × 5%, over) ----
