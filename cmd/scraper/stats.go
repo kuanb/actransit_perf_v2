@@ -139,6 +139,13 @@ func generateDailyStats(ctx context.Context, serviceDate civil.Date) (*dailyStat
 	if err != nil {
 		return nil, fmt.Errorf("query system stats: %w", err)
 	}
+	// queryStatsSystem filters to is_stale = FALSE so the per-stop delay
+	// stats (on-time %, p50/p95, etc.) are computed from clean data. But
+	// COUNT(DISTINCT trip_id) under that filter excludes trips whose only
+	// rows are is_stale=TRUE (mostly residue from the pre-v16 parked-bus
+	// thrash bug). For the headline trip count we want the full set so the
+	// page agrees with "Observed running" in schedule compliance.
+	sys.TotalTrips = int64(len(ranTrips))
 	routes, err := queryStatsPerRoute(ctx, serviceDate)
 	if err != nil {
 		return nil, fmt.Errorf("query route stats: %w", err)
