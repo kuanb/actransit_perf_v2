@@ -29,11 +29,15 @@ required APIs enabled, and a Terraform state bucket at
 
 ```sh
 make tf-init                # only the first time
-make build TAG=vN           # build + push image to Artifact Registry
-make deploy TAG=vN          # terraform apply with the new tag
+make release TAG=vN         # build + push image, then terraform apply (use this for code changes)
+make build TAG=vN           # just build + push (rare; use release instead)
+make deploy TAG=vN          # just terraform apply at a known-good tag (for infra-only changes)
 make invoke                 # curl /scrape with your identity token
 make logs                   # recent Cloud Run logs
 ```
+
+`make deploy` refuses to run if the tag isn't in Artifact Registry, so you
+can't accidentally deploy a tag whose build hasn't finished pushing.
 
 ### Versioning
 
@@ -41,11 +45,11 @@ The Go scraper is shipped as a container image tagged `vN` (`v1`, `v2`, ...) in
 Artifact Registry. The tag is just an integer marker — there's no semver, no
 automation. Bump it manually whenever the image content needs to change:
 
-| Change                                  | Bump tag? |
-|-----------------------------------------|-----------|
-| Go code (`cmd/`, future `internal/`)    | yes       |
-| `Dockerfile` or `go.mod` / `go.sum`     | yes       |
-| Terraform only (`infra/*.tf`)           | no        |
+| Change                                  | Command                       |
+|-----------------------------------------|-------------------------------|
+| Go code (`cmd/`, future `internal/`)    | `make release TAG=vN`         |
+| `Dockerfile` or `go.mod` / `go.sum`     | `make release TAG=vN`         |
+| Terraform only (`infra/*.tf`)           | `make deploy TAG=<current>`   |
 
 For pure Terraform changes, pass the **current** tag (don't omit `TAG=`) so
 Terraform doesn't silently downgrade the image to the variable's default (`v1`).

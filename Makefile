@@ -3,7 +3,7 @@ REGION     := us-west1
 REPO       := actransit-scraper
 IMAGE      := $(REGION)-docker.pkg.dev/$(PROJECT_ID)/$(REPO)/scraper
 
-.PHONY: tf-init tf-plan tf-apply tf-fmt build deploy logs invoke run-local
+.PHONY: tf-init tf-plan tf-apply tf-fmt build deploy release logs invoke run-local
 
 tf-init:
 	cd infra && terraform init
@@ -23,7 +23,14 @@ build:
 
 deploy:
 	@test -n "$(TAG)" || (echo "usage: make deploy TAG=v1" && exit 1)
+	@gcloud artifacts docker tags list $(IMAGE) --format='value(TAG)' | grep -qx '$(TAG)' \
+		|| (echo "ERROR: image tag '$(TAG)' not found in Artifact Registry. Run 'make build TAG=$(TAG)' first." && exit 1)
 	cd infra && terraform apply -var "image_tag=$(TAG)"
+
+release:
+	@test -n "$(TAG)" || (echo "usage: make release TAG=v1" && exit 1)
+	$(MAKE) build TAG=$(TAG)
+	$(MAKE) deploy TAG=$(TAG)
 
 logs:
 	gcloud logging read 'resource.labels.service_name="actransit-scraper"' --limit 50 --freshness=15m
