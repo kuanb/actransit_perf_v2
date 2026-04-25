@@ -24,7 +24,7 @@ func TestUpdateInFlightStateNewVehicle(t *testing.T) {
 	s := stateFile{}
 	vehicles := []vehicleSnapshot{mkSnapshot("V1", "T1", "R1", now)}
 
-	out, stats := updateInFlightState(s, vehicles, now)
+	out, stats, _ := updateInFlightState(s, vehicles, now)
 
 	if stats.NewTripsStarted != 1 {
 		t.Fatalf("NewTripsStarted = %d, want 1", stats.NewTripsStarted)
@@ -60,7 +60,7 @@ func TestUpdateInFlightStateContinuingTrip(t *testing.T) {
 	}
 	vehicles := []vehicleSnapshot{mkSnapshot("V1", "T1", "R1", later)}
 
-	out, stats := updateInFlightState(s, vehicles, later)
+	out, stats, _ := updateInFlightState(s, vehicles, later)
 
 	if stats.ProbesAppended != 1 {
 		t.Fatalf("ProbesAppended = %d, want 1", stats.ProbesAppended)
@@ -99,7 +99,7 @@ func TestUpdateInFlightStateDuplicateTimestampNotAppended(t *testing.T) {
 	// Same vehicle, same trip, SAME TS as the existing probe (caller may run
 	// at any wall-clock time; only vs.TS controls dedup).
 	vs := mkSnapshot("V1", "T1", "R1", ts)
-	out, stats := updateInFlightState(s, []vehicleSnapshot{vs}, ts.Add(time.Minute))
+	out, stats, _ := updateInFlightState(s, []vehicleSnapshot{vs}, ts.Add(time.Minute))
 
 	if stats.ProbesAppended != 0 {
 		t.Fatalf("ProbesAppended = %d, want 0 (duplicate TS should be skipped)", stats.ProbesAppended)
@@ -128,13 +128,16 @@ func TestUpdateInFlightStateTripChange(t *testing.T) {
 	}
 	vehicles := []vehicleSnapshot{mkSnapshot("V1", "T2", "R1", later)}
 
-	out, stats := updateInFlightState(s, vehicles, later)
+	out, stats, preempted := updateInFlightState(s, vehicles, later)
 
 	if stats.NewTripsStarted != 1 {
 		t.Fatalf("NewTripsStarted = %d, want 1", stats.NewTripsStarted)
 	}
-	if stats.TripsExpired != 1 {
-		t.Fatalf("TripsExpired = %d, want 1", stats.TripsExpired)
+	if len(preempted) != 1 {
+		t.Fatalf("preempted len = %d, want 1 (the old T1 trip)", len(preempted))
+	}
+	if preempted[0].TripID != "T1" {
+		t.Fatalf("preempted[0].TripID = %q, want T1 (the trip that was replaced)", preempted[0].TripID)
 	}
 	if len(out.InFlight) != 1 {
 		t.Fatalf("len(InFlight) = %d, want 1", len(out.InFlight))
@@ -415,7 +418,7 @@ func TestUpdateInFlightStateProbeCap(t *testing.T) {
 	newTS := base.Add(time.Duration(maxProbesPerTrip) * time.Second)
 	vehicles := []vehicleSnapshot{mkSnapshot("V1", "T1", "R1", newTS)}
 
-	out, _ := updateInFlightState(s, vehicles, newTS)
+	out, _, _ := updateInFlightState(s, vehicles, newTS)
 
 	if len(out.InFlight) != 1 {
 		t.Fatalf("len(InFlight) = %d, want 1", len(out.InFlight))

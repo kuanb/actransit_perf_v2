@@ -109,7 +109,8 @@ func trackPerformance(ctx context.Context) (trackStats, error) {
 
 	now := time.Now().UTC()
 	vehicles := parseVehicleEntities(rawEntities, now)
-	s, stats = updateInFlightState(s, vehicles, now)
+	var preempted []inFlightTrip
+	s, stats, preempted = updateInFlightState(s, vehicles, now)
 
 	cache := ensureGTFSCache(ctx)
 	if cache != nil {
@@ -118,14 +119,15 @@ func trackPerformance(ctx context.Context) (trackStats, error) {
 	}
 
 	stale := pruneStaleTrips(&s, now.Add(-staleThreshold))
-	stats.TripsExpired += len(stale)
+	finalize := append(preempted, stale...)
+	stats.TripsExpired = len(finalize)
 	stats.InFlight = len(s.InFlight)
-	if len(stale) > 0 {
-		obsCount, probeCount, ferr := writeFinalizedTrips(ctx, stale, cache, now)
+	if len(finalize) > 0 {
+		obsCount, probeCount, ferr := writeFinalizedTrips(ctx, finalize, cache, now)
 		stats.RowsWrittenObs += obsCount
 		stats.RowsWrittenProbes += probeCount
 		if ferr != nil {
-			slog.Warn("finalize to BigQuery failed", "err", ferr, "trips", len(stale))
+			slog.Warn("finalize to BigQuery failed", "err", ferr, "trips", len(finalize))
 		}
 	}
 
@@ -184,8 +186,14 @@ func parseVehicleEntities(raw []json.RawMessage, fallbackNow time.Time) []vehicl
 	return out
 }
 
-func updateInFlightState(s stateFile, vehicles []vehicleSnapshot, now time.Time) (stateFile, trackStats) {
+// updateInFlightState mutates the in-flight set by appending probes for
+// continuing trips and starting new trips for new vehicles or trip-id
+// changes. Returns the new state, stats for the mutation, and any trips
+// that were preempted by a vehicle starting a new trip (so the caller
+// can finalize them to BigQuery before they're lost).
+func updateInFlightState(s stateFile, vehicles []vehicleSnapshot, now time.Time) (stateFile, trackStats, []inFlightTrip) {
 	var stats trackStats
+	var preempted []inFlightTrip
 
 	byVehicle := make(map[string]*inFlightTrip, len(s.InFlight))
 	for i := range s.InFlight {
@@ -219,7 +227,7 @@ func updateInFlightState(s stateFile, vehicles []vehicleSnapshot, now time.Time)
 		}
 
 		if ok {
-			stats.TripsExpired++
+			preempted = append(preempted, *existing)
 		}
 		byVehicle[vs.VehicleID] = &inFlightTrip{
 			VehicleID:   vs.VehicleID,
@@ -242,7 +250,7 @@ func updateInFlightState(s stateFile, vehicles []vehicleSnapshot, now time.Time)
 	s.UpdatedAt = now
 	s.SchemaVersion = 1
 	stats.InFlight = len(out)
-	return s, stats
+	return s, stats, preempted
 }
 
 // pruneStaleTrips removes any in-flight trip whose LastSeenTS is older
