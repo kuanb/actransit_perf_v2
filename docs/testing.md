@@ -24,7 +24,15 @@ What's covered:
 - **`cmd/scraper/track_test.go`** — `updateInFlightState`, the pure
   state-machine half of `trackPerformance`. Covers new vehicle, continuing
   trip, trip change for the same vehicle, stale pruning past
-  `staleThreshold` (20 min), and the `maxProbesPerTrip` (20) cap.
+  `staleThreshold` (20 min), and the `maxProbesPerTrip` (20) cap. Also
+  covers `projectInFlightProbes` (fills `dist_along_route_m` and
+  `nearest_stop_seq` per probe; skips trips with unknown shapes; doesn't
+  overwrite already-projected probes) and `detectStopArrivals` (probe
+  before/at/past a stop, two-probe linear interpolation across a stop,
+  preservation of already-recorded arrivals, single probe past multiple
+  stops, unknown-route safety).
+- **`cmd/scraper/gtfs_cache_test.go`** — `nearestStopSeq` with
+  before-first / on-stop / between / past-last cases plus empty input.
 
 ## Smoke test — `make smoke`
 
