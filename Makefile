@@ -3,7 +3,7 @@ REGION     := us-west1
 REPO       := actransit-scraper
 IMAGE      := $(REGION)-docker.pkg.dev/$(PROJECT_ID)/$(REPO)/scraper
 
-.PHONY: tf-init tf-plan tf-apply tf-fmt build deploy release logs invoke run-local
+.PHONY: tf-init tf-plan tf-apply tf-fmt build deploy release logs invoke run-local test smoke
 
 tf-init:
 	cd infra && terraform init
@@ -42,3 +42,39 @@ invoke:
 
 run-local:
 	go run ./cmd/scraper
+
+test:
+	go test ./... -race -v
+
+# Post-deploy smoke check. Hits the live service + verifies side-effect
+# artifacts in GCS. Requires a deployed service and `gcloud auth login`.
+# /refresh-gtfs is skipped by default (downloads ~14 MB); pass TAG=full to
+# include it.
+smoke:
+	@set -euo pipefail; \
+	URL="$$(cd infra && terraform output -raw scraper_url)"; \
+	TOKEN="$$(gcloud auth print-identity-token)"; \
+	BUCKET="gs://$(PROJECT_ID)-actransit-cache"; \
+	hit() { \
+		echo "==> $$1 $$2"; \
+		code=$$(curl -s -o /dev/null -w '%{http_code}' -X "$$1" -H "Authorization: Bearer $$TOKEN" "$$URL$$2"); \
+		if [ "$$code" != "200" ]; then echo "FAIL $$1 $$2 -> $$code"; exit 1; fi; \
+		echo "  OK"; \
+	}; \
+	check() { \
+		echo "==> gsutil stat $$1"; \
+		gsutil -q stat "$$1" || { echo "FAIL: $$1 not found"; exit 1; }; \
+		echo "  OK"; \
+	}; \
+	hit GET /; \
+	hit POST /scrape; \
+	check "$$BUCKET/latest.json"; \
+	hit POST /refresh-stops; \
+	check "$$BUCKET/route_stops.json"; \
+	hit POST /track-performance; \
+	check "$$BUCKET/state.json"; \
+	if [ "$(TAG)" = "full" ]; then \
+		hit POST /refresh-gtfs; \
+		check "$$BUCKET/gtfs/current.zip"; \
+	fi; \
+	echo "==> all smoke checks passed"

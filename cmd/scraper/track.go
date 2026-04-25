@@ -63,6 +63,18 @@ type trackStats struct {
 	Conflict        bool
 }
 
+type vehicleSnapshot struct {
+	VehicleID string
+	RouteID   string
+	TripID    string
+	StartDate string
+	TS        time.Time
+	Lat       float64
+	Lon       float64
+	Bearing   float64
+	SpeedMps  float64
+}
+
 var (
 	metricsClient *monitoring.MetricClient
 	projectID     string
@@ -88,16 +100,31 @@ func trackPerformance(ctx context.Context) (trackStats, error) {
 		return stats, fmt.Errorf("read state: %w", err)
 	}
 
-	byVehicle := make(map[string]*inFlightTrip, len(s.InFlight))
-	for i := range s.InFlight {
-		byVehicle[s.InFlight[i].VehicleID] = &s.InFlight[i]
+	now := time.Now().UTC()
+	vehicles := parseVehicleEntities(rawEntities, now)
+	s, stats = updateInFlightState(s, vehicles, now)
+
+	if err := writeState(ctx, s, gen); err != nil {
+		if errors.Is(err, errStateConflict) {
+			stats.Conflict = true
+			return stats, nil
+		}
+		return stats, fmt.Errorf("write state: %w", err)
 	}
 
-	now := time.Now().UTC()
+	if err := emitVehiclesInFlight(ctx, int64(stats.InFlight)); err != nil {
+		slog.Warn("emit vehicles_in_flight failed", "err", err)
+	}
+
+	return stats, nil
+}
+
+func parseVehicleEntities(raw []json.RawMessage, fallbackNow time.Time) []vehicleSnapshot {
+	out := make([]vehicleSnapshot, 0, len(raw))
 	um := protojson.UnmarshalOptions{DiscardUnknown: true}
-	for _, raw := range rawEntities {
+	for _, r := range raw {
 		e := &gtfs.FeedEntity{}
-		if err := um.Unmarshal(raw, e); err != nil {
+		if err := um.Unmarshal(r, e); err != nil {
 			continue
 		}
 		v := e.GetVehicle()
@@ -108,32 +135,50 @@ func trackPerformance(ctx context.Context) (trackStats, error) {
 		if vid == "" {
 			continue
 		}
-		trip := v.GetTrip()
 		pos := v.GetPosition()
 		if pos == nil {
 			continue
 		}
-
-		tripID := trip.GetTripId()
-		routeID := trip.GetRouteId()
-		startDate := trip.GetStartDate()
-
-		ts := now
+		trip := v.GetTrip()
+		ts := fallbackNow
 		if v.GetTimestamp() != 0 {
 			ts = time.Unix(int64(v.GetTimestamp()), 0).UTC()
 		}
+		out = append(out, vehicleSnapshot{
+			VehicleID: vid,
+			RouteID:   trip.GetRouteId(),
+			TripID:    trip.GetTripId(),
+			StartDate: trip.GetStartDate(),
+			TS:        ts,
+			Lat:       float64(pos.GetLatitude()),
+			Lon:       float64(pos.GetLongitude()),
+			Bearing:   float64(pos.GetBearing()),
+			SpeedMps:  float64(pos.GetSpeed()),
+		})
+	}
+	return out
+}
 
+func updateInFlightState(s stateFile, vehicles []vehicleSnapshot, now time.Time) (stateFile, trackStats) {
+	var stats trackStats
+
+	byVehicle := make(map[string]*inFlightTrip, len(s.InFlight))
+	for i := range s.InFlight {
+		byVehicle[s.InFlight[i].VehicleID] = &s.InFlight[i]
+	}
+
+	for _, vs := range vehicles {
 		p := probe{
-			TS:               ts,
-			Lat:              float64(pos.GetLatitude()),
-			Lon:              float64(pos.GetLongitude()),
-			BearingDeg:       float64(pos.GetBearing()),
-			ReportedSpeedMps: float64(pos.GetSpeed()),
+			TS:               vs.TS,
+			Lat:              vs.Lat,
+			Lon:              vs.Lon,
+			BearingDeg:       vs.Bearing,
+			ReportedSpeedMps: vs.SpeedMps,
 		}
 
-		existing, ok := byVehicle[vid]
-		if ok && existing.TripID == tripID {
-			existing.LastSeenTS = ts
+		existing, ok := byVehicle[vs.VehicleID]
+		if ok && existing.TripID == vs.TripID {
+			existing.LastSeenTS = vs.TS
 			existing.Probes = append(existing.Probes, p)
 			if len(existing.Probes) > maxProbesPerTrip {
 				existing.Probes = existing.Probes[len(existing.Probes)-maxProbesPerTrip:]
@@ -145,13 +190,13 @@ func trackPerformance(ctx context.Context) (trackStats, error) {
 		if ok {
 			stats.TripsExpired++
 		}
-		byVehicle[vid] = &inFlightTrip{
-			VehicleID:   vid,
-			RouteID:     routeID,
-			TripID:      tripID,
-			ServiceDate: startDate,
-			FirstSeenTS: ts,
-			LastSeenTS:  ts,
+		byVehicle[vs.VehicleID] = &inFlightTrip{
+			VehicleID:   vs.VehicleID,
+			RouteID:     vs.RouteID,
+			TripID:      vs.TripID,
+			ServiceDate: vs.StartDate,
+			FirstSeenTS: vs.TS,
+			LastSeenTS:  vs.TS,
 			Probes:      []probe{p},
 		}
 		stats.NewTripsStarted++
@@ -171,20 +216,7 @@ func trackPerformance(ctx context.Context) (trackStats, error) {
 	s.UpdatedAt = now
 	s.SchemaVersion = 1
 	stats.InFlight = len(filtered)
-
-	if err := writeState(ctx, s, gen); err != nil {
-		if errors.Is(err, errStateConflict) {
-			stats.Conflict = true
-			return stats, nil
-		}
-		return stats, fmt.Errorf("write state: %w", err)
-	}
-
-	if err := emitVehiclesInFlight(ctx, int64(stats.InFlight)); err != nil {
-		slog.Warn("emit vehicles_in_flight failed", "err", err)
-	}
-
-	return stats, nil
+	return s, stats
 }
 
 func readState(ctx context.Context) (stateFile, int64, error) {

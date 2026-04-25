@@ -112,6 +112,13 @@ update-traffic actransit-scraper --region us-west1 --to-revisions=<rev>=100` —
 flips traffic to a previously deployed revision instantly, but Terraform state
 will then disagree until you reconcile.
 
+## Testing
+
+Run `make test` to execute unit tests locally (no external dependencies).
+After a deploy, `make smoke` verifies the live service end-to-end via curl
+and `gsutil`. See [`docs/testing.md`](docs/testing.md) for what each tier
+covers and what's intentionally not unit-tested.
+
 ## Cost
 
 Designed for ~$1/month on a personal GCP project (free tier covers
