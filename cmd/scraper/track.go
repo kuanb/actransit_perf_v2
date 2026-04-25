@@ -38,13 +38,14 @@ type stateFile struct {
 }
 
 type inFlightTrip struct {
-	VehicleID   string    `json:"vehicle_id"`
-	RouteID     string    `json:"route_id"`
-	TripID      string    `json:"trip_id"`
-	ServiceDate string    `json:"service_date"`
-	FirstSeenTS time.Time `json:"first_seen_ts"`
-	LastSeenTS  time.Time `json:"last_seen_ts"`
-	Probes      []probe   `json:"probes"`
+	VehicleID    string             `json:"vehicle_id"`
+	RouteID      string             `json:"route_id"`
+	TripID       string             `json:"trip_id"`
+	ServiceDate  string             `json:"service_date"`
+	FirstSeenTS  time.Time          `json:"first_seen_ts"`
+	LastSeenTS   time.Time          `json:"last_seen_ts"`
+	Probes       []probe            `json:"probes"`
+	StopArrivals map[int]time.Time  `json:"stop_arrivals,omitempty"`
 }
 
 type probe struct {
@@ -53,14 +54,18 @@ type probe struct {
 	Lon              float64   `json:"lon"`
 	BearingDeg       float64   `json:"bearing_deg"`
 	ReportedSpeedMps float64   `json:"reported_speed_mps"`
+	DistAlongRouteM  float64   `json:"dist_along_route_m,omitempty"`
+	NearestStopSeq   int       `json:"nearest_stop_seq,omitempty"`
 }
 
 type trackStats struct {
-	InFlight        int
-	NewTripsStarted int
-	TripsExpired    int
-	ProbesAppended  int
-	Conflict        bool
+	InFlight             int
+	NewTripsStarted      int
+	TripsExpired         int
+	ProbesAppended       int
+	StopArrivalsDetected int
+	TripsMissingShape    int
+	Conflict             bool
 }
 
 type vehicleSnapshot struct {
@@ -103,6 +108,12 @@ func trackPerformance(ctx context.Context) (trackStats, error) {
 	now := time.Now().UTC()
 	vehicles := parseVehicleEntities(rawEntities, now)
 	s, stats = updateInFlightState(s, vehicles, now)
+
+	cache := ensureGTFSCache(ctx)
+	if cache != nil {
+		projectInFlightProbes(&s, cache, &stats)
+		detectStopArrivals(&s, cache, &stats)
+	}
 
 	if err := writeState(ctx, s, gen); err != nil {
 		if errors.Is(err, errStateConflict) {
@@ -179,6 +190,12 @@ func updateInFlightState(s stateFile, vehicles []vehicleSnapshot, now time.Time)
 		existing, ok := byVehicle[vs.VehicleID]
 		if ok && existing.TripID == vs.TripID {
 			existing.LastSeenTS = vs.TS
+			if len(existing.Probes) > 0 {
+				last := existing.Probes[len(existing.Probes)-1]
+				if !vs.TS.After(last.TS) {
+					continue
+				}
+			}
 			existing.Probes = append(existing.Probes, p)
 			if len(existing.Probes) > maxProbesPerTrip {
 				existing.Probes = existing.Probes[len(existing.Probes)-maxProbesPerTrip:]
@@ -264,6 +281,104 @@ func writeState(ctx context.Context, s stateFile, ifGeneration int64) error {
 		return err
 	}
 	return nil
+}
+
+// projectInFlightProbes fills DistAlongRouteM and NearestStopSeq on each
+// probe in s.InFlight using the cached GTFS shapes and stop projections.
+// Trips whose route or shape is unknown to the cache are left untouched
+// (and counted in stats.TripsMissingShape).
+func projectInFlightProbes(s *stateFile, cache *gtfsCache, stats *trackStats) {
+	for i := range s.InFlight {
+		t := &s.InFlight[i]
+		route, ok := cache.Routes[t.RouteID]
+		if !ok {
+			stats.TripsMissingShape++
+			continue
+		}
+		trip, ok := route.Trips[t.TripID]
+		if !ok || trip.ShapeID == "" {
+			stats.TripsMissingShape++
+			continue
+		}
+		shape, ok := route.Shapes[trip.ShapeID]
+		if !ok {
+			stats.TripsMissingShape++
+			continue
+		}
+		stops := trip.StopTimes
+		for j := range t.Probes {
+			p := &t.Probes[j]
+			if p.DistAlongRouteM != 0 {
+				continue
+			}
+			distAlong, _ := projectLatLonOntoShape(p.Lat, p.Lon, shape)
+			p.DistAlongRouteM = distAlong
+			p.NearestStopSeq = nearestStopSeq(stops, distAlong)
+		}
+	}
+}
+
+// detectStopArrivals scans each in-flight trip's probes (which must have
+// DistAlongRouteM populated by projectInFlightProbes) and records an
+// arrival timestamp for any stop the bus has now passed but that hasn't
+// been recorded yet. Linearly interpolates the arrival timestamp between
+// the two probes that bracket the stop.
+func detectStopArrivals(s *stateFile, cache *gtfsCache, stats *trackStats) {
+	for i := range s.InFlight {
+		t := &s.InFlight[i]
+		route, ok := cache.Routes[t.RouteID]
+		if !ok {
+			continue
+		}
+		trip, ok := route.Trips[t.TripID]
+		if !ok {
+			continue
+		}
+		if t.StopArrivals == nil {
+			t.StopArrivals = make(map[int]time.Time)
+		}
+		for _, stop := range trip.StopTimes {
+			if _, already := t.StopArrivals[stop.StopSequence]; already {
+				continue
+			}
+			arrival, ok := arrivalForStop(t.Probes, stop.DistAlongRoute)
+			if !ok {
+				continue
+			}
+			t.StopArrivals[stop.StopSequence] = arrival
+			stats.StopArrivalsDetected++
+		}
+	}
+}
+
+// arrivalForStop returns the interpolated timestamp at which the bus
+// was observed crossing a stop located at stopDist along the route.
+// Returns false unless we have a "before" probe (dist < stopDist) AND a
+// later probe at or past stopDist — i.e., we actually witnessed the
+// crossing. A single probe alone, even past the stop, is not enough:
+// the bus may have crossed long before we started observing it.
+func arrivalForStop(probes []probe, stopDist float64) (time.Time, bool) {
+	for i, p := range probes {
+		if p.DistAlongRouteM < stopDist {
+			continue
+		}
+		if i == 0 {
+			return time.Time{}, false
+		}
+		prev := probes[i-1]
+		if prev.DistAlongRouteM >= stopDist {
+			return time.Time{}, false
+		}
+		span := p.DistAlongRouteM - prev.DistAlongRouteM
+		if span <= 0 {
+			return p.TS, true
+		}
+		frac := (stopDist - prev.DistAlongRouteM) / span
+		dt := p.TS.Sub(prev.TS)
+		offset := time.Duration(float64(dt) * frac)
+		return prev.TS.Add(offset), true
+	}
+	return time.Time{}, false
 }
 
 func emitVehiclesInFlight(ctx context.Context, count int64) error {

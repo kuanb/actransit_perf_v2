@@ -174,6 +174,8 @@ func handleTrackPerformance(w http.ResponseWriter, r *http.Request) {
 			"new_trips", stats.NewTripsStarted,
 			"trips_expired", stats.TripsExpired,
 			"probes_appended", stats.ProbesAppended,
+			"arrivals_detected", stats.StopArrivalsDetected,
+			"trips_missing_shape", stats.TripsMissingShape,
 		)
 	}
 	fmt.Fprintln(w, "ok")
