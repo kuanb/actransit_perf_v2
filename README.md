@@ -116,8 +116,11 @@ will then disagree until you reconcile.
 
 Run `make test` to execute unit tests locally (no external dependencies).
 After a deploy, `make smoke` verifies the live service end-to-end via curl
-and `gsutil`. See [`docs/testing.md`](docs/testing.md) for what each tier
-covers and what's intentionally not unit-tested.
+and `gsutil`. A pre-commit hook is available — install with
+`make hooks-install` to auto-run `go vet` + `go test` before every commit.
+GitHub Actions runs the same checks on every push to `main`. See
+[`docs/testing.md`](docs/testing.md) for what each tier covers and what's
+intentionally not unit-tested.
 
 ## Cost
 

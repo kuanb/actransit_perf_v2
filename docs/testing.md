@@ -1,6 +1,7 @@
 # Testing
 
-Two tiers, both invoked via `make`.
+Two tiers, both invoked via `make`. Also: a pre-commit hook and GitHub
+Actions CI keep regressions from sneaking in.
 
 ## Unit tests — `make test`
 
@@ -73,3 +74,29 @@ files as templates:
 If a new test would require a GCP client to be mocked, write the test as
 an additional smoke check in the `Makefile` instead of pulling an
 interface seam into production code.
+
+## Pre-commit hook
+
+A version-controlled `pre-commit` hook lives at `.githooks/pre-commit`
+and runs `go vet ./...` + `go test ./...` before every commit. Install
+once per clone:
+
+```sh
+make hooks-install
+```
+
+It symlinks `.git/hooks/pre-commit` → `.githooks/pre-commit`, so future
+hook updates land automatically when you `git pull`. Skip ad hoc with
+`git commit --no-verify` (use sparingly).
+
+## GitHub Actions CI
+
+`.github/workflows/test.yml` runs `go vet` and `go test ./... -race` on
+every push to `main` and on every pull request. No GCP credentials are
+needed because unit tests are pure (per the boundary policy above) — the
+runner is a vanilla `ubuntu-latest`.
+
+`make smoke` is **not** wired into CI by design. It would require either
+a service account JSON key or a Workload Identity Federation setup, plus
+ongoing concern about CI invocations causing real GCS writes. Run smoke
+manually after each `make release`.

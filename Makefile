@@ -3,7 +3,7 @@ REGION     := us-west1
 REPO       := actransit-scraper
 IMAGE      := $(REGION)-docker.pkg.dev/$(PROJECT_ID)/$(REPO)/scraper
 
-.PHONY: tf-init tf-plan tf-apply tf-fmt build deploy release logs invoke run-local test smoke
+.PHONY: tf-init tf-plan tf-apply tf-fmt build deploy release logs invoke run-local test smoke hooks-install
 
 tf-init:
 	cd infra && terraform init
@@ -45,6 +45,14 @@ run-local:
 
 test:
 	go test ./... -race -v
+
+# Install the version-controlled pre-commit hook into .git/hooks/.
+# Idempotent — re-run after pulling new hook changes.
+hooks-install:
+	@mkdir -p .git/hooks
+	@ln -sf ../../.githooks/pre-commit .git/hooks/pre-commit
+	@chmod +x .githooks/pre-commit
+	@echo "pre-commit hook installed (symlinked from .githooks/)"
 
 # Post-deploy smoke check. Hits the live service + verifies side-effect
 # artifacts in GCS. Requires a deployed service and `gcloud auth login`.
