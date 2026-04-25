@@ -33,6 +33,13 @@
       <strong>Within 7 min</strong> = <code>0&nbsp;≤&nbsp;delay&nbsp;≤&nbsp;7&nbsp;min</code>.
     </p>
     <div id="system-secondary" class="cards small-cards"></div>
+    <h3 class="sub-h">Delay distribution (1-min buckets)</h3>
+    <p class="muted defn">
+      Each bar = one whole-minute bucket of the schedule-vs-actual delay,
+      counted across all observed stop arrivals. Outliers beyond
+      <code>−15&nbsp;min</code> or <code>+45&nbsp;min</code> are clamped to the boundary buckets.
+    </p>
+    <canvas id="delay-minute-chart" width="900" height="280"></canvas>
   </section>
 
   <section>

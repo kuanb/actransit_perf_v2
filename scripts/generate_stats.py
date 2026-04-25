@@ -304,6 +304,26 @@ def main() -> int:
     bucket_labels = ["< -2 min", "-2 to -1 min", "-1 to +1 min",
                      "+1 to +3 min", "+3 to +10 min", "> +10 min"]
 
+    print("Querying BQ for 1-minute delay histogram...", file=sys.stderr)
+    minute_rows = run_bq(f"""
+        SELECT
+          CASE
+            WHEN delay_seconds < -15*60 THEN -15
+            WHEN delay_seconds >  45*60 THEN  45
+            ELSE CAST(FLOOR(delay_seconds / 60.0) AS INT64)
+          END AS minute,
+          COUNT(*) AS n
+        FROM `{PROJECT_ID}.{DATASET}.trip_observations`
+        WHERE service_date = "{service_date}"
+          AND actual_arrival IS NOT NULL
+          AND is_stale = FALSE
+        GROUP BY minute
+        ORDER BY minute
+    """)
+    minute_histogram = [
+        {"minute": int(r["minute"]), "count": int(r["n"])} for r in minute_rows
+    ]
+
     output = {
         "service_date": str(service_date),
         "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -319,6 +339,7 @@ def main() -> int:
             "labels":  bucket_labels,
             "counts":  [hist.get(b, 0) for b in bucket_order],
         },
+        "delay_minute_histogram": minute_histogram,
         "routes": routes,
     }
 

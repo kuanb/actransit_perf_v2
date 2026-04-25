@@ -24,12 +24,18 @@ const (
 )
 
 type dailyStats struct {
-	ServiceDate        string             `json:"service_date"`
-	GeneratedAt        time.Time          `json:"generated_at"`
-	System             systemStats        `json:"system"`
-	ScheduleCompliance scheduleCompliance `json:"schedule_compliance"`
-	DelayHistogram     delayHistogram     `json:"delay_histogram"`
-	Routes             []routeStats       `json:"routes"`
+	ServiceDate          string             `json:"service_date"`
+	GeneratedAt          time.Time          `json:"generated_at"`
+	System               systemStats        `json:"system"`
+	ScheduleCompliance   scheduleCompliance `json:"schedule_compliance"`
+	DelayHistogram       delayHistogram     `json:"delay_histogram"`
+	DelayMinuteHistogram []minuteBucket     `json:"delay_minute_histogram"`
+	Routes               []routeStats       `json:"routes"`
+}
+
+type minuteBucket struct {
+	Minute int   `json:"minute"`
+	Count  int64 `json:"count"`
 }
 
 type systemStats struct {
@@ -140,6 +146,10 @@ func generateDailyStats(ctx context.Context, serviceDate civil.Date) (*dailyStat
 	if err != nil {
 		return nil, fmt.Errorf("query histogram: %w", err)
 	}
+	minuteHist, err := queryStatsMinuteHistogram(ctx, serviceDate)
+	if err != nil {
+		return nil, fmt.Errorf("query minute histogram: %w", err)
+	}
 
 	for i := range routes {
 		rid := routes[i].RouteID
@@ -189,8 +199,9 @@ func generateDailyStats(ctx context.Context, serviceDate civil.Date) (*dailyStat
 			DroppedTrips:         len(dropped),
 			DroppedTripIDsSample: sample,
 		},
-		DelayHistogram: hist,
-		Routes:         routes,
+		DelayHistogram:       hist,
+		DelayMinuteHistogram: minuteHist,
+		Routes:               routes,
 	}
 
 	payload, err := json.MarshalIndent(out, "", "  ")
@@ -637,6 +648,48 @@ func queryStatsHistogram(ctx context.Context, serviceDate civil.Date) (delayHist
 		final[i] = counts[b]
 	}
 	return delayHistogram{Buckets: bucketOrder, Labels: labels, Counts: final}, nil
+}
+
+// queryStatsMinuteHistogram returns one bucket per (whole) minute of delay
+// observed today. Buckets outside the [-15, +45] minute window are clamped
+// to the boundary buckets to prevent extreme outliers from blowing up the
+// JSON or the chart's x-axis.
+func queryStatsMinuteHistogram(ctx context.Context, serviceDate civil.Date) ([]minuteBucket, error) {
+	q := bqClient.Query(fmt.Sprintf(`
+		SELECT
+		  CASE
+		    WHEN delay_seconds < -15*60 THEN -15
+		    WHEN delay_seconds >  45*60 THEN  45
+		    ELSE CAST(FLOOR(delay_seconds / 60.0) AS INT64)
+		  END AS minute,
+		  COUNT(*) AS n
+		FROM `+"`%s.actransit.trip_observations`"+`
+		WHERE service_date = "%s"
+		  AND actual_arrival IS NOT NULL
+		  AND is_stale = FALSE
+		GROUP BY minute
+		ORDER BY minute
+	`, projectID, serviceDate))
+	it, err := q.Read(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var out []minuteBucket
+	for {
+		var row struct {
+			Minute int64 `bigquery:"minute"`
+			N      int64 `bigquery:"n"`
+		}
+		err := it.Next(&row)
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, minuteBucket{Minute: int(row.Minute), Count: row.N})
+	}
+	return out, nil
 }
 
 func nullableMinutes(v bigquery.NullInt64) *float64 {

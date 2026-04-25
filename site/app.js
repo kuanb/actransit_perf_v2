@@ -215,6 +215,61 @@ function render(data) {
     { label: "Within 7 min", val: `${fmt(s.within_7min_pct)}%`, grade: gradeOnTime(s.within_7min_pct) },
   ]);
 
+  // ---- 1-min delay histogram ----
+  const minBuckets = data.delay_minute_histogram || [];
+  if (minBuckets.length) {
+    const minM = Math.min(...minBuckets.map((b) => b.minute));
+    const maxM = Math.max(...minBuckets.map((b) => b.minute));
+    const labels = [];
+    const counts = [];
+    const bgColors = [];
+    const byMinute = Object.fromEntries(minBuckets.map((b) => [b.minute, b.count]));
+    for (let m = minM; m <= maxM; m++) {
+      labels.push(m === 0 ? "0" : m > 0 ? `+${m}` : `${m}`);
+      counts.push(byMinute[m] || 0);
+      // color: red for late, blue for early, green for on-time band 0..3
+      let color;
+      if (m < 0) color = "#a6c3e0";        // early — soft blue
+      else if (m <= 3) color = "#a1d99b";  // on-time — green
+      else if (m <= 7) color = "#fdae6b";  // mildly late — orange
+      else color = "#d62728";              // late — red
+      bgColors.push(color);
+    }
+    const total = counts.reduce((a, b) => a + b, 0);
+    const minCtx = document.getElementById("delay-minute-chart").getContext("2d");
+    new Chart(minCtx, {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [{
+          label: "Stop arrivals",
+          data: counts,
+          backgroundColor: bgColors,
+          borderWidth: 0,
+        }],
+      },
+      options: {
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              title: (ctx) => `${ctx[0].label} min`,
+              label: (ctx) => {
+                const cnt = ctx.raw;
+                const pct = total > 0 ? (100 * cnt) / total : 0;
+                return `${cnt.toLocaleString()} stops (${pct.toFixed(1)}%)`;
+              },
+            },
+          },
+        },
+        scales: {
+          x: { title: { display: true, text: "delay (min)" }, grid: { display: false } },
+          y: { beginAtZero: true, title: { display: true, text: "stops observed" } },
+        },
+      },
+    });
+  }
+
   // ---- schedule compliance ----
   const sc = data.schedule_compliance;
   const sdPct = sc.scheduled_trips
