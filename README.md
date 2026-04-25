@@ -25,6 +25,13 @@ plus updates `gtfs/current.zip` only if the hash changed:
 - `gtfs/current.zip` — the most recent GTFS, also tagged with the SHA-256 in metadata
 - `gtfs/<YYYYMMDDTHHMMSSZ>.zip` — immutable dated archives of each version observed
 
+## Design docs
+
+In-progress / planned services have architecture artifacts under `docs/`:
+
+- [`docs/architecture.md`](docs/architecture.md) — vehicle performance tracking service (planned)
+- [`docs/data-model.md`](docs/data-model.md) — state, processed GTFS, and BigQuery schemas (planned)
+
 ## Public endpoints
 
 The cache bucket is world-readable so frontends can fetch the JSON
