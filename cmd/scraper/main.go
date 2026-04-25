@@ -22,10 +22,12 @@ import (
 )
 
 const (
-	maxHistory       = 10
-	latestObjectKey  = "latest.json"
-	historyObjectKey = "history.json"
-	feedURLTemplate  = "https://api.actransit.org/transit/gtfsrt/vehicles?token=%s"
+	maxHistory          = 10
+	latestObjectKey     = "latest.json"
+	historyObjectKey    = "history.json"
+	routeStopsObjectKey = "route_stops.json"
+	feedURLTemplate     = "https://api.actransit.org/transit/gtfsrt/vehicles?token=%s"
+	allStopsURLTemplate = "https://api.actransit.org/transit/actrealtime/allstops?rt=%s&token=%s"
 )
 
 var (
@@ -63,6 +65,7 @@ func main() {
 	}
 
 	http.HandleFunc("/scrape", handleScrape)
+	http.HandleFunc("/refresh-stops", handleRefreshStops)
 	http.HandleFunc("/", handleHealth)
 
 	slog.Info("listening", "port", port)
@@ -87,13 +90,29 @@ func handleScrape(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintln(w, "ok")
 }
 
+func handleRefreshStops(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	stats, err := refreshStops(r.Context())
+	if err != nil {
+		slog.Error("refresh-stops failed", "err", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	slog.Info("refresh-stops ok",
+		"duration_ms", time.Since(start).Milliseconds(),
+		"routes_total", stats.Total,
+		"routes_failed", stats.Failed,
+	)
+	fmt.Fprintln(w, "ok")
+}
+
 func scrape(ctx context.Context) error {
 	token, err := getToken(ctx)
 	if err != nil {
 		return fmt.Errorf("get token: %w", err)
 	}
 
-	body, err := fetchFeed(ctx, fmt.Sprintf(feedURLTemplate, token))
+	body, err := httpGet(ctx, fmt.Sprintf(feedURLTemplate, token))
 	if err != nil {
 		return fmt.Errorf("fetch feed: %w", err)
 	}
@@ -124,6 +143,81 @@ func scrape(ctx context.Context) error {
 	return nil
 }
 
+type refreshStats struct {
+	Total  int
+	Failed int
+}
+
+type routeStopsEntry struct {
+	RouteName      string          `json:"routeName"`
+	ProcessedStops json.RawMessage `json:"processedStops"`
+}
+
+func refreshStops(ctx context.Context) (refreshStats, error) {
+	var stats refreshStats
+
+	token, err := getToken(ctx)
+	if err != nil {
+		return stats, fmt.Errorf("get token: %w", err)
+	}
+
+	latestBytes, exists, err := readObject(ctx, latestObjectKey)
+	if err != nil {
+		return stats, fmt.Errorf("read latest: %w", err)
+	}
+	if !exists {
+		return stats, errors.New("latest.json not yet written; run /scrape first")
+	}
+
+	var rawEntities []json.RawMessage
+	if err := json.Unmarshal(latestBytes, &rawEntities); err != nil {
+		return stats, fmt.Errorf("parse latest: %w", err)
+	}
+
+	routeSet := make(map[string]struct{})
+	um := protojson.UnmarshalOptions{DiscardUnknown: true}
+	for _, raw := range rawEntities {
+		e := &gtfs.FeedEntity{}
+		if err := um.Unmarshal(raw, e); err != nil {
+			continue
+		}
+		v := e.GetVehicle()
+		if v == nil {
+			continue
+		}
+		t := v.GetTrip()
+		if t == nil {
+			continue
+		}
+		if rid := t.GetRouteId(); rid != "" {
+			routeSet[rid] = struct{}{}
+		}
+	}
+
+	out := make([]routeStopsEntry, 0, len(routeSet))
+	for routeName := range routeSet {
+		stats.Total++
+		url := fmt.Sprintf(allStopsURLTemplate, routeName, token)
+		body, err := httpGet(ctx, url)
+		if err != nil {
+			slog.Warn("allstops fetch failed", "route", routeName, "err", err)
+			stats.Failed++
+			out = append(out, routeStopsEntry{RouteName: routeName, ProcessedStops: json.RawMessage("null")})
+			continue
+		}
+		out = append(out, routeStopsEntry{RouteName: routeName, ProcessedStops: body})
+	}
+
+	payload, err := json.Marshal(out)
+	if err != nil {
+		return stats, err
+	}
+	if err := writeObject(ctx, routeStopsObjectKey, payload); err != nil {
+		return stats, fmt.Errorf("write route_stops: %w", err)
+	}
+	return stats, nil
+}
+
 func getToken(ctx context.Context) (string, error) {
 	secretOnce.Do(func() {
 		c, err := secretmanager.NewClient(ctx)
@@ -142,7 +236,7 @@ func getToken(ctx context.Context) (string, error) {
 	return secretValue, secretErr
 }
 
-func fetchFeed(ctx context.Context, url string) ([]byte, error) {
+func httpGet(ctx context.Context, url string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
