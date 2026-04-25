@@ -13,8 +13,18 @@ body {
 header {
   border-bottom: 1px solid #e5e5e5;
   padding-bottom: 12px;
+  /* Reserve room on the right for the absolutely-positioned .header-link
+     so h1 and meta text wrap instead of slipping under it on narrow screens. */
+  padding-right: 150px;
   margin-bottom: 24px;
   position: relative;
+}
+
+h1 { word-wrap: break-word; overflow-wrap: break-word; }
+
+@media (max-width: 480px) {
+  header { padding-right: 110px; }
+  .header-link { font-size: 12px; padding: 4px 8px; }
 }
 
 .header-link {
