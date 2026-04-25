@@ -72,11 +72,41 @@ func TestUpdateInFlightStateContinuingTrip(t *testing.T) {
 		t.Fatalf("len(InFlight) = %d, want 1", len(out.InFlight))
 	}
 	trip := out.InFlight[0]
+	// LastSeenTS tracks the observation time (now), not the GPS fix time.
 	if !trip.LastSeenTS.Equal(later) {
-		t.Fatalf("LastSeenTS = %v, want %v", trip.LastSeenTS, later)
+		t.Fatalf("LastSeenTS = %v, want %v (= now)", trip.LastSeenTS, later)
 	}
 	if len(trip.Probes) != 2 {
 		t.Fatalf("Probes len = %d, want 2", len(trip.Probes))
+	}
+}
+
+// Regression: a parked bus reports stale GPS (vs.TS doesn't refresh).
+// LastSeenTS must track when WE observed the vehicle (now), not the
+// stale GPS time, otherwise stale-prune fires on every cycle.
+func TestUpdateInFlightStateLastSeenTSUsesNowNotGPSFixTime(t *testing.T) {
+	gpsTS := time.Date(2026, 4, 24, 12, 0, 0, 0, time.UTC)
+	observedNow := gpsTS.Add(25 * time.Minute) // 25 min later — would trip stale-prune at 20 min
+
+	s := stateFile{
+		InFlight: []inFlightTrip{{
+			VehicleID:   "V1",
+			RouteID:     "R1",
+			TripID:      "T1",
+			FirstSeenTS: gpsTS,
+			LastSeenTS:  gpsTS,
+			Probes:      []probe{{TS: gpsTS}},
+		}},
+	}
+	vs := mkSnapshot("V1", "T1", "R1", gpsTS) // same stale GPS time
+	out, _, _ := updateInFlightState(s, []vehicleSnapshot{vs}, observedNow)
+
+	if len(out.InFlight) != 1 {
+		t.Fatalf("len(InFlight) = %d, want 1", len(out.InFlight))
+	}
+	if !out.InFlight[0].LastSeenTS.Equal(observedNow) {
+		t.Fatalf("LastSeenTS = %v, want %v (= now, not GPS time %v)",
+			out.InFlight[0].LastSeenTS, observedNow, gpsTS)
 	}
 }
 

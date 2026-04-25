@@ -229,7 +229,12 @@ func updateInFlightState(s stateFile, vehicles []vehicleSnapshot, now time.Time)
 
 		existing, ok := byVehicle[vs.VehicleID]
 		if ok && existing.TripID == vs.TripID {
-			existing.LastSeenTS = vs.TS
+			// LastSeenTS tracks when we OBSERVED the vehicle in the feed
+			// (used by stale-prune), not the GPS fix time. AC Transit's
+			// GTFS-RT often reports stale vs.TS for parked buses; setting
+			// LastSeenTS = vs.TS made parked-bus trips immediately stale,
+			// causing per-minute re-finalization cycles.
+			existing.LastSeenTS = now
 			if len(existing.Probes) > 0 {
 				last := existing.Probes[len(existing.Probes)-1]
 				if !vs.TS.After(last.TS) {
@@ -253,7 +258,7 @@ func updateInFlightState(s stateFile, vehicles []vehicleSnapshot, now time.Time)
 			TripID:      vs.TripID,
 			ServiceDate: vs.StartDate,
 			FirstSeenTS: vs.TS,
-			LastSeenTS:  vs.TS,
+			LastSeenTS:  now,
 			Probes:      []probe{p},
 		}
 		stats.NewTripsStarted++
