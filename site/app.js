@@ -217,8 +217,9 @@ function render(data) {
       .join("");
   };
 
+  // System summary holds stop-level metrics; trip counts live in
+  // schedule compliance (Observed running / Scheduled / Service delivered).
   renderCards("#system-cards", [
-    { label: "Total trips",      val: intFmt(s.total_trips) },
     { label: "Stops observed",   val: intFmt(s.total_observations) },
     { label: "Vehicles seen",    val: intFmt(s.vehicles_observed) },
     { label: "On time (≤3 min)", val: `${fmt(s.on_time_pct)}%`, grade: gradeOnTime(s.on_time_pct) },
