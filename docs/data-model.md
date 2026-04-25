@@ -14,6 +14,15 @@ One JSON object per route, written by `/refresh-gtfs` only when the source
 GTFS hash changes. Joins `trips.txt`, `stop_times.txt`, `stops.txt`, and
 `shapes.txt` so the tracker can do a single key lookup at runtime.
 
+> **Warning — non-GeoJSON shape format.** Each entry in a shape array is
+> `[latitude, longitude, cumulative_distance_meters]`. This is **not**
+> GeoJSON. GeoJSON convention is `[longitude, latitude, elevation]`. If you
+> feed our shapes to a Mapbox/Leaflet/turf.js consumer, swap the first two
+> values and ignore (or repurpose) the third — the third value here is the
+> distance along the polyline from the shape's first point, *not* an
+> altitude. Picked this layout for compactness and because it matches the
+> tracker's internal Go representation `[3]float64{lat, lon, cum_dist_m}`.
+
 ```jsonc
 {
   "route_id": "1",

@@ -83,6 +83,16 @@ Reading the freshest `latest.json` is consistent regardless of trigger timing
 because the tracker just reads whatever GCS returns when called; small race
 windows don't matter (the next minute fixes it).
 
+**Accepted tradeoff: ~1 minute of analytics lag.** Both `/scrape` and
+`/track-performance` are fired by Cloud Scheduler at every minute boundary,
+without ordering guarantees. If `/track-performance` runs before `/scrape`
+finishes its GCS write, it processes last minute's `latest.json` instead of
+this minute's. Net effect: every probe is processed exactly one minute later
+than it would be otherwise. For our use case (post-hoc trip analytics, not
+live dispatch) this is fine. A tighter coupling would either require running
+both in the same handler or introducing a Pub/Sub trigger from the GCS
+write — neither's worth the operational complexity.
+
 ### State: GCS `state.json`, single object
 
 The tracker is stateful — it must remember "vehicle 5001 has been on trip
