@@ -33,6 +33,13 @@ What's covered:
   stops, unknown-route safety).
 - **`cmd/scraper/gtfs_cache_test.go`** — `nearestStopSeq` with
   before-first / on-stop / between / past-last cases plus empty input.
+- **`cmd/scraper/bq_test.go`** — `parseServiceDate` (GTFS YYYYMMDD →
+  civil.Date), `parseScheduledArrival` (GTFS-static HH:MM:SS combined
+  with service_date in America/Los_Angeles, including post-midnight
+  hours like 25:30), and `tripToRows` (happy path with delay + leg
+  computations, unknown route → 0 obs but probes still emit, no
+  StopArrivals → NULL actual fields, malformed service_date doesn't
+  short-circuit row emission).
 
 ## Smoke test — `make smoke`
 

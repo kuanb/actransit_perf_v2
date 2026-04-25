@@ -83,6 +83,10 @@ smoke:
 	check "$$BUCKET/state.json"; \
 	echo "==> state.json schema check (chunk 3 fields present)"; \
 	gsutil cat "$$BUCKET/state.json" | python3 -c 'import json,sys; s=json.load(sys.stdin); inflt=s.get("in_flight",[]); assert isinstance(inflt,list), "in_flight not array"; assert len(inflt)>0, "no in_flight trips"; t=inflt[0]; assert "stop_arrivals" in t or "probes" in t, "trip missing stop_arrivals/probes"; print("  OK in_flight=%d probes[0]_keys=%s" % (len(inflt), sorted(t["probes"][0].keys()) if t.get("probes") else []))' || { echo "FAIL: state.json schema check"; exit 1; }; \
+	echo "==> bq tables exist (chunk 4)"; \
+	bq show -q $(PROJECT_ID):actransit.trip_observations >/dev/null 2>&1 || { echo "FAIL: actransit.trip_observations missing"; exit 1; }; \
+	bq show -q $(PROJECT_ID):actransit.trip_probes >/dev/null 2>&1 || { echo "FAIL: actransit.trip_probes missing"; exit 1; }; \
+	echo "  OK"; \
 	if [ "$(TAG)" = "full" ]; then \
 		hit POST /refresh-gtfs; \
 		check "$$BUCKET/gtfs/current.zip"; \
