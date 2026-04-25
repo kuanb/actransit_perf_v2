@@ -150,6 +150,69 @@ func TestUpdateInFlightStateTripChange(t *testing.T) {
 	}
 }
 
+func TestDetectCompletedTrips(t *testing.T) {
+	cache := fixtureRouteCache() // R1/T1 with stop_seq 1, 2, 3 (last is 3)
+	t0 := time.Date(2026, 4, 24, 12, 0, 0, 0, time.UTC)
+
+	t.Run("trip with arrival recorded for last stop is completed", func(t *testing.T) {
+		s := stateFile{InFlight: []inFlightTrip{
+			{VehicleID: "V1", RouteID: "R1", TripID: "T1",
+				StopArrivals: map[int]time.Time{1: t0, 2: t0.Add(time.Minute), 3: t0.Add(2 * time.Minute)}},
+			{VehicleID: "V2", RouteID: "R1", TripID: "T1",
+				StopArrivals: map[int]time.Time{1: t0}},
+		}}
+		completed := detectCompletedTrips(&s, cache)
+		if len(completed) != 1 || completed[0].VehicleID != "V1" {
+			t.Fatalf("completed = %+v, want one V1", completed)
+		}
+		if len(s.InFlight) != 1 || s.InFlight[0].VehicleID != "V2" {
+			t.Fatalf("kept = %+v, want V2", s.InFlight)
+		}
+	})
+
+	t.Run("trip with no last-stop arrival stays in flight", func(t *testing.T) {
+		s := stateFile{InFlight: []inFlightTrip{
+			{VehicleID: "V1", RouteID: "R1", TripID: "T1",
+				StopArrivals: map[int]time.Time{1: t0}},
+		}}
+		completed := detectCompletedTrips(&s, cache)
+		if len(completed) != 0 {
+			t.Fatalf("got %d completed, want 0", len(completed))
+		}
+		if len(s.InFlight) != 1 {
+			t.Fatalf("InFlight len = %d, want 1", len(s.InFlight))
+		}
+	})
+
+	t.Run("trip with unknown route is preserved (not finalized)", func(t *testing.T) {
+		s := stateFile{InFlight: []inFlightTrip{
+			{VehicleID: "V1", RouteID: "UNKNOWN", TripID: "T1",
+				StopArrivals: map[int]time.Time{99: t0}},
+		}}
+		completed := detectCompletedTrips(&s, cache)
+		if len(completed) != 0 {
+			t.Fatalf("completed = %+v, want 0 (unknown route shouldn't trigger completion)", completed)
+		}
+		if len(s.InFlight) != 1 {
+			t.Fatalf("InFlight len = %d, want 1", len(s.InFlight))
+		}
+	})
+
+	t.Run("nil cache is a no-op", func(t *testing.T) {
+		s := stateFile{InFlight: []inFlightTrip{
+			{VehicleID: "V1", RouteID: "R1", TripID: "T1",
+				StopArrivals: map[int]time.Time{3: t0}},
+		}}
+		completed := detectCompletedTrips(&s, nil)
+		if completed != nil {
+			t.Fatalf("got %+v, want nil", completed)
+		}
+		if len(s.InFlight) != 1 {
+			t.Fatalf("InFlight len = %d, want 1", len(s.InFlight))
+		}
+	})
+}
+
 func TestPruneStaleTrips(t *testing.T) {
 	now := time.Date(2026, 4, 24, 12, 0, 0, 0, time.UTC)
 	cutoff := now.Add(-staleThreshold)

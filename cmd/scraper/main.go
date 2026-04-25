@@ -182,6 +182,7 @@ func handleTrackPerformance(w http.ResponseWriter, r *http.Request) {
 			"in_flight", stats.InFlight,
 			"new_trips", stats.NewTripsStarted,
 			"trips_expired", stats.TripsExpired,
+			"trips_completed", stats.TripsCompleted,
 			"probes_appended", stats.ProbesAppended,
 			"arrivals_detected", stats.StopArrivalsDetected,
 			"trips_missing_shape", stats.TripsMissingShape,

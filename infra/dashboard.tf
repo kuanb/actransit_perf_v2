@@ -145,6 +145,68 @@ resource "google_monitoring_dashboard" "scraper" {
             }
           }
         },
+        {
+          xPos   = 0
+          yPos   = 16
+          width  = 6
+          height = 6
+          widget = {
+            title = "Vehicles in flight"
+            xyChart = {
+              chartOptions = { mode = "COLOR" }
+              dataSets = [
+                {
+                  plotType       = "LINE"
+                  legendTemplate = "in_flight"
+                  timeSeriesQuery = {
+                    timeSeriesFilter = {
+                      filter = "metric.type=\"custom.googleapis.com/actransit/vehicles_in_flight\" resource.type=\"global\""
+                      aggregation = {
+                        alignmentPeriod  = "60s"
+                        perSeriesAligner = "ALIGN_MEAN"
+                      }
+                    }
+                  }
+                },
+              ]
+              yAxis = {
+                label = "vehicles"
+                scale = "LINEAR"
+              }
+            }
+          }
+        },
+        {
+          xPos   = 6
+          yPos   = 16
+          width  = 6
+          height = 6
+          widget = {
+            title = "Trips finalized per minute"
+            xyChart = {
+              chartOptions = { mode = "COLOR" }
+              dataSets = [
+                {
+                  plotType       = "LINE"
+                  legendTemplate = "trips/min"
+                  timeSeriesQuery = {
+                    timeSeriesFilter = {
+                      filter = "metric.type=\"custom.googleapis.com/actransit/trips_finalized_per_minute\" resource.type=\"global\""
+                      aggregation = {
+                        alignmentPeriod  = "60s"
+                        perSeriesAligner = "ALIGN_MEAN"
+                      }
+                    }
+                  }
+                },
+              ]
+              yAxis = {
+                label = "trips"
+                scale = "LINEAR"
+              }
+            }
+          }
+        },
       ]
     }
   })

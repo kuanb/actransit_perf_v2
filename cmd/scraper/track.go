@@ -23,10 +23,11 @@ import (
 )
 
 const (
-	stateObjectKey         = "state.json"
-	staleThreshold         = 20 * time.Minute
-	maxProbesPerTrip       = 20
-	metricVehiclesInFlight = "custom.googleapis.com/actransit/vehicles_in_flight"
+	stateObjectKey                = "state.json"
+	staleThreshold                = 20 * time.Minute
+	maxProbesPerTrip              = 20
+	metricVehiclesInFlight        = "custom.googleapis.com/actransit/vehicles_in_flight"
+	metricTripsFinalizedPerMinute = "custom.googleapis.com/actransit/trips_finalized_per_minute"
 )
 
 var errStateConflict = errors.New("state.json concurrent write conflict")
@@ -62,6 +63,7 @@ type trackStats struct {
 	InFlight             int
 	NewTripsStarted      int
 	TripsExpired         int
+	TripsCompleted       int
 	ProbesAppended       int
 	StopArrivalsDetected int
 	TripsMissingShape    int
@@ -118,16 +120,27 @@ func trackPerformance(ctx context.Context) (trackStats, error) {
 		detectStopArrivals(&s, cache, &stats)
 	}
 
+	completed := detectCompletedTrips(&s, cache)
 	stale := pruneStaleTrips(&s, now.Add(-staleThreshold))
-	finalize := append(preempted, stale...)
-	stats.TripsExpired = len(finalize)
+	stats.TripsCompleted = len(completed)
+	stats.TripsExpired = len(preempted) + len(completed) + len(stale)
 	stats.InFlight = len(s.InFlight)
-	if len(finalize) > 0 {
-		obsCount, probeCount, ferr := writeFinalizedTrips(ctx, finalize, cache, now)
+
+	normalEnd := append(preempted, completed...)
+	if len(normalEnd) > 0 {
+		obsCount, probeCount, ferr := writeFinalizedTrips(ctx, normalEnd, false, cache, now)
 		stats.RowsWrittenObs += obsCount
 		stats.RowsWrittenProbes += probeCount
 		if ferr != nil {
-			slog.Warn("finalize to BigQuery failed", "err", ferr, "trips", len(finalize))
+			slog.Warn("finalize normal-end to BigQuery failed", "err", ferr, "trips", len(normalEnd))
+		}
+	}
+	if len(stale) > 0 {
+		obsCount, probeCount, ferr := writeFinalizedTrips(ctx, stale, true, cache, now)
+		stats.RowsWrittenObs += obsCount
+		stats.RowsWrittenProbes += probeCount
+		if ferr != nil {
+			slog.Warn("finalize stale to BigQuery failed", "err", ferr, "trips", len(stale))
 		}
 	}
 
@@ -139,8 +152,11 @@ func trackPerformance(ctx context.Context) (trackStats, error) {
 		return stats, fmt.Errorf("write state: %w", err)
 	}
 
-	if err := emitVehiclesInFlight(ctx, int64(stats.InFlight)); err != nil {
+	if err := emitGaugeInt(ctx, metricVehiclesInFlight, int64(stats.InFlight)); err != nil {
 		slog.Warn("emit vehicles_in_flight failed", "err", err)
+	}
+	if err := emitGaugeInt(ctx, metricTripsFinalizedPerMinute, int64(stats.TripsExpired)); err != nil {
+		slog.Warn("emit trips_finalized failed", "err", err)
 	}
 
 	return stats, nil
@@ -251,6 +267,39 @@ func updateInFlightState(s stateFile, vehicles []vehicleSnapshot, now time.Time)
 	s.SchemaVersion = 1
 	stats.InFlight = len(out)
 	return s, stats, preempted
+}
+
+// detectCompletedTrips removes from in-flight any trip whose final
+// scheduled stop has a recorded actual arrival, and returns them for
+// finalization. Pure. A trip without a known route or trip_id (no
+// shape data in the cache) is left untouched — we have no way to
+// know which stop is the last.
+func detectCompletedTrips(s *stateFile, cache *gtfsCache) []inFlightTrip {
+	if cache == nil || len(s.InFlight) == 0 {
+		return nil
+	}
+	kept := make([]inFlightTrip, 0, len(s.InFlight))
+	var completed []inFlightTrip
+	for _, t := range s.InFlight {
+		route, ok := cache.Routes[t.RouteID]
+		if !ok {
+			kept = append(kept, t)
+			continue
+		}
+		trip, ok := route.Trips[t.TripID]
+		if !ok || len(trip.StopTimes) == 0 {
+			kept = append(kept, t)
+			continue
+		}
+		lastStopSeq := trip.StopTimes[len(trip.StopTimes)-1].StopSequence
+		if _, hasArrival := t.StopArrivals[lastStopSeq]; hasArrival {
+			completed = append(completed, t)
+			continue
+		}
+		kept = append(kept, t)
+	}
+	s.InFlight = kept
+	return completed
 }
 
 // pruneStaleTrips removes any in-flight trip whose LastSeenTS is older
@@ -418,7 +467,9 @@ func arrivalForStop(probes []probe, stopDist float64) (time.Time, bool) {
 	return time.Time{}, false
 }
 
-func emitVehiclesInFlight(ctx context.Context, count int64) error {
+// emitGaugeInt writes a single int64 gauge data point to Cloud Monitoring.
+// Used for both vehicles_in_flight and trips_finalized_per_minute.
+func emitGaugeInt(ctx context.Context, metricType string, value int64) error {
 	if metricsClient == nil || projectID == "" {
 		return nil
 	}
@@ -426,7 +477,7 @@ func emitVehiclesInFlight(ctx context.Context, count int64) error {
 		Name: "projects/" + projectID,
 		TimeSeries: []*monitoringpb.TimeSeries{{
 			Metric: &metricpb.Metric{
-				Type: metricVehiclesInFlight,
+				Type: metricType,
 			},
 			Resource: &monitoredrespb.MonitoredResource{
 				Type:   "global",
@@ -437,7 +488,7 @@ func emitVehiclesInFlight(ctx context.Context, count int64) error {
 					EndTime: timestamppb.Now(),
 				},
 				Value: &monitoringpb.TypedValue{
-					Value: &monitoringpb.TypedValue_Int64Value{Int64Value: count},
+					Value: &monitoringpb.TypedValue_Int64Value{Int64Value: value},
 				},
 			}},
 		}},

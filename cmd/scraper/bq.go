@@ -181,17 +181,18 @@ func parseScheduledArrival(serviceDate civil.Date, gtfsTime string) time.Time {
 }
 
 // writeFinalizedTrips streams observation and probe rows to BigQuery.
-// Failures are logged but don't propagate — finalization is best-effort
-// so a transient BQ outage doesn't block state evolution. Returns counts
-// of rows attempted (not necessarily inserted on partial failure).
-func writeFinalizedTrips(ctx context.Context, trips []inFlightTrip, cache *gtfsCache, now time.Time) (obsCount, probeCount int, err error) {
+// `isStale` marks the rows as having come from the timeout-based
+// finalization path (vs. preempted/completed which are normal endings).
+// Failures don't propagate — finalization is best-effort so a transient
+// BQ outage doesn't block state evolution. Returns row counts attempted.
+func writeFinalizedTrips(ctx context.Context, trips []inFlightTrip, isStale bool, cache *gtfsCache, now time.Time) (obsCount, probeCount int, err error) {
 	if bqClient == nil || len(trips) == 0 {
 		return 0, 0, nil
 	}
 	var allObs []tripObservationRow
 	var allProbes []tripProbeRow
 	for _, t := range trips {
-		obs, probes := tripToRows(t, cache, now, true)
+		obs, probes := tripToRows(t, cache, now, isStale)
 		allObs = append(allObs, obs...)
 		allProbes = append(allProbes, probes...)
 	}

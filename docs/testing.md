@@ -40,6 +40,10 @@ What's covered:
   computations, unknown route → 0 obs but probes still emit, no
   StopArrivals → NULL actual fields, malformed service_date doesn't
   short-circuit row emission).
+- **`cmd/scraper/track_test.go`** also covers `detectCompletedTrips` —
+  trip with last-stop arrival → finalized; trip without → kept;
+  unknown route → preserved (we can't tell which stop is last); nil
+  cache → no-op.
 
 ## Smoke test — `make smoke`
 
