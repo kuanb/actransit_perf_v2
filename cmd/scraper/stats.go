@@ -24,13 +24,18 @@ const (
 )
 
 type dailyStats struct {
-	ServiceDate          string             `json:"service_date"`
-	GeneratedAt          time.Time          `json:"generated_at"`
-	System               systemStats        `json:"system"`
-	ScheduleCompliance   scheduleCompliance `json:"schedule_compliance"`
-	DelayHistogram       delayHistogram     `json:"delay_histogram"`
-	DelayMinuteHistogram []minuteBucket     `json:"delay_minute_histogram"`
-	Routes               []routeStats       `json:"routes"`
+	ServiceDate          string              `json:"service_date"`
+	GeneratedAt          time.Time           `json:"generated_at"`
+	System               systemStats         `json:"system"`
+	ScheduleCompliance   scheduleCompliance  `json:"schedule_compliance"`
+	DistortionHistogram  distortionHistogram `json:"distortion_histogram"`
+	DelayMinuteHistogram []minuteBucket      `json:"delay_minute_histogram"`
+	Routes               []routeStats        `json:"routes"`
+}
+
+type distortionHistogram struct {
+	Buckets []string `json:"buckets"`
+	Counts  []int64  `json:"counts"`
 }
 
 type minuteBucket struct {
@@ -59,12 +64,6 @@ type scheduleCompliance struct {
 	DroppedTripIDsSample  []string `json:"dropped_trip_ids_sample"`
 }
 
-type delayHistogram struct {
-	Buckets []string `json:"buckets"`
-	Labels  []string `json:"labels"`
-	Counts  []int64  `json:"counts"`
-}
-
 type routeStats struct {
 	RouteID             string   `json:"route_id"`
 	TripsObserved       int64    `json:"trips_observed"`
@@ -79,6 +78,8 @@ type routeStats struct {
 	P50DelayMinutes     *float64 `json:"p50_delay_minutes"`
 	P75DelayMinutes     *float64 `json:"p75_delay_minutes"`
 	P95DelayMinutes     *float64 `json:"p95_delay_minutes"`
+	P50DistortionPct    *float64 `json:"p50_distortion_pct"`
+	P95DistortionPct    *float64 `json:"p95_distortion_pct"`
 	AvgSpeedMph         float64  `json:"avg_speed_mph"`
 	Color               string   `json:"color"`
 	TextColor           string   `json:"text_color"`
@@ -142,14 +143,20 @@ func generateDailyStats(ctx context.Context, serviceDate civil.Date) (*dailyStat
 	if err != nil {
 		return nil, fmt.Errorf("query route stats: %w", err)
 	}
-	hist, err := queryStatsHistogram(ctx, serviceDate)
-	if err != nil {
-		return nil, fmt.Errorf("query histogram: %w", err)
-	}
 	minuteHist, err := queryStatsMinuteHistogram(ctx, serviceDate)
 	if err != nil {
 		return nil, fmt.Errorf("query minute histogram: %w", err)
 	}
+
+	scheduleByStop, err := loadScheduleByStop(zr, serviceDate, activeServices)
+	if err != nil {
+		return nil, fmt.Errorf("load schedule by stop: %w", err)
+	}
+	observations, err := queryStatsObservations(ctx, serviceDate)
+	if err != nil {
+		return nil, fmt.Errorf("query observations: %w", err)
+	}
+	distHist, distByRoute := computeDistortion(observations, scheduleByStop)
 
 	for i := range routes {
 		rid := routes[i].RouteID
@@ -167,6 +174,13 @@ func generateDailyStats(ctx context.Context, serviceDate civil.Date) (*dailyStat
 		if sched > 0 {
 			pct := round1(100 * float64(ran) / float64(sched))
 			routes[i].ServiceDeliveredPct = &pct
+		}
+		if vals, ok := distByRoute[rid]; ok && len(vals) > 0 {
+			sort.Float64s(vals)
+			p50 := round1(percentileSorted(vals, 0.50))
+			p95 := round1(percentileSorted(vals, 0.95))
+			routes[i].P50DistortionPct = &p50
+			routes[i].P95DistortionPct = &p95
 		}
 	}
 
@@ -199,7 +213,7 @@ func generateDailyStats(ctx context.Context, serviceDate civil.Date) (*dailyStat
 			DroppedTrips:         len(dropped),
 			DroppedTripIDsSample: sample,
 		},
-		DelayHistogram:       hist,
+		DistortionHistogram:  distHist,
 		DelayMinuteHistogram: minuteHist,
 		Routes:               routes,
 	}
@@ -604,50 +618,181 @@ func queryStatsPerRoute(ctx context.Context, serviceDate civil.Date) ([]routeSta
 	return out, nil
 }
 
-func queryStatsHistogram(ctx context.Context, serviceDate civil.Date) (delayHistogram, error) {
-	bucketOrder := []string{"very_early", "early", "on_time", "slightly_late", "late", "very_late"}
-	labels := []string{"< -2 min", "-2 to -1 min", "-1 to +1 min", "+1 to +3 min", "+3 to +10 min", "> +10 min"}
+type stopKey struct {
+	RouteID string
+	StopID  string
+}
+
+// loadScheduleByStop reads stop_times.txt + trips.txt and produces a sorted
+// (ascending) list of scheduled UTC arrival timestamps per (route_id, stop_id)
+// for the target service_date. Only trips with active service_id are included.
+// This is the source of truth for headway calculations because it includes
+// trips that were scheduled but dropped (no observation in BQ).
+func loadScheduleByStop(zr *zip.Reader, serviceDate civil.Date, services map[string]struct{}) (map[stopKey][]time.Time, error) {
+	tripCSV, tripRC, tripHeaders, err := openZipCSV(zr, "trips.txt")
+	if err != nil {
+		return nil, err
+	}
+	tripIdx := headerIndex(tripHeaders)
+	tripToRoute := make(map[string]string)
+	for {
+		row, err := tripCSV.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			tripRC.Close()
+			return nil, err
+		}
+		if _, ok := services[col(row, tripIdx, "service_id")]; !ok {
+			continue
+		}
+		tripToRoute[col(row, tripIdx, "trip_id")] = col(row, tripIdx, "route_id")
+	}
+	tripRC.Close()
+
+	stCSV, stRC, stHeaders, err := openZipCSV(zr, "stop_times.txt")
+	if err != nil {
+		return nil, err
+	}
+	defer stRC.Close()
+	stIdx := headerIndex(stHeaders)
+	out := make(map[stopKey][]time.Time)
+	for {
+		row, err := stCSV.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		tid := col(row, stIdx, "trip_id")
+		rid, ok := tripToRoute[tid]
+		if !ok {
+			continue
+		}
+		ts := parseScheduledArrival(serviceDate, col(row, stIdx, "arrival_time"))
+		if ts.IsZero() {
+			continue
+		}
+		key := stopKey{RouteID: rid, StopID: col(row, stIdx, "stop_id")}
+		out[key] = append(out[key], ts)
+	}
+	for k, v := range out {
+		sort.Slice(v, func(i, j int) bool { return v[i].Before(v[j]) })
+		out[k] = v
+	}
+	return out, nil
+}
+
+type observationRow struct {
+	RouteID          string    `bigquery:"route_id"`
+	StopID           string    `bigquery:"stop_id"`
+	ScheduledArrival time.Time `bigquery:"scheduled_arrival"`
+	DelaySeconds     int64     `bigquery:"delay_seconds"`
+}
+
+func queryStatsObservations(ctx context.Context, serviceDate civil.Date) ([]observationRow, error) {
 	q := bqClient.Query(fmt.Sprintf(`
-		SELECT
-		  CASE
-		    WHEN delay_seconds < -120 THEN 'very_early'
-		    WHEN delay_seconds < -60  THEN 'early'
-		    WHEN delay_seconds <= 60  THEN 'on_time'
-		    WHEN delay_seconds <= 180 THEN 'slightly_late'
-		    WHEN delay_seconds <= 600 THEN 'late'
-		    ELSE                            'very_late'
-		  END AS bucket,
-		  COUNT(*) AS n
+		SELECT route_id, stop_id, scheduled_arrival, delay_seconds
 		FROM `+"`%s.actransit.trip_observations`"+`
 		WHERE service_date = "%s"
 		  AND actual_arrival IS NOT NULL
+		  AND scheduled_arrival IS NOT NULL
 		  AND is_stale = FALSE
-		GROUP BY bucket
 	`, projectID, serviceDate))
 	it, err := q.Read(ctx)
 	if err != nil {
-		return delayHistogram{}, err
+		return nil, err
 	}
-	counts := make(map[string]int64)
+	var out []observationRow
 	for {
-		var row struct {
-			Bucket string `bigquery:"bucket"`
-			N      int64  `bigquery:"n"`
-		}
+		var row observationRow
 		err := it.Next(&row)
 		if err == iterator.Done {
 			break
 		}
 		if err != nil {
-			return delayHistogram{}, err
+			return nil, err
 		}
-		counts[row.Bucket] = row.N
+		out = append(out, row)
 	}
-	final := make([]int64, len(bucketOrder))
-	for i, b := range bucketOrder {
-		final[i] = counts[b]
+	return out, nil
+}
+
+// computeDistortion calculates per-observation headway distortion as a
+// percent of the relevant scheduled headway:
+//   - late  (delay > 0): distortion = +delay / (this_sched − prior_sched) * 100
+//   - early (delay < 0): distortion = +delay / (next_sched − this_sched) * 100  (negative because delay is)
+//
+// Returns the system-wide histogram and a per-route map of all distortion
+// values (caller computes percentiles).
+func computeDistortion(obs []observationRow, schedule map[stopKey][]time.Time) (distortionHistogram, map[string][]float64) {
+	bucketLabels := []string{"< -50%", "-50% to -10%", "-10% to +10%", "+10% to +25%", "+25% to +50%", "+50% to +100%", "> +100%"}
+	counts := make([]int64, len(bucketLabels))
+	byRoute := make(map[string][]float64)
+
+	for _, o := range obs {
+		if o.DelaySeconds == 0 {
+			continue
+		}
+		sched, ok := schedule[stopKey{o.RouteID, o.StopID}]
+		if !ok || len(sched) < 2 {
+			continue
+		}
+		// Find this observation's scheduled arrival in the sorted list.
+		idx := sort.Search(len(sched), func(i int) bool { return !sched[i].Before(o.ScheduledArrival) })
+		if idx >= len(sched) || !sched[idx].Equal(o.ScheduledArrival) {
+			continue
+		}
+		var headway time.Duration
+		if o.DelaySeconds > 0 {
+			if idx == 0 {
+				continue
+			}
+			headway = o.ScheduledArrival.Sub(sched[idx-1])
+		} else {
+			if idx+1 >= len(sched) {
+				continue
+			}
+			headway = sched[idx+1].Sub(o.ScheduledArrival)
+		}
+		if headway <= 0 {
+			continue
+		}
+		d := float64(o.DelaySeconds) / headway.Seconds() * 100.0
+		byRoute[o.RouteID] = append(byRoute[o.RouteID], d)
+		switch {
+		case d < -50:
+			counts[0]++
+		case d < -10:
+			counts[1]++
+		case d <= 10:
+			counts[2]++
+		case d <= 25:
+			counts[3]++
+		case d <= 50:
+			counts[4]++
+		case d <= 100:
+			counts[5]++
+		default:
+			counts[6]++
+		}
 	}
-	return delayHistogram{Buckets: bucketOrder, Labels: labels, Counts: final}, nil
+	return distortionHistogram{Buckets: bucketLabels, Counts: counts}, byRoute
+}
+
+// percentileSorted returns the value at percentile p (0..1) from a sorted
+// (ascending) slice. Uses nearest-rank.
+func percentileSorted(sorted []float64, p float64) float64 {
+	if len(sorted) == 0 {
+		return 0
+	}
+	idx := int(float64(len(sorted)) * p)
+	if idx >= len(sorted) {
+		idx = len(sorted) - 1
+	}
+	return sorted[idx]
 }
 
 // queryStatsMinuteHistogram returns one bucket per (whole) minute of delay

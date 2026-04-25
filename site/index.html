@@ -58,31 +58,46 @@
   </section>
 
   <section>
-    <h2>Delay distribution</h2>
-    <p class="muted">Per stop arrival, delay = actual − scheduled. On-time = within ±1 min.</p>
+    <h2>Headway distortion</h2>
+    <p class="muted defn">
+      For each observed stop arrival, we compare the bus's lateness/earliness to
+      the scheduled gap to its <strong>neighboring scheduled trip</strong> at the
+      same stop on the same route. Late buses use the prior scheduled trip's gap;
+      early buses use the next.
+      <br><br>
+      <strong>Example.</strong> A 10-min headway with a bus 6 min late = a
+      <strong>+60%</strong> distortion (the gap from the previous bus stretched
+      from 10 to 16 min). A 5-min-early arrival on a 5-min headway is a
+      <strong>−100%</strong> distortion — the bus collapsed onto the previous
+      scheduled slot. Higher absolute values = more disruptive to riders waiting at the stop.
+    </p>
     <canvas id="histogram-chart" width="800" height="320"></canvas>
   </section>
 
   <section>
     <h2>Per-route</h2>
     <p class="muted">Click a column header to sort.</p>
-    <table id="routes-table">
-      <thead>
-        <tr>
-          <th data-key="route_id">Route</th>
-          <th>Δ distribution</th>
-          <th data-key="trips_observed">Trips</th>
-          <th data-key="observations">Stops</th>
-          <th data-key="service_delivered_pct">Service delivered %</th>
-          <th data-key="on_time_pct">On time % (≤3 min)</th>
-          <th data-key="late_pct">Late % (&gt;3 min)</th>
-          <th data-key="p50_delay_minutes">p50 delay (min)</th>
-          <th data-key="p95_delay_minutes">p95 delay (min)</th>
-          <th data-key="avg_speed_mph">Speed (mph)</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
+    <div class="table-wrap">
+      <table id="routes-table">
+        <thead>
+          <tr>
+            <th data-key="route_id">Route</th>
+            <th>Δ distribution</th>
+            <th data-key="trips_observed">Trips</th>
+            <th data-key="observations">Stops</th>
+            <th data-key="service_delivered_pct">Service delivered %</th>
+            <th data-key="on_time_pct">On time % (≤3 min)</th>
+            <th data-key="late_pct">Late % (&gt;3 min)</th>
+            <th data-key="p50_delay_minutes">p50 delay (min)</th>
+            <th data-key="p95_delay_minutes">p95 delay (min)</th>
+            <th data-key="p50_distortion_pct">p50 distortion %</th>
+            <th data-key="p95_distortion_pct">p95 distortion %</th>
+            <th data-key="avg_speed_mph">Speed (mph)</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
   </section>
 
   <script src="app.js"></script>

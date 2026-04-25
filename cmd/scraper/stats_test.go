@@ -184,6 +184,123 @@ func TestLoadRouteColors(t *testing.T) {
 	}
 }
 
+func TestComputeDistortion(t *testing.T) {
+	t0 := time.Date(2026, 4, 24, 15, 0, 0, 0, time.UTC) // 8:00 AM PT, say
+	// Schedule for one (route, stop): three buses at 10-min headway
+	sched := map[stopKey][]time.Time{
+		{"R1", "A"}: {
+			t0,
+			t0.Add(10 * time.Minute),
+			t0.Add(20 * time.Minute),
+		},
+	}
+
+	t.Run("late bus on first scheduled has no prior — skipped", func(t *testing.T) {
+		obs := []observationRow{
+			{RouteID: "R1", StopID: "A", ScheduledArrival: t0, DelaySeconds: 60},
+		}
+		_, byRoute := computeDistortion(obs, sched)
+		if len(byRoute["R1"]) != 0 {
+			t.Fatalf("expected 0 distortions (no prior), got %v", byRoute["R1"])
+		}
+	})
+
+	t.Run("late bus uses prior headway: +60% on 10-min headway", func(t *testing.T) {
+		// scheduled = t0 + 10 min, delayed by 6 min → 360 / 600 = 60%
+		obs := []observationRow{
+			{RouteID: "R1", StopID: "A", ScheduledArrival: t0.Add(10 * time.Minute), DelaySeconds: 360},
+		}
+		_, byRoute := computeDistortion(obs, sched)
+		if len(byRoute["R1"]) != 1 {
+			t.Fatalf("got %d, want 1", len(byRoute["R1"]))
+		}
+		got := byRoute["R1"][0]
+		if got != 60 {
+			t.Fatalf("distortion = %v, want 60", got)
+		}
+	})
+
+	t.Run("early bus uses next headway: -100% when arriving at prior bus's slot", func(t *testing.T) {
+		// scheduled = t0 + 10, delay = -600s (10 min early) → bus arrives at t0
+		// Distortion based on next headway (10 min) = -600/600 = -100%
+		obs := []observationRow{
+			{RouteID: "R1", StopID: "A", ScheduledArrival: t0.Add(10 * time.Minute), DelaySeconds: -600},
+		}
+		_, byRoute := computeDistortion(obs, sched)
+		if len(byRoute["R1"]) != 1 || byRoute["R1"][0] != -100 {
+			t.Fatalf("got %v, want -100", byRoute["R1"])
+		}
+	})
+
+	t.Run("early bus on last scheduled has no next — skipped", func(t *testing.T) {
+		obs := []observationRow{
+			{RouteID: "R1", StopID: "A", ScheduledArrival: t0.Add(20 * time.Minute), DelaySeconds: -60},
+		}
+		_, byRoute := computeDistortion(obs, sched)
+		if len(byRoute["R1"]) != 0 {
+			t.Fatalf("expected 0 distortions, got %v", byRoute["R1"])
+		}
+	})
+
+	t.Run("histogram buckets", func(t *testing.T) {
+		obs := []observationRow{
+			// Late by 6 min on 10-min headway → +60% → bucket 5 (50%-100%)
+			{RouteID: "R1", StopID: "A", ScheduledArrival: t0.Add(10 * time.Minute), DelaySeconds: 360},
+			// Late by 1 min on 10-min headway → +10% → bucket 2 (-10% to +10%)
+			{RouteID: "R1", StopID: "A", ScheduledArrival: t0.Add(20 * time.Minute), DelaySeconds: 60},
+			// Late by 12 min on 10-min headway → +120% → bucket 6 (>100%)
+			{RouteID: "R1", StopID: "A", ScheduledArrival: t0.Add(10 * time.Minute), DelaySeconds: 720},
+		}
+		hist, _ := computeDistortion(obs, sched)
+		if hist.Counts[2] != 1 {
+			t.Fatalf("bucket -10..+10 count = %d, want 1", hist.Counts[2])
+		}
+		if hist.Counts[5] != 1 {
+			t.Fatalf("bucket +50..+100 count = %d, want 1", hist.Counts[5])
+		}
+		if hist.Counts[6] != 1 {
+			t.Fatalf("bucket >+100 count = %d, want 1", hist.Counts[6])
+		}
+	})
+
+	t.Run("unknown stop is skipped without panicking", func(t *testing.T) {
+		obs := []observationRow{
+			{RouteID: "R1", StopID: "UNKNOWN", ScheduledArrival: t0, DelaySeconds: 60},
+		}
+		_, byRoute := computeDistortion(obs, sched)
+		if len(byRoute["R1"]) != 0 {
+			t.Fatalf("expected 0, got %v", byRoute["R1"])
+		}
+	})
+}
+
+func TestPercentileSorted(t *testing.T) {
+	cases := []struct {
+		name string
+		vals []float64
+		p    float64
+		want float64
+	}{
+		{"empty", nil, 0.5, 0},
+		{"p50 of 10 values", []float64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}, 0.5, 5},
+		{"p95 of 100 values", func() []float64 {
+			s := make([]float64, 100)
+			for i := range s {
+				s[i] = float64(i)
+			}
+			return s
+		}(), 0.95, 95},
+		{"p100 clamps", []float64{1, 2, 3}, 1.0, 3},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := percentileSorted(c.vals, c.p); got != c.want {
+				t.Fatalf("got %v, want %v", got, c.want)
+			}
+		})
+	}
+}
+
 func TestRound1(t *testing.T) {
 	cases := []struct {
 		in   float64

@@ -291,21 +291,19 @@ function render(data) {
     .map((id) => `<li>${id}</li>`)
     .join("");
 
-  // ---- histogram ----
-  const ctx = document.getElementById("histogram-chart").getContext("2d");
-  const colors = ["#92c5de", "#c6dbef", "#a1d99b", "#fdae6b", "#fd8d3c", "#d62728"];
-  const counts = data.delay_histogram.counts;
-  const total = counts.reduce((a, b) => a + b, 0);
-  const pcts = counts.map((c) => (total > 0 ? (c / total) * 100 : 0));
-  new Chart(ctx, {
+  // ---- distortion histogram ----
+  const dh = data.distortion_histogram || { buckets: [], counts: [] };
+  const distCtx = document.getElementById("histogram-chart").getContext("2d");
+  // blue (early) → green (on-schedule) → orange → red (late)
+  const distColors = ["#3182bd", "#92c5de", "#a1d99b", "#fdd49e", "#fdae6b", "#fd8d3c", "#d62728"];
+  const dCounts = dh.counts || [];
+  const dTotal = dCounts.reduce((a, b) => a + b, 0);
+  const dPcts = dCounts.map((c) => (dTotal > 0 ? (c / dTotal) * 100 : 0));
+  new Chart(distCtx, {
     type: "bar",
     data: {
-      labels: data.delay_histogram.labels,
-      datasets: [{
-        label: "% of stop arrivals",
-        data: pcts,
-        backgroundColor: colors,
-      }],
+      labels: dh.buckets,
+      datasets: [{ label: "% of stop arrivals", data: dPcts, backgroundColor: distColors }],
     },
     options: {
       plugins: {
@@ -314,18 +312,15 @@ function render(data) {
           callbacks: {
             label: (ctx) => {
               const pct = ctx.raw;
-              const cnt = counts[ctx.dataIndex];
-              return `${pct.toFixed(1)}%  (${cnt.toLocaleString()} stops of ${total.toLocaleString()})`;
+              const cnt = dCounts[ctx.dataIndex];
+              return `${pct.toFixed(1)}%  (${cnt.toLocaleString()} stops of ${dTotal.toLocaleString()})`;
             },
           },
         },
       },
       scales: {
-        y: {
-          beginAtZero: true,
-          title: { display: true, text: "% of stop arrivals" },
-          ticks: { callback: (v) => `${v}%` },
-        },
+        x: { title: { display: true, text: "headway distortion" }, grid: { display: false } },
+        y: { beginAtZero: true, title: { display: true, text: "% of stop arrivals" }, ticks: { callback: (v) => `${v}%` } },
       },
     },
   });
@@ -366,6 +361,8 @@ function render(data) {
         <td ${cellGrade(r.late_pct, gradeLate)}>${fmt(r.late_pct)}</td>
         <td>${fmt(r.p50_delay_minutes)}</td>
         <td>${fmt(r.p95_delay_minutes)}</td>
+        <td>${fmt(r.p50_distortion_pct)}</td>
+        <td>${fmt(r.p95_distortion_pct)}</td>
         <td>${fmt(r.avg_speed_mph)}</td>
       </tr>`;
       })

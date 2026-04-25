@@ -150,3 +150,9 @@ tbody tr:hover { background: #fafafa; }
 }
 
 canvas { max-width: 100%; height: auto !important; }
+
+.table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.table-wrap table { min-width: 1100px; }
