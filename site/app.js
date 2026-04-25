@@ -285,12 +285,6 @@ function render(data) {
     { label: "Dropped / not observed", val: `${intFmt(sc.dropped_trips)} (${fmt(droppedPct)}%)` },
   ]);
 
-  document.getElementById("dropped-summary").textContent =
-    `Sample of dropped trip IDs (showing first ${sc.dropped_trip_ids_sample.length})`;
-  document.getElementById("dropped-list").innerHTML = sc.dropped_trip_ids_sample
-    .map((id) => `<li>${id}</li>`)
-    .join("");
-
   // ---- distortion histogram ----
   const dh = data.distortion_histogram || { buckets: [], counts: [] };
   const distCtx = document.getElementById("histogram-chart").getContext("2d");

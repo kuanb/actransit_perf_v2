@@ -101,16 +101,6 @@ section { margin-top: 32px; }
   font-variant-numeric: tabular-nums;
 }
 
-#dropped-summary {
-  margin-top: 12px;
-  cursor: pointer;
-}
-#dropped-list {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
-  columns: 3;
-}
-
 table {
   width: 100%;
   border-collapse: collapse;
