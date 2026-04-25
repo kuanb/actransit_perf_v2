@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/bigquery"
+	"cloud.google.com/go/civil"
 	monitoring "cloud.google.com/go/monitoring/apiv3/v2"
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
 	secretmanagerpb "cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
@@ -123,6 +124,7 @@ func main() {
 	http.HandleFunc("/refresh-stops", handleRefreshStops)
 	http.HandleFunc("/refresh-gtfs", handleRefreshGTFS)
 	http.HandleFunc("/track-performance", handleTrackPerformance)
+	http.HandleFunc("/generate-daily-stats", handleGenerateDailyStats)
 	http.HandleFunc("/", handleHealth)
 
 	slog.Info("listening", "port", port)
@@ -191,6 +193,38 @@ func handleTrackPerformance(w http.ResponseWriter, r *http.Request) {
 		)
 	}
 	fmt.Fprintln(w, "ok")
+}
+
+func handleGenerateDailyStats(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	dateStr := r.URL.Query().Get("service_date")
+	var sd civil.Date
+	if dateStr != "" {
+		parsed, err := civil.ParseDate(dateStr)
+		if err != nil {
+			http.Error(w, "invalid service_date: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		sd = parsed
+	} else {
+		sd = defaultStatsServiceDate(time.Now())
+	}
+	stats, err := generateDailyStats(r.Context(), sd)
+	if err != nil {
+		slog.Error("generate-daily-stats failed", "err", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	slog.Info("generate-daily-stats ok",
+		"duration_ms", time.Since(start).Milliseconds(),
+		"service_date", sd.String(),
+		"routes", len(stats.Routes),
+		"system_total_trips", stats.System.TotalTrips,
+		"scheduled_trips", stats.ScheduleCompliance.ScheduledTrips,
+		"ran_trips", stats.ScheduleCompliance.RanTrips,
+	)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(stats)
 }
 
 func handleRefreshGTFS(w http.ResponseWriter, r *http.Request) {

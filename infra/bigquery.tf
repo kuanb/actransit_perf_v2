@@ -42,3 +42,12 @@ resource "google_bigquery_dataset_iam_member" "scraper_writer" {
   role       = "roles/bigquery.dataEditor"
   member     = "serviceAccount:${google_service_account.scraper.email}"
 }
+
+# /generate-daily-stats issues SELECT queries against trip_observations.
+# bigquery.dataEditor covers reads/writes on table data, but query jobs
+# require bigquery.jobUser at the project level.
+resource "google_project_iam_member" "scraper_bq_job_user" {
+  project = var.project_id
+  role    = "roles/bigquery.jobUser"
+  member  = "serviceAccount:${google_service_account.scraper.email}"
+}

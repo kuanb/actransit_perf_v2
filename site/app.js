@@ -1,9 +1,68 @@
-const STATS_URL = "data/stats.json";
+const GCS_BASE = "https://storage.googleapis.com/transit-203605-actransit-cache";
+const isLocal = ["localhost", "127.0.0.1"].includes(window.location.hostname);
 
 const fmt = (v, d = 1) =>
   v === null || v === undefined ? "—" : Number(v).toFixed(d);
 const intFmt = (v) =>
   v === null || v === undefined ? "—" : Number(v).toLocaleString();
+
+function statsURL(date) {
+  return date ? `${GCS_BASE}/stats/${date}.json` : `${GCS_BASE}/stats/latest.json`;
+}
+
+async function fetchJSON(url) {
+  const res = await fetch(url, { cache: "no-cache" });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+async function loadIndex() {
+  try {
+    const idx = await fetchJSON(`${GCS_BASE}/stats/_index.json`);
+    return Array.isArray(idx.dates) ? idx.dates : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function renderDateSelector(dates, current) {
+  const el = document.getElementById("date-selector");
+  if (!dates.length && !current) {
+    el.innerHTML = "";
+    return;
+  }
+  const last10 = dates.slice(0, 10);
+  const customSelected = current && !last10.includes(current);
+  el.innerHTML = `
+    <label>View date:
+      <select id="date-dropdown">
+        <option value="" ${!current ? "selected" : ""}>Latest</option>
+        ${last10.map((d) => `<option value="${d}" ${d === current ? "selected" : ""}>${d}</option>`).join("")}
+        ${customSelected ? `<option value="${current}" selected>${current}</option>` : ""}
+        ${dates.length > 10 ? `<option value="__more__">Older date…</option>` : ""}
+      </select>
+    </label>
+  `;
+  document.getElementById("date-dropdown").addEventListener("change", (e) => {
+    const v = e.target.value;
+    if (v === "__more__") {
+      const oldest = dates[dates.length - 1];
+      const newest = dates[0];
+      const picked = prompt(`Enter a date (YYYY-MM-DD).\nAvailable range: ${oldest} – ${newest}`, "");
+      if (picked && /^\d{4}-\d{2}-\d{2}$/.test(picked)) navigateTo(picked);
+      else e.target.value = current || "";
+      return;
+    }
+    navigateTo(v || null);
+  });
+}
+
+function navigateTo(date) {
+  const url = new URL(window.location.href);
+  if (date) url.searchParams.set("date", date);
+  else url.searchParams.delete("date");
+  window.location.href = url.toString();
+}
 
 // gradeColor maps t (0=worst, 1=best) to a {bg, fg} CSS color via a 3-stop
 // gradient: dark red → orange → green. Text flips to white when bg is darkest.
@@ -83,20 +142,39 @@ function routeBoxPlot(r) {
 }
 
 async function load() {
-  try {
-    const res = await fetch(STATS_URL);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    render(data);
-  } catch (e) {
+  const params = new URLSearchParams(window.location.search);
+  const date = params.get("date");
+
+  // Load order: GCS first, then local fallback (only when no specific date
+  // is requested AND we're on localhost — supports `python3 scripts/generate_stats.py`
+  // for offline iteration).
+  const sources = [statsURL(date)];
+  if (isLocal && !date) sources.push("data/stats.json");
+
+  let data = null;
+  let lastErr = null;
+  for (const url of sources) {
+    try {
+      data = await fetchJSON(url);
+      break;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  if (!data) {
     document.body.insertAdjacentHTML(
       "afterbegin",
       `<div style="padding:16px;background:#fee;color:#900;">
-        Couldn't load ${STATS_URL}: ${e.message}.
-        Run <code>python3 scripts/generate_stats.py</code> first.
+        Couldn't load stats for ${date || "latest"}: ${lastErr ? lastErr.message : "unknown"}.
+        ${isLocal ? "For local iteration, run <code>python3 scripts/generate_stats.py</code>." : ""}
       </div>`
     );
+    return;
   }
+
+  render(data);
+  const dates = await loadIndex();
+  renderDateSelector(dates, date || data.service_date);
 }
 
 function render(data) {

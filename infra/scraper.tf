@@ -8,7 +8,9 @@ resource "google_cloud_run_v2_service" "scraper" {
 
   template {
     service_account = google_service_account.scraper.email
-    timeout         = "60s"
+    # 300s accommodates /generate-daily-stats (GTFS download + 4 BQ queries
+    # against ~80k rows). Other endpoints finish in <2s and are unaffected.
+    timeout = "300s"
 
     scaling {
       max_instance_count = 2

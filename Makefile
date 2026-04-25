@@ -87,6 +87,9 @@ smoke:
 	bq show -q $(PROJECT_ID):actransit.trip_observations >/dev/null 2>&1 || { echo "FAIL: actransit.trip_observations missing"; exit 1; }; \
 	bq show -q $(PROJECT_ID):actransit.trip_probes >/dev/null 2>&1 || { echo "FAIL: actransit.trip_probes missing"; exit 1; }; \
 	echo "  OK"; \
+	hit POST /generate-daily-stats; \
+	check "$$BUCKET/stats/latest.json"; \
+	check "$$BUCKET/stats/_index.json"; \
 	if [ "$(TAG)" = "full" ]; then \
 		hit POST /refresh-gtfs; \
 		check "$$BUCKET/gtfs/current.zip"; \

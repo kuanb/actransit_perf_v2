@@ -65,6 +65,24 @@ resource "google_cloud_scheduler_job" "track_performance" {
   }
 }
 
+resource "google_cloud_scheduler_job" "generate_daily_stats" {
+  name             = "actransit-generate-daily-stats"
+  region           = var.region
+  schedule         = "0 2 * * *"
+  time_zone        = "America/Los_Angeles"
+  attempt_deadline = "300s"
+
+  http_target {
+    http_method = "POST"
+    uri         = "${google_cloud_run_v2_service.scraper.uri}/generate-daily-stats"
+
+    oidc_token {
+      service_account_email = google_service_account.scheduler.email
+      audience              = google_cloud_run_v2_service.scraper.uri
+    }
+  }
+}
+
 resource "google_cloud_scheduler_job" "refresh_gtfs" {
   name             = "actransit-refresh-gtfs"
   region           = var.region
