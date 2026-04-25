@@ -26,7 +26,7 @@ deploy:
 	cd infra && terraform apply -var "image_tag=$(TAG)"
 
 logs:
-	gcloud run services logs read $(REPO) --region $(REGION) --limit 50
+	gcloud logging read 'resource.labels.service_name="actransit-scraper"' --limit 50 --freshness=15m
 
 invoke:
 	curl -H "Authorization: Bearer $$(gcloud auth print-identity-token)" \
