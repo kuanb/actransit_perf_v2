@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	monitoring "cloud.google.com/go/monitoring/apiv3/v2"
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
 	secretmanagerpb "cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
 	"cloud.google.com/go/storage"
@@ -74,11 +75,13 @@ func main() {
 	bucketName = os.Getenv("CACHE_BUCKET")
 	apiSecretName := os.Getenv("SECRET_NAME")
 	gtfsSecretName := os.Getenv("GTFS_SECRET_NAME")
-	if bucketName == "" || apiSecretName == "" || gtfsSecretName == "" {
+	projectID = os.Getenv("PROJECT_ID")
+	if bucketName == "" || apiSecretName == "" || gtfsSecretName == "" || projectID == "" {
 		slog.Error("missing required env",
 			"CACHE_BUCKET", bucketName,
 			"SECRET_NAME", apiSecretName,
 			"GTFS_SECRET_NAME", gtfsSecretName,
+			"PROJECT_ID", projectID,
 		)
 		os.Exit(1)
 	}
@@ -94,6 +97,14 @@ func main() {
 	defer c.Close()
 	gcsClient = c
 
+	mc, err := monitoring.NewMetricClient(ctx)
+	if err != nil {
+		slog.Error("monitoring.NewMetricClient failed", "err", err)
+		os.Exit(1)
+	}
+	defer mc.Close()
+	metricsClient = mc
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
@@ -102,6 +113,7 @@ func main() {
 	http.HandleFunc("/scrape", handleScrape)
 	http.HandleFunc("/refresh-stops", handleRefreshStops)
 	http.HandleFunc("/refresh-gtfs", handleRefreshGTFS)
+	http.HandleFunc("/track-performance", handleTrackPerformance)
 	http.HandleFunc("/", handleHealth)
 
 	slog.Info("listening", "port", port)
@@ -139,6 +151,31 @@ func handleRefreshStops(w http.ResponseWriter, r *http.Request) {
 		"routes_total", stats.Total,
 		"routes_failed", stats.Failed,
 	)
+	fmt.Fprintln(w, "ok")
+}
+
+func handleTrackPerformance(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	stats, err := trackPerformance(r.Context())
+	if err != nil {
+		slog.Error("track-performance failed", "err", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if stats.Conflict {
+		slog.Info("track-performance conflict",
+			"duration_ms", time.Since(start).Milliseconds(),
+			"note", "another writer updated state.json first; will reconcile next minute",
+		)
+	} else {
+		slog.Info("track-performance ok",
+			"duration_ms", time.Since(start).Milliseconds(),
+			"in_flight", stats.InFlight,
+			"new_trips", stats.NewTripsStarted,
+			"trips_expired", stats.TripsExpired,
+			"probes_appended", stats.ProbesAppended,
+		)
+	}
 	fmt.Fprintln(w, "ok")
 }
 

@@ -47,6 +47,24 @@ resource "google_cloud_scheduler_job" "refresh_stops" {
   }
 }
 
+resource "google_cloud_scheduler_job" "track_performance" {
+  name             = "actransit-track-performance"
+  region           = var.region
+  schedule         = "* * * * *"
+  time_zone        = "Etc/UTC"
+  attempt_deadline = "60s"
+
+  http_target {
+    http_method = "POST"
+    uri         = "${google_cloud_run_v2_service.scraper.uri}/track-performance"
+
+    oidc_token {
+      service_account_email = google_service_account.scheduler.email
+      audience              = google_cloud_run_v2_service.scraper.uri
+    }
+  }
+}
+
 resource "google_cloud_scheduler_job" "refresh_gtfs" {
   name             = "actransit-refresh-gtfs"
   region           = var.region

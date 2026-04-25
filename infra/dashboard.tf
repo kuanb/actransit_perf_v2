@@ -62,7 +62,7 @@ resource "google_monitoring_dashboard" "scraper" {
               chartOptions = { mode = "COLOR" }
               dataSets = [
                 {
-                  plotType   = "LINE"
+                  plotType       = "LINE"
                   legendTemplate = "$${metric.labels.response_code_class}"
                   timeSeriesQuery = {
                     timeSeriesFilter = {
