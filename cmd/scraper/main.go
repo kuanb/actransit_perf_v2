@@ -459,6 +459,10 @@ func updateHistory(ctx context.Context, newest []byte) error {
 func writeObject(ctx context.Context, key string, data []byte) error {
 	w := gcsClient.Bucket(bucketName).Object(key).NewWriter(ctx)
 	w.ContentType = "application/json"
+	// GCS defaults to Cache-Control: public, max-age=3600 on publicly-readable
+	// objects, which made latest.json serve stale via the public URL despite
+	// per-minute writes. We need every fetch to revalidate.
+	w.CacheControl = "no-cache, max-age=0"
 	if _, err := w.Write(data); err != nil {
 		_ = w.Close()
 		return err
