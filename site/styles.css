@@ -14,6 +14,23 @@ header {
   border-bottom: 1px solid #e5e5e5;
   padding-bottom: 12px;
   margin-bottom: 24px;
+  position: relative;
+}
+
+.header-link {
+  position: absolute;
+  top: 4px;
+  right: 0;
+  font-size: 13px;
+  color: #1971c2;
+  text-decoration: none;
+  padding: 6px 12px;
+  border: 1px solid #1971c2;
+  border-radius: 4px;
+}
+.header-link:hover {
+  background: #1971c2;
+  color: white;
 }
 
 h1 { margin: 0 0 4px; font-size: 28px; }
