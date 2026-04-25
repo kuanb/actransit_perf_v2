@@ -106,6 +106,25 @@ function gradeServiceDelivered(pct) {
   return gradeColor((pct - 90) / (99 - 90));
 }
 
+// distortionColor: blue (very early, -100%) → light gray (around 0) → red (very
+// late, +100%). Used to color the 42 bars in the distortion histogram.
+function distortionColor(centerPct) {
+  const t = Math.max(-1, Math.min(1, centerPct / 100));
+  if (t < 0) {
+    // -1 (deep blue) → 0 (near-neutral)
+    const f = t + 1;
+    const r = Math.round(50 + (220 - 50) * f);
+    const g = Math.round(110 + (230 - 110) * f);
+    const b = Math.round(180 + (235 - 180) * f);
+    return `rgb(${r},${g},${b})`;
+  }
+  // 0 (near-neutral) → +1 (deep red)
+  const r = Math.round(220 + (170 - 220) * t);
+  const g = Math.round(230 + (35 - 230) * t);
+  const b = Math.round(235 + (35 - 235) * t);
+  return `rgb(${r},${g},${b})`;
+}
+
 function routeBadge(r) {
   const bg = r.color || "FFFFFF";
   const fg = r.text_color || "000000";
@@ -285,36 +304,70 @@ function render(data) {
     { label: "Dropped / not observed", val: `${intFmt(sc.dropped_trips)} (${fmt(droppedPct)}%)` },
   ]);
 
-  // ---- distortion histogram ----
+  // ---- distortion histogram (42 buckets: under, 40 × 5%, over) ----
   const dh = data.distortion_histogram || { buckets: [], counts: [] };
   const distCtx = document.getElementById("histogram-chart").getContext("2d");
-  // blue (early) → green (on-schedule) → orange → red (late)
-  const distColors = ["#3182bd", "#92c5de", "#a1d99b", "#fdd49e", "#fdae6b", "#fd8d3c", "#d62728"];
   const dCounts = dh.counts || [];
   const dTotal = dCounts.reduce((a, b) => a + b, 0);
   const dPcts = dCounts.map((c) => (dTotal > 0 ? (c / dTotal) * 100 : 0));
+
+  // Map bucket index → bucket center percent.
+  //  index 0       → -100 (under)
+  //  index 1..40   → -97.5, -92.5, ..., +97.5 (5% buckets)
+  //  index 41      → +100 (over)
+  const centerOf = (i) => {
+    if (i === 0) return -100;
+    if (i === 41) return 100;
+    return -100 + (i - 1) * 5 + 2.5;
+  };
+  const distColors = dCounts.map((_, i) => distortionColor(centerOf(i)));
+
+  // X-axis labels: only show every 4th bucket (every 20%) to keep readable.
+  const xLabels = dh.buckets.map((b, i) => {
+    if (i === 0) return "≤ -100";
+    if (i === 41) return "≥ +100";
+    const lo = -100 + (i - 1) * 5;
+    return lo % 20 === 0 ? `${lo > 0 ? "+" : ""}${lo}` : "";
+  });
+
   new Chart(distCtx, {
     type: "bar",
     data: {
-      labels: dh.buckets,
-      datasets: [{ label: "% of stop arrivals", data: dPcts, backgroundColor: distColors }],
+      labels: xLabels,
+      datasets: [{
+        label: "% of stop arrivals",
+        data: dPcts,
+        backgroundColor: distColors,
+        borderWidth: 0,
+        categoryPercentage: 1.0,
+        barPercentage: 1.0,
+      }],
     },
     options: {
       plugins: {
         legend: { display: false },
         tooltip: {
           callbacks: {
+            title: (ctx) => dh.buckets[ctx[0].dataIndex],
             label: (ctx) => {
               const pct = ctx.raw;
               const cnt = dCounts[ctx.dataIndex];
-              return `${pct.toFixed(1)}%  (${cnt.toLocaleString()} stops of ${dTotal.toLocaleString()})`;
+              return `${pct.toFixed(2)}%  (${cnt.toLocaleString()} stops of ${dTotal.toLocaleString()})`;
             },
           },
         },
       },
       scales: {
-        x: { title: { display: true, text: "headway distortion" }, grid: { display: false } },
-        y: { beginAtZero: true, title: { display: true, text: "% of stop arrivals" }, ticks: { callback: (v) => `${v}%` } },
+        x: {
+          title: { display: true, text: "headway distortion (%)" },
+          grid: { display: false },
+          ticks: { autoSkip: false, maxRotation: 0 },
+        },
+        y: {
+          beginAtZero: true,
+          title: { display: true, text: "% of stop arrivals" },
+          ticks: { callback: (v) => `${v}%` },
+        },
       },
     },
   });

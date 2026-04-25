@@ -242,24 +242,53 @@ func TestComputeDistortion(t *testing.T) {
 		}
 	})
 
-	t.Run("histogram buckets", func(t *testing.T) {
+	t.Run("histogram buckets (5%-wide, ±100% range, two extreme buckets)", func(t *testing.T) {
 		obs := []observationRow{
-			// Late by 6 min on 10-min headway → +60% → bucket 5 (50%-100%)
+			// Late 6 min on 10-min headway → +60% → bucket index for +60% to +65%
 			{RouteID: "R1", StopID: "A", ScheduledArrival: t0.Add(10 * time.Minute), DelaySeconds: 360},
-			// Late by 1 min on 10-min headway → +10% → bucket 2 (-10% to +10%)
-			{RouteID: "R1", StopID: "A", ScheduledArrival: t0.Add(20 * time.Minute), DelaySeconds: 60},
-			// Late by 12 min on 10-min headway → +120% → bucket 6 (>100%)
+			// Late 0.6 min on 10-min headway → +6% → bucket for +5% to +10%
+			{RouteID: "R1", StopID: "A", ScheduledArrival: t0.Add(20 * time.Minute), DelaySeconds: 36},
+			// Late 12 min on 10-min headway → +120% → overflow bucket (last)
 			{RouteID: "R1", StopID: "A", ScheduledArrival: t0.Add(10 * time.Minute), DelaySeconds: 720},
 		}
 		hist, _ := computeDistortion(obs, sched)
-		if hist.Counts[2] != 1 {
-			t.Fatalf("bucket -10..+10 count = %d, want 1", hist.Counts[2])
+		if len(hist.Counts) != 42 {
+			t.Fatalf("got %d buckets, want 42", len(hist.Counts))
 		}
-		if hist.Counts[5] != 1 {
-			t.Fatalf("bucket +50..+100 count = %d, want 1", hist.Counts[5])
+		// +60% → 1 + (60+100)/5 = 1 + 32 = 33
+		if hist.Counts[33] != 1 {
+			t.Fatalf("bucket[33] (+60..+65) count = %d, want 1", hist.Counts[33])
 		}
-		if hist.Counts[6] != 1 {
-			t.Fatalf("bucket >+100 count = %d, want 1", hist.Counts[6])
+		// +6% → 1 + (6+100)/5 = 1 + 21 = 22
+		if hist.Counts[22] != 1 {
+			t.Fatalf("bucket[22] (+5..+10) count = %d, want 1", hist.Counts[22])
+		}
+		// +120% (overflow) → bucket 41
+		if hist.Counts[41] != 1 {
+			t.Fatalf("bucket[41] (≥ +100%%) count = %d, want 1", hist.Counts[41])
+		}
+	})
+
+	t.Run("distortionBucketIndex boundary cases", func(t *testing.T) {
+		cases := []struct {
+			d    float64
+			want int
+		}{
+			{-200, 0},      // underflow
+			{-100, 0},      // exactly -100% goes to underflow
+			{-99.9, 1},     // first 5% bucket
+			{-95, 2},       // -95..-90
+			{0, 21},        // 0% → bucket starting at 0
+			{4.99, 21},     // upper edge of 0..5
+			{5, 22},        // start of +5..+10
+			{99.99, 40},    // last 5% bucket
+			{100, 41},      // exactly +100% goes to overflow
+			{500, 41},      // overflow
+		}
+		for _, c := range cases {
+			if got := distortionBucketIndex(c.d); got != c.want {
+				t.Fatalf("distortionBucketIndex(%v) = %d, want %d", c.d, got, c.want)
+			}
 		}
 	})
 

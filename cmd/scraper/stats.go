@@ -720,16 +720,47 @@ func queryStatsObservations(ctx context.Context, serviceDate civil.Date) ([]obse
 	return out, nil
 }
 
+// distortionBucketLabels returns 42 labels covering [-100%, +100%] in 5%
+// increments, plus extreme buckets at each end:
+//
+//	"≤ -100%", "-100% to -95%", "-95% to -90%", ..., "+95% to +100%", "≥ +100%"
+//
+// Index 0 is the under-flow bucket; index 41 is the over-flow bucket.
+func distortionBucketLabels() []string {
+	labels := make([]string, 0, 42)
+	labels = append(labels, "≤ -100%")
+	for lo := -100; lo < 100; lo += 5 {
+		hi := lo + 5
+		labels = append(labels, fmt.Sprintf("%+d%% to %+d%%", lo, hi))
+	}
+	labels = append(labels, "≥ +100%")
+	return labels
+}
+
+// distortionBucketIndex maps a distortion percent to a histogram bucket index
+// in the 42-bucket scheme described above.
+func distortionBucketIndex(d float64) int {
+	if d <= -100 {
+		return 0
+	}
+	if d >= 100 {
+		return 41
+	}
+	// 5% buckets across [-100, +100); shift so -100 → 0, then int-divide by 5
+	return 1 + int((d+100)/5)
+}
+
 // computeDistortion calculates per-observation headway distortion as a
 // percent of the relevant scheduled headway:
 //   - late  (delay > 0): distortion = +delay / (this_sched − prior_sched) * 100
 //   - early (delay < 0): distortion = +delay / (next_sched − this_sched) * 100  (negative because delay is)
 //
-// Returns the system-wide histogram and a per-route map of all distortion
-// values (caller computes percentiles).
+// Returns the system-wide histogram (42 buckets, 5% wide except for the two
+// extreme catch-all buckets) and a per-route map of all distortion values
+// (caller computes percentiles).
 func computeDistortion(obs []observationRow, schedule map[stopKey][]time.Time) (distortionHistogram, map[string][]float64) {
-	bucketLabels := []string{"< -50%", "-50% to -10%", "-10% to +10%", "+10% to +25%", "+25% to +50%", "+50% to +100%", "> +100%"}
-	counts := make([]int64, len(bucketLabels))
+	labels := distortionBucketLabels()
+	counts := make([]int64, len(labels))
 	byRoute := make(map[string][]float64)
 
 	for _, o := range obs {
@@ -740,7 +771,6 @@ func computeDistortion(obs []observationRow, schedule map[stopKey][]time.Time) (
 		if !ok || len(sched) < 2 {
 			continue
 		}
-		// Find this observation's scheduled arrival in the sorted list.
 		idx := sort.Search(len(sched), func(i int) bool { return !sched[i].Before(o.ScheduledArrival) })
 		if idx >= len(sched) || !sched[idx].Equal(o.ScheduledArrival) {
 			continue
@@ -762,24 +792,9 @@ func computeDistortion(obs []observationRow, schedule map[stopKey][]time.Time) (
 		}
 		d := float64(o.DelaySeconds) / headway.Seconds() * 100.0
 		byRoute[o.RouteID] = append(byRoute[o.RouteID], d)
-		switch {
-		case d < -50:
-			counts[0]++
-		case d < -10:
-			counts[1]++
-		case d <= 10:
-			counts[2]++
-		case d <= 25:
-			counts[3]++
-		case d <= 50:
-			counts[4]++
-		case d <= 100:
-			counts[5]++
-		default:
-			counts[6]++
-		}
+		counts[distortionBucketIndex(d)]++
 	}
-	return distortionHistogram{Buckets: bucketLabels, Counts: counts}, byRoute
+	return distortionHistogram{Buckets: labels, Counts: counts}, byRoute
 }
 
 // percentileSorted returns the value at percentile p (0..1) from a sorted
