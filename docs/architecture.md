@@ -159,6 +159,37 @@ Simple and good enough — staleness window is at most 100 min after a new
 GTFS landing, which is well under the cadence at which AC Transit updates
 schedules.
 
+### Cloud Run memory and parser strategy
+
+**Memory limit: 1 GiB.** Started at 256 MiB (the existing default). Chunk 1
+added per-route GTFS preprocessing inside `/refresh-gtfs`. Three rounds of
+OOMs during testing established that the original buffered-parse approach
+needed >1 GiB at peak (Go's GC scaled allocation up as we raised the limit:
+512 MiB cap → 585 MiB used; 1 GiB cap → 1173 MiB used).
+
+The AC Transit GTFS is bigger than initial estimates: `shapes.txt` has
+320k rows and `stop_times.txt` has 630k rows. Buffering each as
+`[]map[string]string` allocates ~6.4M tiny strings just for stop_times,
+which Go represents inefficiently — that alone explains the 1+ GiB peaks.
+
+**Streaming parser**: `gtfs_static.go` now reads each CSV row-by-row with
+`csv.Reader.ReuseRecord = true`, indexes columns once at the top, and
+extracts directly into the final structured form
+(`map[stopID]gtfsStop` etc.) — no intermediate map-of-strings buffer.
+Expected peak with this approach: ~150–200 MiB. We're keeping the cap
+at 1 GiB for now to leave generous headroom; once steady-state usage is
+observed, we may revisit downward.
+
+**Stop-projection memoization**: `projectLatLonOntoShape` was called
+once per stop per trip (~630k calls, each iterating ~1500 shape segments).
+Many trips share shapes and many stops repeat across trips, so we
+deduplicate to ~15k unique `(shape_id, stop_id)` pairs — ~40× speedup
+that keeps the daily refresh well inside the 60s Cloud Run timeout.
+
+Cost impact of the bumped memory: zero. Cloud Run with `cpu_idle = true`
+bills memory only during request handling; total monthly footprint sits
+at ~8% of the 450k GiB-second free tier even at 1 GiB.
+
 ### Stale trip timeout: 20 minutes
 
 If we haven't seen a vehicle's probe for 20 minutes, finalize whatever we
@@ -190,3 +221,4 @@ Total marginal cost: **~$0.40/month** on top of the existing ~$1/month.
 | 3 | **Route projection + stop-arrival detection**. Output stays in state.json. Spot-check by comparing scheduled vs. detected arrivals manually. | Hardest math; isolating it lets us iterate without DB schema concerns. |
 | 4 | **BigQuery dataset + tables + write path**. Completed/stale trips emit rows to `trip_observations` + `trip_probes`. | One-shot wiring; tables are partitioned/clustered correctly from day one. |
 | 5 | **Stale-trip detector + dashboard tiles**. Add tiles for completed trips/day, avg delay, and a 5th tile for `vehicles_in_flight` on the existing dashboard. | Polish + ops resilience. |
+| 6 | **Memory rightsizing**. Observe steady-state Cloud Run memory across all endpoints over ~7 days. The 1 GiB cap was set defensively during chunk 1's GTFS OOM debugging; with the streaming parser in place, peak should sit near 200 MiB. Trim the limit (likely to `512Mi`) and confirm no OOMs across `/scrape`, `/refresh-stops`, `/refresh-gtfs`, `/track-performance`. | Reverts the chunk-1 over-provisioning once it's safe to do so. |
