@@ -18,6 +18,13 @@ from AC Transit's `/allstops` endpoint, written to a third object:
 
 - `route_stops.json` — `[{routeName, processedStops}]` for each active route
 
+A third job (`/refresh-gtfs`) runs nightly at 22:00 America/Los_Angeles,
+downloads the static GTFS zip, hashes it, and writes a new dated archive
+plus updates `gtfs/current.zip` only if the hash changed:
+
+- `gtfs/current.zip` — the most recent GTFS, also tagged with the SHA-256 in metadata
+- `gtfs/<YYYYMMDDTHHMMSSZ>.zip` — immutable dated archives of each version observed
+
 ## Public endpoints
 
 The cache bucket is world-readable so frontends can fetch the JSON
@@ -28,6 +35,7 @@ directly via HTTPS, with permissive CORS for browsers:
 | Latest vehicles  | `https://storage.googleapis.com/transit-203605-actransit-cache/latest.json`               |
 | Vehicle history  | `https://storage.googleapis.com/transit-203605-actransit-cache/history.json`              |
 | Route stops      | `https://storage.googleapis.com/transit-203605-actransit-cache/route_stops.json`          |
+| Current GTFS     | `https://storage.googleapis.com/transit-203605-actransit-cache/gtfs/current.zip`          |
 
 ## Stack
 
