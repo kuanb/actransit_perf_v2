@@ -65,6 +65,8 @@ type trackStats struct {
 	ProbesAppended       int
 	StopArrivalsDetected int
 	TripsMissingShape    int
+	RowsWrittenObs       int
+	RowsWrittenProbes    int
 	Conflict             bool
 }
 
@@ -113,6 +115,18 @@ func trackPerformance(ctx context.Context) (trackStats, error) {
 	if cache != nil {
 		projectInFlightProbes(&s, cache, &stats)
 		detectStopArrivals(&s, cache, &stats)
+	}
+
+	stale := pruneStaleTrips(&s, now.Add(-staleThreshold))
+	stats.TripsExpired += len(stale)
+	stats.InFlight = len(s.InFlight)
+	if len(stale) > 0 {
+		obsCount, probeCount, ferr := writeFinalizedTrips(ctx, stale, cache, now)
+		stats.RowsWrittenObs += obsCount
+		stats.RowsWrittenProbes += probeCount
+		if ferr != nil {
+			slog.Warn("finalize to BigQuery failed", "err", ferr, "trips", len(stale))
+		}
 	}
 
 	if err := writeState(ctx, s, gen); err != nil {
@@ -219,21 +233,36 @@ func updateInFlightState(s stateFile, vehicles []vehicleSnapshot, now time.Time)
 		stats.NewTripsStarted++
 	}
 
-	cutoff := now.Add(-staleThreshold)
-	filtered := make([]inFlightTrip, 0, len(byVehicle))
+	out := make([]inFlightTrip, 0, len(byVehicle))
 	for _, t := range byVehicle {
-		if t.LastSeenTS.Before(cutoff) {
-			stats.TripsExpired++
-			continue
-		}
-		filtered = append(filtered, *t)
+		out = append(out, *t)
 	}
 
-	s.InFlight = filtered
+	s.InFlight = out
 	s.UpdatedAt = now
 	s.SchemaVersion = 1
-	stats.InFlight = len(filtered)
+	stats.InFlight = len(out)
 	return s, stats
+}
+
+// pruneStaleTrips removes any in-flight trip whose LastSeenTS is older
+// than cutoff and returns the removed trips. Pure: caller writes them
+// to BigQuery (chunk 4) before discarding.
+func pruneStaleTrips(s *stateFile, cutoff time.Time) []inFlightTrip {
+	if len(s.InFlight) == 0 {
+		return nil
+	}
+	kept := make([]inFlightTrip, 0, len(s.InFlight))
+	var stale []inFlightTrip
+	for _, t := range s.InFlight {
+		if t.LastSeenTS.Before(cutoff) {
+			stale = append(stale, t)
+			continue
+		}
+		kept = append(kept, t)
+	}
+	s.InFlight = kept
+	return stale
 }
 
 func readState(ctx context.Context) (stateFile, int64, error) {

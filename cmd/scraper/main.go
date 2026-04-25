@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"cloud.google.com/go/bigquery"
 	monitoring "cloud.google.com/go/monitoring/apiv3/v2"
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
 	secretmanagerpb "cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
@@ -105,6 +106,14 @@ func main() {
 	defer mc.Close()
 	metricsClient = mc
 
+	bq, err := bigquery.NewClient(ctx, projectID)
+	if err != nil {
+		slog.Error("bigquery.NewClient failed", "err", err)
+		os.Exit(1)
+	}
+	defer bq.Close()
+	bqClient = bq
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
@@ -176,6 +185,8 @@ func handleTrackPerformance(w http.ResponseWriter, r *http.Request) {
 			"probes_appended", stats.ProbesAppended,
 			"arrivals_detected", stats.StopArrivalsDetected,
 			"trips_missing_shape", stats.TripsMissingShape,
+			"bq_rows_observations", stats.RowsWrittenObs,
+			"bq_rows_probes", stats.RowsWrittenProbes,
 		)
 	}
 	fmt.Fprintln(w, "ok")

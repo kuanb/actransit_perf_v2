@@ -147,31 +147,44 @@ func TestUpdateInFlightStateTripChange(t *testing.T) {
 	}
 }
 
-func TestUpdateInFlightStateStalePruning(t *testing.T) {
+func TestPruneStaleTrips(t *testing.T) {
 	now := time.Date(2026, 4, 24, 12, 0, 0, 0, time.UTC)
-	stale := now.Add(-25 * time.Minute) // > staleThreshold (20 min)
+	cutoff := now.Add(-staleThreshold)
+	staleTS := now.Add(-25 * time.Minute)
+	freshTS := now.Add(-5 * time.Minute)
 
-	s := stateFile{
-		InFlight: []inFlightTrip{{
-			VehicleID:   "V1",
-			RouteID:     "R1",
-			TripID:      "T1",
-			FirstSeenTS: stale,
-			LastSeenTS:  stale,
-			Probes:      []probe{{TS: stale}},
-		}},
-	}
-	out, stats := updateInFlightState(s, nil, now)
+	t.Run("removes stale, keeps fresh, returns the stale ones", func(t *testing.T) {
+		s := &stateFile{
+			InFlight: []inFlightTrip{
+				{VehicleID: "V_stale", LastSeenTS: staleTS},
+				{VehicleID: "V_fresh", LastSeenTS: freshTS},
+			},
+		}
+		stale := pruneStaleTrips(s, cutoff)
+		if len(stale) != 1 || stale[0].VehicleID != "V_stale" {
+			t.Fatalf("returned stale trips = %+v, want one V_stale", stale)
+		}
+		if len(s.InFlight) != 1 || s.InFlight[0].VehicleID != "V_fresh" {
+			t.Fatalf("kept InFlight = %+v, want one V_fresh", s.InFlight)
+		}
+	})
 
-	if stats.TripsExpired != 1 {
-		t.Fatalf("TripsExpired = %d, want 1", stats.TripsExpired)
-	}
-	if stats.InFlight != 0 {
-		t.Fatalf("InFlight = %d, want 0", stats.InFlight)
-	}
-	if len(out.InFlight) != 0 {
-		t.Fatalf("len(InFlight) = %d, want 0", len(out.InFlight))
-	}
+	t.Run("empty state is a no-op", func(t *testing.T) {
+		s := &stateFile{}
+		if got := pruneStaleTrips(s, cutoff); got != nil {
+			t.Fatalf("got %+v, want nil", got)
+		}
+	})
+
+	t.Run("all-fresh keeps everything", func(t *testing.T) {
+		s := &stateFile{InFlight: []inFlightTrip{{VehicleID: "V1", LastSeenTS: freshTS}}}
+		if got := pruneStaleTrips(s, cutoff); len(got) != 0 {
+			t.Fatalf("got %d stale, want 0", len(got))
+		}
+		if len(s.InFlight) != 1 {
+			t.Fatalf("kept %d, want 1", len(s.InFlight))
+		}
+	})
 }
 
 func absDur(d time.Duration) time.Duration {
