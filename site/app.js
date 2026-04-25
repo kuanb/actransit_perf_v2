@@ -167,6 +167,9 @@ function routeBoxPlot(r) {
 }
 
 async function load() {
+  const yearEl = document.getElementById("footer-year");
+  if (yearEl) yearEl.textContent = new Date().getFullYear();
+
   const params = new URLSearchParams(window.location.search);
   const date = params.get("date");
 

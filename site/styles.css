@@ -55,9 +55,10 @@ section { margin-top: 32px; }
 }
 .defn {
   margin-top: 0;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
   line-height: 1.6;
 }
+.defn + .defn { margin-top: 4px; }
 .defn code {
   background: #eef2f7;
   padding: 1px 4px;
@@ -146,3 +147,20 @@ canvas { max-width: 100%; height: auto !important; }
   -webkit-overflow-scrolling: touch;
 }
 .table-wrap table { min-width: 1100px; }
+
+footer {
+  margin-top: 60px;
+  padding-top: 18px;
+  border-top: 1px solid #e5e5e5;
+  text-align: center;
+  font-size: 13px;
+  color: #6b6b6b;
+}
+footer a {
+  color: inherit;
+  text-decoration: none;
+}
+footer a:hover {
+  color: #1971c2;
+  text-decoration: underline;
+}

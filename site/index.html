@@ -19,57 +19,36 @@
 
   <section>
     <h2>System summary</h2>
-    <p class="muted defn">
-      <strong>On time</strong> = arrived at the scheduled time, up to 3 min late
-      (<code>0&nbsp;≤&nbsp;delay&nbsp;≤&nbsp;3&nbsp;min</code>).
-      <strong>Early</strong> = before scheduled time (<code>delay&nbsp;&lt;&nbsp;0</code>).
-      <strong>Late</strong> = more than 3 min after schedule (<code>delay&nbsp;&gt;&nbsp;3&nbsp;min</code>).
-    </p>
+    <p class="muted defn"><strong>On time</strong> = arrived at the scheduled time, up to 3 min late (<code>0&nbsp;≤&nbsp;delay&nbsp;≤&nbsp;3&nbsp;min</code>).</p>
+    <p class="muted defn"><strong>Early</strong> = before scheduled time (<code>delay&nbsp;&lt;&nbsp;0</code>).</p>
+    <p class="muted defn"><strong>Late</strong> = more than 3 min after schedule (<code>delay&nbsp;&gt;&nbsp;3&nbsp;min</code>).</p>
     <div id="system-cards" class="cards"></div>
     <h3 class="sub-h">Cumulative on-time at looser thresholds</h3>
-    <p class="muted defn">
-      Same numerator (arrived at-or-after schedule), but counting anyone who arrived within
-      the larger window. <strong>Within 5 min</strong> = <code>0&nbsp;≤&nbsp;delay&nbsp;≤&nbsp;5&nbsp;min</code>.
-      <strong>Within 7 min</strong> = <code>0&nbsp;≤&nbsp;delay&nbsp;≤&nbsp;7&nbsp;min</code>.
-    </p>
+    <p class="muted defn">Same numerator (arrived at-or-after schedule), but counting anyone who arrived within the larger window.</p>
+    <p class="muted defn"><strong>Within 5 min</strong> = <code>0&nbsp;≤&nbsp;delay&nbsp;≤&nbsp;5&nbsp;min</code>.</p>
+    <p class="muted defn"><strong>Within 7 min</strong> = <code>0&nbsp;≤&nbsp;delay&nbsp;≤&nbsp;7&nbsp;min</code>.</p>
     <div id="system-secondary" class="cards small-cards"></div>
     <h3 class="sub-h">Delay distribution (1-min buckets)</h3>
-    <p class="muted defn">
-      Each bar = one whole-minute bucket of the schedule-vs-actual delay,
-      counted across all observed stop arrivals. Outliers beyond
-      <code>−15&nbsp;min</code> or <code>+45&nbsp;min</code> are clamped to the boundary buckets.
-    </p>
+    <p class="muted defn">Each bar = one whole-minute bucket of the schedule-vs-actual delay, counted across all observed stop arrivals.</p>
+    <p class="muted defn">Outliers beyond <code>−15&nbsp;min</code> or <code>+45&nbsp;min</code> are clamped to the boundary buckets.</p>
     <canvas id="delay-minute-chart" width="900" height="280"></canvas>
   </section>
 
   <section>
     <h2>Schedule compliance</h2>
-    <p class="muted defn">
-      <strong>Service delivered</strong> = percent of trips scheduled today
-      that we observed running (≥1 stop arrival recorded). 99%+ is good,
-      under 90% is concerning. <strong>Dropped trips</strong> are scheduled
-      trips with no observed arrivals. <strong>Trips not completed</strong>
-      = trips that ran but never reached their final scheduled stop (bus
-      broke down, was reassigned mid-trip, or GPS dropped out before the
-      end of the route).
-    </p>
+    <p class="muted defn"><strong>Service delivered</strong> = percent of trips scheduled today that we observed running (≥1 stop arrival recorded). 99%+ is good, under 90% is concerning.</p>
+    <p class="muted defn"><strong>Dropped trips</strong> = scheduled trips with no observed arrivals.</p>
+    <p class="muted defn"><strong>Trips not completed</strong> = trips that ran but never reached their final scheduled stop (bus broke down, was reassigned mid-trip, or GPS dropped out before the end of the route).</p>
     <div id="schedule-cards" class="cards"></div>
   </section>
 
   <section>
     <h2>Headway distortion</h2>
-    <p class="muted defn">
-      For each observed stop arrival, we compare the bus's lateness/earliness to
-      the scheduled gap to its <strong>neighboring scheduled trip</strong> at the
-      same stop on the same route. Late buses use the prior scheduled trip's gap;
-      early buses use the next.
-      <br><br>
-      <strong>Example.</strong> A 10-min headway with a bus 6 min late = a
-      <strong>+60%</strong> distortion (the gap from the previous bus stretched
-      from 10 to 16 min). A 5-min-early arrival on a 5-min headway is a
-      <strong>−100%</strong> distortion — the bus collapsed onto the previous
-      scheduled slot. Higher absolute values = more disruptive to riders waiting at the stop.
-    </p>
+    <p class="muted defn">For each observed stop arrival, we compare the bus's lateness/earliness to the scheduled gap to its <strong>neighboring scheduled trip</strong> at the same stop on the same route.</p>
+    <p class="muted defn">Late buses use the prior scheduled trip's gap; early buses use the next.</p>
+    <p class="muted defn"><strong>Example (late):</strong> a 10-min headway with a bus 6 min late = <strong>+60%</strong> distortion (the gap from the previous bus stretched from 10 to 16 min).</p>
+    <p class="muted defn"><strong>Example (early):</strong> a 5-min-early arrival on a 5-min headway = <strong>−100%</strong> distortion — the bus collapsed onto the previous scheduled slot.</p>
+    <p class="muted defn">Higher absolute values = more disruptive to riders waiting at the stop.</p>
     <canvas id="histogram-chart" width="800" height="320"></canvas>
   </section>
 
@@ -98,6 +77,12 @@
       </table>
     </div>
   </section>
+
+  <footer>
+    <a href="https://kuanbutts.com" target="_blank" rel="noopener">
+      A project by Kuan Butts &copy; <span id="footer-year"></span>
+    </a>
+  </footer>
 
   <script src="app.js"></script>
 </body>
