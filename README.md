@@ -12,6 +12,23 @@ the protobuf, and writes two JSON objects to a GCS bucket:
 - `latest.json` — vehicle entities from the most recent fetch
 - `history.json` — last 10 snapshots of `latest.json`
 
+A second job (`/refresh-stops`) runs every 6 hours, deriving the unique
+route IDs from `latest.json` and fetching the stops list for each route
+from AC Transit's `/allstops` endpoint, written to a third object:
+
+- `route_stops.json` — `[{routeName, processedStops}]` for each active route
+
+## Public endpoints
+
+The cache bucket is world-readable so frontends can fetch the JSON
+directly via HTTPS, with permissive CORS for browsers:
+
+| Resource         | URL                                                                                       |
+|------------------|-------------------------------------------------------------------------------------------|
+| Latest vehicles  | `https://storage.googleapis.com/transit-203605-actransit-cache/latest.json`               |
+| Vehicle history  | `https://storage.googleapis.com/transit-203605-actransit-cache/history.json`              |
+| Route stops      | `https://storage.googleapis.com/transit-203605-actransit-cache/route_stops.json`          |
+
 ## Stack
 
 - **Compute:** Cloud Run (Go 1.25, distroless image)

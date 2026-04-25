@@ -18,3 +18,9 @@ resource "google_storage_bucket_iam_member" "scraper_cache_access" {
   role   = "roles/storage.objectUser"
   member = "serviceAccount:${google_service_account.scraper.email}"
 }
+
+resource "google_storage_bucket_iam_member" "public_read" {
+  bucket = google_storage_bucket.cache.name
+  role   = "roles/storage.objectViewer"
+  member = "allUsers"
+}
