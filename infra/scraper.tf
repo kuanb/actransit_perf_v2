@@ -23,8 +23,13 @@ resource "google_cloud_run_v2_service" "scraper" {
 
       resources {
         limits = {
-          cpu    = "1"
-          memory = "1Gi"
+          cpu = "1"
+          # 2Gi covers /refresh-gtfs's peak (~1.2 GiB observed: parsed feed +
+          # 60 MiB of marshaled per-route JSONs + Go GC headroom). At 1Gi the
+          # writer was OOM-killed mid-flight, leaving the per-route cache
+          # incomplete and observation-row synthesis silently failing for
+          # ~40% of routes during /track-performance and /backfill-day.
+          memory = "2Gi"
         }
         cpu_idle = true
       }

@@ -490,6 +490,123 @@ func TestDetectStopArrivals(t *testing.T) {
 	})
 }
 
+// fixtureRouteCache has stops at dist 0, 200, 500. The trailing-stop
+// fallback must recover the last stop when the bus's max observed dist
+// is just shy of 500, and must NOT fire when the bus stalled mid-route.
+func TestApplyTrailingStopFallback(t *testing.T) {
+	cache := fixtureRouteCache()
+	t0 := time.Date(2026, 4, 24, 12, 0, 0, 0, time.UTC)
+
+	t.Run("max probe within tolerance of last stop attributes last stop", func(t *testing.T) {
+		// Stops at 200 and 500 already detected; final probe is at 480
+		// (20 m shy of last stop). With 150 m tolerance, last stop
+		// gets attributed using the final probe's TS.
+		final := t0.Add(10 * time.Minute)
+		trip := &inFlightTrip{
+			VehicleID: "V1", RouteID: "R1", TripID: "T1",
+			Probes: []probe{
+				{TS: t0, DistAlongRouteM: 0},
+				{TS: t0.Add(2 * time.Minute), DistAlongRouteM: 200},
+				{TS: final, DistAlongRouteM: 480},
+			},
+			StopArrivals: map[int]time.Time{1: t0, 2: t0.Add(2 * time.Minute)},
+		}
+		added := applyTrailingStopFallback(trip, cache, 150)
+		if added != 1 {
+			t.Fatalf("added = %d, want 1", added)
+		}
+		got, ok := trip.StopArrivals[3]
+		if !ok || !got.Equal(final) {
+			t.Fatalf("StopArrivals[3] = %v ok=%v, want %v", got, ok, final)
+		}
+	})
+
+	t.Run("max probe far from last stop does not attribute", func(t *testing.T) {
+		// Final probe at 200; last stop at 500 (300 m gap > 150 tolerance).
+		trip := &inFlightTrip{
+			VehicleID: "V1", RouteID: "R1", TripID: "T1",
+			Probes: []probe{
+				{TS: t0, DistAlongRouteM: 0},
+				{TS: t0.Add(2 * time.Minute), DistAlongRouteM: 200},
+			},
+			StopArrivals: map[int]time.Time{1: t0, 2: t0.Add(2 * time.Minute)},
+		}
+		added := applyTrailingStopFallback(trip, cache, 150)
+		if added != 0 {
+			t.Fatalf("added = %d, want 0 (gap too large)", added)
+		}
+		if _, ok := trip.StopArrivals[3]; ok {
+			t.Fatalf("StopArrivals[3] was set; should not have been")
+		}
+	})
+
+	t.Run("walks backward attributing multiple trailing stops within tolerance", func(t *testing.T) {
+		// fixture stops: 0, 200, 500. Place bus's max at 380 — within
+		// tolerance of stop 3 (500 - 380 = 120 < 150) AND stop 2 (200
+		// is behind max so already-attributed already by precondition).
+		// Make stop 2 NOT pre-attributed: walk backward should set both.
+		final := t0.Add(8 * time.Minute)
+		trip := &inFlightTrip{
+			VehicleID: "V1", RouteID: "R1", TripID: "T1",
+			Probes: []probe{
+				{TS: t0, DistAlongRouteM: 0},
+				{TS: final, DistAlongRouteM: 380},
+			},
+			StopArrivals: map[int]time.Time{1: t0},
+		}
+		added := applyTrailingStopFallback(trip, cache, 150)
+		if added != 2 {
+			t.Fatalf("added = %d, want 2 (both 2 and 3 attributed)", added)
+		}
+		if got := trip.StopArrivals[2]; !got.Equal(final) {
+			t.Fatalf("StopArrivals[2] = %v, want %v", got, final)
+		}
+		if got := trip.StopArrivals[3]; !got.Equal(final) {
+			t.Fatalf("StopArrivals[3] = %v, want %v", got, final)
+		}
+	})
+
+	t.Run("no-op when last stop already attributed", func(t *testing.T) {
+		ts3 := t0.Add(10 * time.Minute)
+		trip := &inFlightTrip{
+			VehicleID: "V1", RouteID: "R1", TripID: "T1",
+			Probes: []probe{
+				{TS: t0, DistAlongRouteM: 0},
+				{TS: ts3, DistAlongRouteM: 510},
+			},
+			StopArrivals: map[int]time.Time{3: ts3},
+		}
+		added := applyTrailingStopFallback(trip, cache, 150)
+		if added != 0 {
+			t.Fatalf("added = %d, want 0 (already attributed)", added)
+		}
+	})
+
+	t.Run("nil cache no-op", func(t *testing.T) {
+		trip := &inFlightTrip{Probes: []probe{{TS: t0, DistAlongRouteM: 480}}}
+		if added := applyTrailingStopFallback(trip, nil, 150); added != 0 {
+			t.Fatalf("added = %d, want 0", added)
+		}
+	})
+
+	t.Run("empty probes no-op", func(t *testing.T) {
+		trip := &inFlightTrip{VehicleID: "V1", RouteID: "R1", TripID: "T1"}
+		if added := applyTrailingStopFallback(trip, cache, 150); added != 0 {
+			t.Fatalf("added = %d, want 0", added)
+		}
+	})
+
+	t.Run("unknown route no-op", func(t *testing.T) {
+		trip := &inFlightTrip{
+			VehicleID: "V1", RouteID: "UNKNOWN", TripID: "T1",
+			Probes: []probe{{TS: t0, DistAlongRouteM: 480}},
+		}
+		if added := applyTrailingStopFallback(trip, cache, 150); added != 0 {
+			t.Fatalf("added = %d, want 0", added)
+		}
+	})
+}
+
 func TestUpdateInFlightStateProbeCap(t *testing.T) {
 	base := time.Date(2026, 4, 24, 12, 0, 0, 0, time.UTC)
 	probes := make([]probe, maxProbesPerTrip)

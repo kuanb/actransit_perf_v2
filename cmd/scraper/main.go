@@ -267,7 +267,8 @@ func handleBackfillDay(w http.ResponseWriter, r *http.Request) {
 
 func handleRefreshGTFS(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
-	stats, err := refreshGTFS(r.Context())
+	force := r.URL.Query().Get("force") == "true"
+	stats, err := refreshGTFS(r.Context(), force)
 	if err != nil {
 		slog.Error("refresh-gtfs failed", "err", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -412,7 +413,7 @@ type gtfsStats struct {
 	RoutesProcessed int
 }
 
-func refreshGTFS(ctx context.Context) (gtfsStats, error) {
+func refreshGTFS(ctx context.Context, force bool) (gtfsStats, error) {
 	var stats gtfsStats
 
 	token, err := gtfsToken.Get(ctx)
@@ -433,7 +434,11 @@ func refreshGTFS(ctx context.Context) (gtfsStats, error) {
 	switch {
 	case err == nil:
 		stats.PrevHash = attrs.Metadata[gtfsHashMetaKey]
-		if stats.PrevHash == stats.NewHash {
+		// force=true bypasses the hash short-circuit. Useful when a prior
+		// refresh succeeded at the GTFS level but failed mid-write of the
+		// per-route processed JSONs (e.g. OOM), leaving an incomplete cache
+		// on GCS that this code path would otherwise consider up-to-date.
+		if !force && stats.PrevHash == stats.NewHash {
 			return stats, nil
 		}
 	case errors.Is(err, storage.ErrObjectNotExist):

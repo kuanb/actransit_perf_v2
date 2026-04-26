@@ -170,6 +170,24 @@ func generateDailyStats(ctx context.Context, serviceDate civil.Date) (*dailyStat
 	}
 	distHist, distByRoute := computeDistortion(observations, scheduleByStop)
 
+	// queryStatsPerRoute only returns routes that had ≥1 observation row in
+	// BigQuery for the day, so routes that were 100% dropped (or whose
+	// observations weren't synthesized — e.g. trip_id missing from the GTFS
+	// cache) silently disappear from the table. Backfill the missing rows
+	// from scheduledByRoute so a fully-dropped route shows up with zeros
+	// instead of vanishing — that's the only way the per-route view stays
+	// consistent with system aggregate "service delivered %".
+	seenInBQ := make(map[string]struct{}, len(routes))
+	for _, r := range routes {
+		seenInBQ[r.RouteID] = struct{}{}
+	}
+	for rid := range scheduledByRoute {
+		if _, ok := seenInBQ[rid]; ok {
+			continue
+		}
+		routes = append(routes, routeStats{RouteID: rid})
+	}
+
 	for i := range routes {
 		rid := routes[i].RouteID
 		if c, ok := colors[rid]; ok {

@@ -50,14 +50,19 @@ type tripProbeRow struct {
 }
 
 // tripToRows converts a finalized in-flight trip into BigQuery rows.
-// Pure: callable without a BigQuery client. Returns observation rows
-// (one per stop on the trip's GTFS-static stop_times) and probe rows
-// (one per probe currently in state). If the trip's route or trip_id is
-// missing from the cache, observation rows are omitted; probe rows are
-// always returned.
+// Callable without a BigQuery client. Returns observation rows (one per
+// stop on the trip's GTFS-static stop_times) and probe rows (one per
+// probe currently in state). If the trip's route or trip_id is missing
+// from the cache, observation rows are omitted; probe rows are always
+// returned.
+//
+// Called only at finalization (preempted/completed/stale paths in live
+// tracking, and per-trip during backfill), so it's safe to apply the
+// trailing-stop fallback here — the trip will not be observed further.
 func tripToRows(t inFlightTrip, cache *gtfsCache, ingestedAt time.Time, isStale bool) ([]tripObservationRow, []tripProbeRow) {
 	serviceDate := parseServiceDate(t.ServiceDate)
 	probes := buildProbeRows(t, serviceDate, ingestedAt)
+	applyTrailingStopFallback(&t, cache, lastStopToleranceMeters)
 	obs := buildObservationRows(t, cache, serviceDate, ingestedAt, isStale)
 	return obs, probes
 }

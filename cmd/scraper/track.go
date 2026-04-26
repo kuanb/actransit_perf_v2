@@ -26,6 +26,13 @@ const (
 	maxProbesPerTrip              = 20
 	metricVehiclesInFlight        = "custom.googleapis.com/actransit/vehicles_in_flight"
 	metricTripsFinalizedPerMinute = "custom.googleapis.com/actransit/trips_finalized_per_minute"
+	// Tolerance for the trailing-stop fallback in tripToRows. Empirically
+	// ~65% of trips' final probe falls 0–100 m shy of the last stop's
+	// projected dist_along_route (bus pulls into a layover, GPS multipath,
+	// projection variance). 150 m is comfortably under typical AC Transit
+	// inter-stop spacing (200–500 m), so the tolerance won't bridge into
+	// the previous stop's territory.
+	lastStopToleranceMeters = 150.0
 )
 
 var errStateConflict = errors.New("state.json concurrent write conflict")
@@ -441,6 +448,60 @@ func detectStopArrivals(s *stateFile, cache *gtfsCache, stats *trackStats) {
 			stats.StopArrivalsDetected++
 		}
 	}
+}
+
+// applyTrailingStopFallback recovers stop arrivals at the very end of a
+// trip when the bus's last GPS report fell shy of the last scheduled
+// stop's projected distance. Walking backward from the final stop, for
+// each missing stop within toleranceMeters of the bus's max observed
+// dist_along_route, it attributes the time of the max-progress probe
+// as approximate arrival. Stops once it hits an already-attributed
+// stop (we've reached territory that arrivalForStop covered) or a
+// stop too far ahead of max progress.
+//
+// Caller MUST invoke ONLY at finalization. Applying this during
+// in-flight tracking would prematurely mark the last stop as arrived
+// and cause detectCompletedTrips to fire while the bus is still en
+// route. Mutates t.StopArrivals.
+func applyTrailingStopFallback(t *inFlightTrip, cache *gtfsCache, toleranceMeters float64) int {
+	if cache == nil || len(t.Probes) == 0 {
+		return 0
+	}
+	route, ok := cache.Routes[t.RouteID]
+	if !ok {
+		return 0
+	}
+	trip, ok := route.Trips[t.TripID]
+	if !ok || len(trip.StopTimes) == 0 {
+		return 0
+	}
+
+	maxIdx := 0
+	for i := 1; i < len(t.Probes); i++ {
+		if t.Probes[i].DistAlongRouteM > t.Probes[maxIdx].DistAlongRouteM {
+			maxIdx = i
+		}
+	}
+	maxDist := t.Probes[maxIdx].DistAlongRouteM
+	maxTS := t.Probes[maxIdx].TS
+
+	if t.StopArrivals == nil {
+		t.StopArrivals = make(map[int]time.Time)
+	}
+
+	added := 0
+	for i := len(trip.StopTimes) - 1; i >= 0; i-- {
+		stop := trip.StopTimes[i]
+		if _, already := t.StopArrivals[stop.StopSequence]; already {
+			break
+		}
+		if stop.DistAlongRoute-maxDist > toleranceMeters {
+			break
+		}
+		t.StopArrivals[stop.StopSequence] = maxTS
+		added++
+	}
+	return added
 }
 
 // arrivalForStop returns the interpolated timestamp at which the bus
