@@ -134,7 +134,11 @@ function distortionColor(centerPct) {
 function routeBadge(r) {
   const bg = r.color || "FFFFFF";
   const fg = r.text_color || "000000";
-  return `<span class="route-badge" style="background:#${bg};color:#${fg}">${r.route_id}</span>`;
+  const n = r.trips_observed;
+  const nSuffix = n === null || n === undefined
+    ? ""
+    : `<span class="route-n">N=${intFmt(n)}</span>`;
+  return `<span class="route-badge" style="background:#${bg};color:#${fg}">${r.route_id}</span>${nSuffix}`;
 }
 
 // Inline horizontal box plot of delay (minutes), x-axis fixed at -3 to +15 min
@@ -392,8 +396,11 @@ function render(data) {
 
   // ---- routes table ----
   const tbody = document.querySelector("#routes-table tbody");
-  let sortKey = "trips_observed";
+  let sortKey = "service_delivered_pct";
   let sortDir = -1; // descending
+  // Set of route_ids whose detail row is currently expanded. Persists
+  // across sort/re-render so a column-header click doesn't collapse rows.
+  const expanded = new Set();
 
   function renderRoutes() {
     const rows = [...data.routes].sort((a, b) => {
@@ -415,20 +422,38 @@ function render(data) {
       .map((r) => {
         const sd = r.service_delivered_pct;
         const sdTitle = `ran ${intFmt(r.ran_trips)} of ${intFmt(r.scheduled_trips)} scheduled`;
+        const isOpen = expanded.has(r.route_id);
+        const detailHidden = isOpen ? "" : "hidden";
         return `
-      <tr>
+      <tr class="route-row ${isOpen ? "is-open" : ""}" data-rid="${r.route_id}">
         <td>${routeBadge(r)}</td>
         <td>${routeBoxPlot(r)}</td>
-        <td>${intFmt(r.trips_observed)}</td>
-        <td>${intFmt(r.observations)}</td>
         <td ${cellGrade(sd, gradeServiceDelivered)} title="${sdTitle}">${sd === null ? "—" : fmt(sd)}</td>
         <td ${cellGrade(r.on_time_pct, gradeOnTime)}>${fmt(r.on_time_pct)}</td>
-        <td ${cellGrade(r.late_pct, gradeLate)}>${fmt(r.late_pct)}</td>
         <td>${fmt(r.p50_delay_minutes)}</td>
-        <td>${fmt(r.p95_delay_minutes)}</td>
-        <td>${fmt(r.p50_distortion_pct)}</td>
-        <td>${fmt(r.p95_distortion_pct)}</td>
-        <td>${fmt(r.avg_speed_mph)}</td>
+        <td class="expand-cell" aria-hidden="true">${isOpen ? "▾" : "▸"}</td>
+      </tr>
+      <tr class="route-detail" data-rid="${r.route_id}" ${detailHidden}>
+        <td colspan="6">
+          <dl class="route-detail-list">
+            <div><dt>Trips observed</dt><dd>${intFmt(r.trips_observed)}${r.scheduled_trips ? ` (of ${intFmt(r.scheduled_trips)} scheduled)` : ""}</dd></div>
+            <div><dt>Stop arrivals</dt><dd>${intFmt(r.observations)}</dd></div>
+            <div><dt>Service delivered</dt><dd>${sd === null ? "—" : `${fmt(sd)}%`}</dd></div>
+            <div><dt>On time (≤3 min)</dt><dd>${fmt(r.on_time_pct)}%</dd></div>
+            <div><dt>Within 5 min</dt><dd>${fmt(r.within_5min_pct)}%</dd></div>
+            <div><dt>Within 7 min</dt><dd>${fmt(r.within_7min_pct)}%</dd></div>
+            <div><dt>Early</dt><dd>${fmt(r.early_pct)}%</dd></div>
+            <div><dt>Late (&gt;3 min)</dt><dd>${fmt(r.late_pct)}%</dd></div>
+            <div><dt>p5 delay</dt><dd>${fmt(r.p5_delay_minutes)} min</dd></div>
+            <div><dt>p25 delay</dt><dd>${fmt(r.p25_delay_minutes)} min</dd></div>
+            <div><dt>p50 delay</dt><dd>${fmt(r.p50_delay_minutes)} min</dd></div>
+            <div><dt>p75 delay</dt><dd>${fmt(r.p75_delay_minutes)} min</dd></div>
+            <div><dt>p95 delay</dt><dd>${fmt(r.p95_delay_minutes)} min</dd></div>
+            <div><dt>p50 headway distortion</dt><dd>${r.p50_distortion_pct === null ? "—" : `${fmt(r.p50_distortion_pct)}%`}</dd></div>
+            <div><dt>p95 headway distortion</dt><dd>${r.p95_distortion_pct === null ? "—" : `${fmt(r.p95_distortion_pct)}%`}</dd></div>
+            <div><dt>Avg speed</dt><dd>${fmt(r.avg_speed_mph)} mph</dd></div>
+          </dl>
+        </td>
       </tr>`;
       })
       .join("");
@@ -442,12 +467,37 @@ function render(data) {
   }
 
   document.querySelectorAll("#routes-table th").forEach((th) => {
+    if (!th.dataset.key) return;
     th.addEventListener("click", () => {
       const k = th.dataset.key;
       if (k === sortKey) sortDir = -sortDir;
       else { sortKey = k; sortDir = -1; }
       renderRoutes();
     });
+  });
+
+  document.getElementById("routes-expand-all").addEventListener("click", () => {
+    for (const r of data.routes) expanded.add(r.route_id);
+    renderRoutes();
+  });
+  document.getElementById("routes-collapse-all").addEventListener("click", () => {
+    expanded.clear();
+    renderRoutes();
+  });
+
+  // Delegate row clicks: any click on a .route-row toggles the matching
+  // detail row's hidden state and the chevron's open class.
+  tbody.addEventListener("click", (e) => {
+    const tr = e.target.closest("tr.route-row");
+    if (!tr) return;
+    const rid = tr.dataset.rid;
+    if (expanded.has(rid)) expanded.delete(rid);
+    else expanded.add(rid);
+    const detail = tbody.querySelector(`tr.route-detail[data-rid="${CSS.escape(rid)}"]`);
+    if (detail) detail.toggleAttribute("hidden");
+    tr.classList.toggle("is-open");
+    const chev = tr.querySelector(".expand-cell");
+    if (chev) chev.textContent = expanded.has(rid) ? "▾" : "▸";
   });
 
   renderRoutes();
