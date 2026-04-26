@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"sort"
 	"strconv"
 	"strings"
@@ -253,8 +254,24 @@ func generateDailyStats(ctx context.Context, serviceDate civil.Date) (*dailyStat
 	if err != nil {
 		return nil, fmt.Errorf("marshal: %w", err)
 	}
-	if err := writeObject(ctx, statsLatestKey, payload); err != nil {
-		return nil, fmt.Errorf("write latest: %w", err)
+	// stats/latest.json should always reflect the newest service_date.
+	// generateDailyStats is called by both the daily cron AND backfill;
+	// blindly overwriting would let an older-date backfill clobber it.
+	// Skip the latest write when we'd be replacing newer data.
+	updateLatest, err := isAtLeastAsRecentAsLatest(ctx, serviceDate)
+	if err != nil {
+		slog.Warn("compare to existing latest failed; writing anyway", "err", err)
+		updateLatest = true
+	}
+	if updateLatest {
+		if err := writeObject(ctx, statsLatestKey, payload); err != nil {
+			return nil, fmt.Errorf("write latest: %w", err)
+		}
+	} else {
+		slog.Info("generate-daily-stats skipped latest write",
+			"service_date", serviceDate.String(),
+			"reason", "older than current stats/latest.json",
+		)
 	}
 	archiveKey := fmt.Sprintf("%s%s.json", statsArchivePrefix, serviceDate.String())
 	if err := writeObject(ctx, archiveKey, payload); err != nil {
@@ -264,6 +281,33 @@ func generateDailyStats(ctx context.Context, serviceDate civil.Date) (*dailyStat
 		return out, fmt.Errorf("update stats index: %w", err)
 	}
 	return out, nil
+}
+
+// isAtLeastAsRecentAsLatest returns true when candidate is the same as,
+// or newer than, the service_date in the existing stats/latest.json. Used
+// to gate latest.json overwrites so a backfill of an older date doesn't
+// clobber newer data. Missing or malformed existing latest counts as
+// "go ahead and write" — first-run case is the obvious one.
+func isAtLeastAsRecentAsLatest(ctx context.Context, candidate civil.Date) (bool, error) {
+	body, exists, err := readObject(ctx, statsLatestKey)
+	if err != nil {
+		return false, err
+	}
+	if !exists {
+		return true, nil
+	}
+	var existing dailyStats
+	if err := json.Unmarshal(body, &existing); err != nil {
+		return false, fmt.Errorf("parse existing latest: %w", err)
+	}
+	if existing.ServiceDate == "" {
+		return true, nil
+	}
+	existingDate, err := civil.ParseDate(existing.ServiceDate)
+	if err != nil {
+		return false, fmt.Errorf("parse existing service_date %q: %w", existing.ServiceDate, err)
+	}
+	return !candidate.Before(existingDate), nil
 }
 
 const statsIndexKey = "stats/_index.json"
