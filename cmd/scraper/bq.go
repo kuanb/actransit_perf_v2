@@ -17,36 +17,40 @@ const (
 
 var bqClient *bigquery.Client
 
+// json tags mirror the bigquery tags so the same struct serializes both
+// for streaming inserts (live tracking) and for NDJSON-formatted load
+// jobs (backfill). bigquery.Null* and civil.Date already implement
+// json.Marshaler with the BigQuery-compatible representation.
 type tripObservationRow struct {
-	ServiceDate      civil.Date              `bigquery:"service_date"`
-	RouteID          string                  `bigquery:"route_id"`
-	TripID           string                  `bigquery:"trip_id"`
-	VehicleID        string                  `bigquery:"vehicle_id"`
-	StopSequence     int64                   `bigquery:"stop_sequence"`
-	StopID           string                  `bigquery:"stop_id"`
-	ScheduledArrival bigquery.NullTimestamp  `bigquery:"scheduled_arrival"`
-	ActualArrival    bigquery.NullTimestamp  `bigquery:"actual_arrival"`
-	DelaySeconds     bigquery.NullInt64      `bigquery:"delay_seconds"`
-	LegDistanceM     bigquery.NullFloat64    `bigquery:"leg_distance_m"`
-	LegDurationS     bigquery.NullFloat64    `bigquery:"leg_duration_s"`
-	LegAvgSpeedMps   bigquery.NullFloat64    `bigquery:"leg_avg_speed_mps"`
-	IsStale          bool                    `bigquery:"is_stale"`
-	IngestedAt       time.Time               `bigquery:"ingested_at"`
+	ServiceDate      civil.Date             `bigquery:"service_date"      json:"service_date"`
+	RouteID          string                 `bigquery:"route_id"          json:"route_id"`
+	TripID           string                 `bigquery:"trip_id"           json:"trip_id"`
+	VehicleID        string                 `bigquery:"vehicle_id"        json:"vehicle_id"`
+	StopSequence     int64                  `bigquery:"stop_sequence"     json:"stop_sequence"`
+	StopID           string                 `bigquery:"stop_id"           json:"stop_id"`
+	ScheduledArrival bigquery.NullTimestamp `bigquery:"scheduled_arrival" json:"scheduled_arrival"`
+	ActualArrival    bigquery.NullTimestamp `bigquery:"actual_arrival"    json:"actual_arrival"`
+	DelaySeconds     bigquery.NullInt64     `bigquery:"delay_seconds"     json:"delay_seconds"`
+	LegDistanceM     bigquery.NullFloat64   `bigquery:"leg_distance_m"    json:"leg_distance_m"`
+	LegDurationS     bigquery.NullFloat64   `bigquery:"leg_duration_s"    json:"leg_duration_s"`
+	LegAvgSpeedMps   bigquery.NullFloat64   `bigquery:"leg_avg_speed_mps" json:"leg_avg_speed_mps"`
+	IsStale          bool                   `bigquery:"is_stale"          json:"is_stale"`
+	IngestedAt       time.Time              `bigquery:"ingested_at"       json:"ingested_at"`
 }
 
 type tripProbeRow struct {
-	ServiceDate      civil.Date           `bigquery:"service_date"`
-	RouteID          string               `bigquery:"route_id"`
-	TripID           string               `bigquery:"trip_id"`
-	VehicleID        string               `bigquery:"vehicle_id"`
-	ObservedAt       time.Time            `bigquery:"observed_at"`
-	Lat              float64              `bigquery:"lat"`
-	Lon              float64              `bigquery:"lon"`
-	BearingDeg       bigquery.NullFloat64 `bigquery:"bearing_deg"`
-	ReportedSpeedMps bigquery.NullFloat64 `bigquery:"reported_speed_mps"`
-	DistAlongRouteM  float64              `bigquery:"dist_along_route_m"`
-	NearestStopSeq   bigquery.NullInt64   `bigquery:"nearest_stop_seq"`
-	IngestedAt       time.Time            `bigquery:"ingested_at"`
+	ServiceDate      civil.Date           `bigquery:"service_date"       json:"service_date"`
+	RouteID          string               `bigquery:"route_id"           json:"route_id"`
+	TripID           string               `bigquery:"trip_id"            json:"trip_id"`
+	VehicleID        string               `bigquery:"vehicle_id"         json:"vehicle_id"`
+	ObservedAt       time.Time            `bigquery:"observed_at"        json:"observed_at"`
+	Lat              float64              `bigquery:"lat"                json:"lat"`
+	Lon              float64              `bigquery:"lon"                json:"lon"`
+	BearingDeg       bigquery.NullFloat64 `bigquery:"bearing_deg"        json:"bearing_deg"`
+	ReportedSpeedMps bigquery.NullFloat64 `bigquery:"reported_speed_mps" json:"reported_speed_mps"`
+	DistAlongRouteM  float64              `bigquery:"dist_along_route_m" json:"dist_along_route_m"`
+	NearestStopSeq   bigquery.NullInt64   `bigquery:"nearest_stop_seq"   json:"nearest_stop_seq"`
+	IngestedAt       time.Time            `bigquery:"ingested_at"        json:"ingested_at"`
 }
 
 // tripToRows converts a finalized in-flight trip into BigQuery rows.

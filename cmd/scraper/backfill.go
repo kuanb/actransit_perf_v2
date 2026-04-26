@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/csv"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -23,7 +24,6 @@ import (
 const (
 	backfillSourceBucket    = "ac-transit"
 	backfillSourcePrefix    = "maptime/"
-	backfillBatchSize       = 500
 	backfillWindowStartHrPT = 3 // 03:00 PT on the target date
 	backfillWindowEndHrPT   = 6 // 06:00 PT on the day after the target date
 )
@@ -37,8 +37,6 @@ type backfillStats struct {
 	VehiclesObserved     int    `json:"vehicles_observed"`
 	TripsReconstructed   int    `json:"trips_reconstructed"`
 	StopArrivalsDetected int    `json:"stop_arrivals_detected"`
-	ObsRowsDeleted       int64  `json:"obs_rows_deleted"`
-	ProbeRowsDeleted     int64  `json:"probe_rows_deleted"`
 	ObsRowsInserted      int    `json:"obs_rows_inserted"`
 	ProbeRowsInserted    int    `json:"probe_rows_inserted"`
 	StatsRegenerated     bool   `json:"stats_regenerated"`
@@ -137,22 +135,12 @@ func processBackfillDay(ctx context.Context, serviceDate civil.Date, force bool)
 		allProbes = append(allProbes, probes...)
 	}
 
-	if err := deleteBackfillPartition(ctx, serviceDate, stats); err != nil {
-		return stats, fmt.Errorf("delete partition: %w", err)
-	}
-	if err := insertBackfillRows(ctx, allObs, allProbes); err != nil {
-		// Partition was just emptied. Surface so user can re-run.
-		return stats, fmt.Errorf(
-			"insert rows (partition for %s is now empty — rerun to repopulate): %w",
-			serviceDate, err,
-		)
+	if err := writeBackfillPartition(ctx, serviceDate, allObs, allProbes); err != nil {
+		return stats, fmt.Errorf("write partition: %w", err)
 	}
 	stats.ObsRowsInserted = len(allObs)
 	stats.ProbeRowsInserted = len(allProbes)
 
-	// BQ streaming inserts can take a few seconds before SELECT sees them.
-	// generateDailyStats is read-heavy, so let the buffer settle.
-	time.Sleep(5 * time.Second)
 	if _, err := generateDailyStats(ctx, serviceDate); err != nil {
 		return stats, fmt.Errorf("generate stats: %w", err)
 	}
@@ -356,61 +344,61 @@ func reconstructTrips(snapshots []vehicleSnapshot, cache *gtfsCache) []inFlightT
 	return s.InFlight
 }
 
-// deleteBackfillPartition runs partition-scoped DELETEs for the target
-// service_date on both BigQuery tables. Records affected-row counts when
-// BigQuery returns them.
-func deleteBackfillPartition(ctx context.Context, serviceDate civil.Date, stats *backfillStats) error {
-	tables := []struct {
-		name string
-		dst  *int64
-	}{
-		{bqTableObs, &stats.ObsRowsDeleted},
-		{bqTableProb, &stats.ProbeRowsDeleted},
+// writeBackfillPartition atomically replaces the target service_date's
+// partition on both BigQuery tables using load jobs against the partition
+// decorator (table$YYYYMMDD) with WriteTruncate disposition.
+//
+// This replaces an earlier streaming-insert + DML-DELETE pair. Streaming
+// inserts deposit rows into a "streaming buffer" — a hot in-memory layer
+// queryable immediately but not modifiable via DML for ~30–90 minutes
+// after the most recent stream into that partition. A re-backfill within
+// that window would fail at the DELETE step. Load jobs bypass the
+// streaming buffer entirely, so backfill is safely idempotent and
+// re-runnable at any cadence.
+func writeBackfillPartition(ctx context.Context, sd civil.Date, obs []tripObservationRow, probes []tripProbeRow) error {
+	if err := loadIntoPartition(ctx, bqTableObs, sd, obs); err != nil {
+		return fmt.Errorf("load %s: %w", bqTableObs, err)
 	}
-	for _, t := range tables {
-		sql := fmt.Sprintf(
-			"DELETE FROM `%s.%s.%s` WHERE service_date = \"%s\"",
-			projectID, bqDatasetID, t.name, serviceDate,
-		)
-		job, err := bqClient.Query(sql).Run(ctx)
-		if err != nil {
-			return fmt.Errorf("submit delete %s: %w", t.name, err)
-		}
-		status, err := job.Wait(ctx)
-		if err != nil {
-			return fmt.Errorf("wait delete %s: %w", t.name, err)
-		}
-		if err := status.Err(); err != nil {
-			return fmt.Errorf("delete %s: %w", t.name, err)
-		}
-		if status.Statistics != nil {
-			if qd, ok := status.Statistics.Details.(*bigquery.QueryStatistics); ok {
-				*t.dst = qd.NumDMLAffectedRows
-			}
-		}
+	if err := loadIntoPartition(ctx, bqTableProb, sd, probes); err != nil {
+		return fmt.Errorf("load %s: %w", bqTableProb, err)
 	}
 	return nil
 }
 
-func insertBackfillRows(ctx context.Context, obs []tripObservationRow, probes []tripProbeRow) error {
-	dataset := bqClient.Dataset(bqDatasetID)
-	for i := 0; i < len(obs); i += backfillBatchSize {
-		end := i + backfillBatchSize
-		if end > len(obs) {
-			end = len(obs)
-		}
-		if err := dataset.Table(bqTableObs).Inserter().Put(ctx, obs[i:end]); err != nil {
-			return fmt.Errorf("insert obs %d-%d: %w", i, end, err)
+func loadIntoPartition[T any](ctx context.Context, table string, sd civil.Date, rows []T) error {
+	if len(rows) == 0 {
+		// Refusing to no-op silently — a 0-row backfill is suspicious and
+		// would leave the partition's prior contents untouched, which is
+		// the opposite of the WriteTruncate semantics callers expect.
+		return fmt.Errorf("0 rows to load for %s on %s — backfill produced no data?", table, sd)
+	}
+
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	for i := range rows {
+		if err := enc.Encode(&rows[i]); err != nil {
+			return fmt.Errorf("encode row %d: %w", i, err)
 		}
 	}
-	for i := 0; i < len(probes); i += backfillBatchSize {
-		end := i + backfillBatchSize
-		if end > len(probes) {
-			end = len(probes)
-		}
-		if err := dataset.Table(bqTableProb).Inserter().Put(ctx, probes[i:end]); err != nil {
-			return fmt.Errorf("insert probes %d-%d: %w", i, end, err)
-		}
+
+	src := bigquery.NewReaderSource(&buf)
+	src.SourceFormat = bigquery.JSON
+
+	decorated := fmt.Sprintf("%s$%04d%02d%02d", table, sd.Year, sd.Month, sd.Day)
+	loader := bqClient.Dataset(bqDatasetID).Table(decorated).LoaderFrom(src)
+	loader.WriteDisposition = bigquery.WriteTruncate
+	loader.CreateDisposition = bigquery.CreateNever
+
+	job, err := loader.Run(ctx)
+	if err != nil {
+		return fmt.Errorf("submit load: %w", err)
+	}
+	status, err := job.Wait(ctx)
+	if err != nil {
+		return fmt.Errorf("wait load: %w", err)
+	}
+	if err := status.Err(); err != nil {
+		return fmt.Errorf("load failed: %w", err)
 	}
 	return nil
 }

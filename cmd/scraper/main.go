@@ -258,8 +258,6 @@ func handleBackfillDay(w http.ResponseWriter, r *http.Request) {
 		"vehicles", stats.VehiclesObserved,
 		"obs_inserted", stats.ObsRowsInserted,
 		"probes_inserted", stats.ProbeRowsInserted,
-		"obs_deleted", stats.ObsRowsDeleted,
-		"probes_deleted", stats.ProbeRowsDeleted,
 	)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(stats)
