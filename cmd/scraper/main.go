@@ -125,6 +125,7 @@ func main() {
 	http.HandleFunc("/refresh-gtfs", handleRefreshGTFS)
 	http.HandleFunc("/track-performance", handleTrackPerformance)
 	http.HandleFunc("/generate-daily-stats", handleGenerateDailyStats)
+	http.HandleFunc("/backfill-day", handleBackfillDay)
 	http.HandleFunc("/", handleHealth)
 
 	slog.Info("listening", "port", port)
@@ -222,6 +223,43 @@ func handleGenerateDailyStats(w http.ResponseWriter, r *http.Request) {
 		"system_total_trips", stats.System.TotalTrips,
 		"scheduled_trips", stats.ScheduleCompliance.ScheduledTrips,
 		"ran_trips", stats.ScheduleCompliance.RanTrips,
+	)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(stats)
+}
+
+func handleBackfillDay(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	dateStr := r.URL.Query().Get("service_date")
+	if dateStr == "" {
+		http.Error(w, "service_date query parameter is required (YYYY-MM-DD)", http.StatusBadRequest)
+		return
+	}
+	sd, err := civil.ParseDate(dateStr)
+	if err != nil {
+		http.Error(w, "invalid service_date: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	force := r.URL.Query().Get("force") == "true"
+
+	stats, err := processBackfillDay(r.Context(), sd, force)
+	if err != nil {
+		slog.Error("backfill-day failed", "service_date", sd.String(), "err", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	slog.Info("backfill-day ok",
+		"duration_ms", time.Since(start).Milliseconds(),
+		"service_date", sd.String(),
+		"csvs_listed", stats.CSVsListed,
+		"csvs_read", stats.CSVsRead,
+		"rows_kept", stats.RowsKept,
+		"trips", stats.TripsReconstructed,
+		"vehicles", stats.VehiclesObserved,
+		"obs_inserted", stats.ObsRowsInserted,
+		"probes_inserted", stats.ProbeRowsInserted,
+		"obs_deleted", stats.ObsRowsDeleted,
+		"probes_deleted", stats.ProbeRowsDeleted,
 	)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(stats)

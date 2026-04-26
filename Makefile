@@ -3,7 +3,7 @@ REGION     := us-west1
 REPO       := actransit-scraper
 IMAGE      := $(REGION)-docker.pkg.dev/$(PROJECT_ID)/$(REPO)/scraper
 
-.PHONY: tf-init tf-plan tf-apply tf-fmt build deploy release logs invoke run-local test smoke hooks-install
+.PHONY: tf-init tf-plan tf-apply tf-fmt build deploy release logs invoke run-local test smoke hooks-install backfill
 
 tf-init:
 	cd infra && terraform init
@@ -39,6 +39,19 @@ logs:
 invoke:
 	curl -H "Authorization: Bearer $$(gcloud auth print-identity-token)" \
 		"$$(cd infra && terraform output -raw scraper_url)/scrape"
+
+# Replays a past day's CSVs from gs://ac-transit/maptime/ into BigQuery and
+# regenerates that date's stats. Idempotent (DELETE+INSERT). FORCE=true
+# overrides the today-or-future safety guard. Use with care.
+backfill:
+	@test -n "$(DATE)" || (echo "usage: make backfill DATE=YYYY-MM-DD [FORCE=true]" && exit 1)
+	@URL="$$(cd infra && terraform output -raw scraper_url)"; \
+	TOKEN="$$(gcloud auth print-identity-token)"; \
+	QS="service_date=$(DATE)"; \
+	if [ "$(FORCE)" = "true" ]; then QS="$$QS&force=true"; fi; \
+	echo "==> POST $$URL/backfill-day?$$QS"; \
+	curl --fail --max-time 1800 -X POST -H "Authorization: Bearer $$TOKEN" \
+		"$$URL/backfill-day?$$QS"
 
 run-local:
 	go run ./cmd/scraper

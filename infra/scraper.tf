@@ -8,9 +8,11 @@ resource "google_cloud_run_v2_service" "scraper" {
 
   template {
     service_account = google_service_account.scraper.email
-    # 300s accommodates /generate-daily-stats (GTFS download + 4 BQ queries
-    # against ~80k rows). Other endpoints finish in <2s and are unaffected.
-    timeout = "300s"
+    # 1800s accommodates /backfill-day (lists/reads ~1500 maptime CSVs from
+    # the cross-account ac-transit bucket, partition-DELETE+INSERT into BQ,
+    # then re-runs /generate-daily-stats). /generate-daily-stats alone is
+    # well under 60s; /track-performance under 2s.
+    timeout = "1800s"
 
     scaling {
       max_instance_count = 2
