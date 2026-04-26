@@ -1,0 +1,9 @@
+---
+description: Project conventions, layout, and gotchas for actransit_perf_v2
+alwaysApply: true
+---
+
+The canonical agent guide for this repo lives in [AGENTS.md](mdc:AGENTS.md).
+Always read and follow it — it covers project conventions, repo layout, cron
+schedule, deploy commands, diagnostic recipes, and known footguns. Don't
+fork guidance into this rule file; update `AGENTS.md` instead.
