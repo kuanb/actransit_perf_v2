@@ -1,19 +1,8 @@
-const GCS_BASE = "https://storage.googleapis.com/transit-203605-actransit-cache";
-const isLocal = ["localhost", "127.0.0.1"].includes(window.location.hostname);
-
-const fmt = (v, d = 1) =>
-  v === null || v === undefined ? "—" : Number(v).toFixed(d);
-const intFmt = (v) =>
-  v === null || v === undefined ? "—" : Number(v).toLocaleString();
+// GCS_BASE, isLocal, fmt, intFmt, fetchJSON, gradeColor*, routeBadge,
+// delayDivergingColor are defined in /lib.js (shared with /weekly/).
 
 function statsURL(date) {
   return date ? `${GCS_BASE}/stats/${date}.json` : `${GCS_BASE}/stats/latest.json`;
-}
-
-async function fetchJSON(url) {
-  const res = await fetch(url, { cache: "no-cache" });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
 }
 
 async function loadIndex() {
@@ -64,50 +53,8 @@ function navigateTo(date) {
   window.location.href = url.toString();
 }
 
-// gradeColor maps t (0=worst, 1=best) to a {bg, fg} CSS color via a 3-stop
-// gradient: dark red → orange → green. Text flips to white when bg is darkest.
-function gradeColor(t) {
-  t = Math.max(0, Math.min(1, t));
-  const stops = [
-    { t: 0,   rgb: [173,  30,  35] },  // dark red
-    { t: 0.5, rgb: [232, 140,  35] },  // orange
-    { t: 1,   rgb: [160, 200, 130] },  // green
-  ];
-  let lo = stops[0], hi = stops[1];
-  for (let i = 0; i < stops.length - 1; i++) {
-    if (t <= stops[i + 1].t) {
-      lo = stops[i];
-      hi = stops[i + 1];
-      break;
-    }
-  }
-  const f = (t - lo.t) / (hi.t - lo.t);
-  const r = Math.round(lo.rgb[0] + (hi.rgb[0] - lo.rgb[0]) * f);
-  const g = Math.round(lo.rgb[1] + (hi.rgb[1] - lo.rgb[1]) * f);
-  const b = Math.round(lo.rgb[2] + (hi.rgb[2] - lo.rgb[2]) * f);
-  return {
-    bg: `rgb(${r},${g},${b})`,
-    fg: t < 0.3 ? "#ffffff" : "#1a1a1a",
-  };
-}
-
-// On-time: 98%+ = green, 80%- = dark red, linear in between.
-function gradeOnTime(pct) {
-  return gradeColor((pct - 80) / (98 - 80));
-}
-
-// Late: 2%- = green, 20%+ = dark red, linear in between (inverted).
-function gradeLate(pct) {
-  return gradeColor(1 - (pct - 2) / (20 - 2));
-}
-
-// Service delivered: 99%+ = green, 90%- = dark red, linear in between.
-function gradeServiceDelivered(pct) {
-  return gradeColor((pct - 90) / (99 - 90));
-}
-
 // Trips not completed (as % of running trips): 0% = green, 25%+ = dark red.
-// Higher means more buses didn't finish their route.
+// Higher means more buses didn't finish their route. Daily-only.
 function gradeNotCompleted(pct) {
   return gradeColor(1 - pct / 25);
 }
@@ -131,15 +78,7 @@ function distortionColor(centerPct) {
   return `rgb(${r},${g},${b})`;
 }
 
-function routeBadge(r) {
-  const bg = r.color || "FFFFFF";
-  const fg = r.text_color || "000000";
-  const n = r.trips_observed;
-  const nSuffix = n === null || n === undefined
-    ? ""
-    : `<span class="route-n">N=${intFmt(n)}</span>`;
-  return `<span class="route-badge" style="background:#${bg};color:#${fg}">${r.route_id}</span>${nSuffix}`;
-}
+// routeBadge moved to /lib.js (shared with /weekly/).
 
 // Inline horizontal box plot of delay (minutes), x-axis fixed at -3 to +15 min
 // for cross-route comparability. Whiskers are p5/p95 (not min/max) to keep the

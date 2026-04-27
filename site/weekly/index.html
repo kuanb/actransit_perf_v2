@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AC Transit weekly performance</title>
+  <link rel="stylesheet" href="../styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <header>
+    <a class="header-link" href="../">← Daily view</a>
+    <h1>AC Transit performance — weekly</h1>
+    <div id="meta" class="muted"></div>
+    <div id="week-selector"></div>
+  </header>
+
+  <section>
+    <h2>Service delivered by day</h2>
+    <p class="muted defn">Trips observed running ÷ trips scheduled, per day. Click a bar to drill into that day.</p>
+    <canvas id="daily-sd-chart" width="900" height="240"></canvas>
+  </section>
+
+  <section>
+    <h2>Delay heatmap by day × hour</h2>
+    <p class="muted defn">Signed median (or p95) of <code>delay_seconds</code> per (day, PT hour) bucket, system-wide. <span style="color:rgb(40,100,180);font-weight:600">Blue</span> = early, white = on-time, <span style="color:rgb(180,40,40);font-weight:600">red</span> = late. Cells with fewer than 10 observations are blank.</p>
+    <div class="hm-controls" id="heatmap-controls">
+      <label><input type="radio" name="hm-stat" value="p50" checked> p50 (median)</label>
+      <label><input type="radio" name="hm-stat" value="p95"> p95 (tail)</label>
+    </div>
+    <div id="delay-heatmap"></div>
+  </section>
+
+  <section>
+    <h2>Per-route delay by hour</h2>
+    <p class="muted defn">Each line = one route's delay across the day (PT hours). The 10 routes with the worst week-overall median delay are bold-colored; the rest fade to gray to show the system band.</p>
+    <div class="hm-controls">
+      <label><input type="radio" name="rline-stat" value="p50" checked> p50 (median)</label>
+      <label><input type="radio" name="rline-stat" value="p95"> p95 (tail)</label>
+    </div>
+    <canvas id="route-line-chart" width="900" height="320"></canvas>
+  </section>
+
+  <section>
+    <h2>Service delivered by route × day</h2>
+    <p class="muted defn">Routes sorted worst → best by week's median delay. Each cell is the per-day SD%. Click a cell to drill into that route's day.</p>
+    <div id="route-day-grid"></div>
+  </section>
+
+  <footer>
+    <a href="https://kuanbutts.com" target="_blank" rel="noopener">
+      A project by Kuan Butts &copy; <span id="footer-year"></span>
+    </a>
+  </footer>
+
+  <script src="../lib.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
