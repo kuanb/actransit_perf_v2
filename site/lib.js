@@ -68,6 +68,78 @@ function routeBadge(r) {
   return `<span class="route-badge" style="background:#${bg};color:#${fg}">${r.route_id}</span>${nSuffix}`;
 }
 
+// renderCards drops a uniform "labeled value" card grid into the
+// element matching `selector`. Items: { label, val, grade? } where
+// `grade` is { bg, fg } from gradeColor / gradeOnTime / etc.; cards
+// without a grade use the default neutral background.
+function renderCards(selector, items) {
+  document.querySelector(selector).innerHTML = items
+    .map(({ label, val, grade }) => {
+      const style = grade
+        ? `background:${grade.bg};color:${grade.fg};border-color:transparent;`
+        : "";
+      return `
+        <div class="card" style="${style}">
+          <div class="label">${label}</div>
+          <div class="val">${val}</div>
+        </div>`;
+    })
+    .join("");
+}
+
+// renderDelayMinuteHistogram draws a 1-minute-bucket bar chart of stop
+// delays into the canvas with id `canvasId`. Bars colored by lateness
+// band (early=blue, on-time=green, mildly-late=orange, late=red).
+// Buckets at the boundary minutes (-15 / +45) are clamps for outliers
+// and the tooltip says so via the bare label values.
+function renderDelayMinuteHistogram(canvasId, minBuckets) {
+  if (!minBuckets || !minBuckets.length) return;
+  const minM = Math.min(...minBuckets.map((b) => b.minute));
+  const maxM = Math.max(...minBuckets.map((b) => b.minute));
+  const labels = [];
+  const counts = [];
+  const bgColors = [];
+  const byMinute = Object.fromEntries(minBuckets.map((b) => [b.minute, b.count]));
+  for (let m = minM; m <= maxM; m++) {
+    labels.push(m === 0 ? "0" : m > 0 ? `+${m}` : `${m}`);
+    counts.push(byMinute[m] || 0);
+    let color;
+    if (m < 0) color = "#a6c3e0";
+    else if (m <= 3) color = "#a1d99b";
+    else if (m <= 7) color = "#fdae6b";
+    else color = "#d62728";
+    bgColors.push(color);
+  }
+  const total = counts.reduce((a, b) => a + b, 0);
+  const ctx = document.getElementById(canvasId).getContext("2d");
+  return new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [{ label: "Stop arrivals", data: counts, backgroundColor: bgColors, borderWidth: 0 }],
+    },
+    options: {
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            title: (ctx) => `${ctx[0].label} min`,
+            label: (ctx) => {
+              const cnt = ctx.raw;
+              const pct = total > 0 ? (100 * cnt) / total : 0;
+              return `${cnt.toLocaleString()} stops (${pct.toFixed(1)}%)`;
+            },
+          },
+        },
+      },
+      scales: {
+        x: { title: { display: true, text: "delay (min)" }, grid: { display: false } },
+        y: { beginAtZero: true, title: { display: true, text: "stops observed" } },
+      },
+    },
+  });
+}
+
 // pickTextColor picks black or white based on the perceived luminance
 // of an "rgb(r,g,b)" CSS color, so foreground text stays legible against
 // any background in a colormap that spans dark→light→dark.

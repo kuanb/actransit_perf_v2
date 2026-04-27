@@ -16,6 +16,27 @@
   </header>
 
   <section>
+    <h2>System summary</h2>
+    <p class="muted defn"><strong>On time</strong> = arrived at the scheduled time, up to 3 min late (<code>0&nbsp;≤&nbsp;delay&nbsp;≤&nbsp;3&nbsp;min</code>).</p>
+    <p class="muted defn"><strong>Early</strong> = before scheduled time. <strong>Late</strong> = more than 3 min after schedule.</p>
+    <p class="muted defn">All stop arrivals across the 7-day window, weighted equally — i.e. a busy weekday counts more than a sparse Sunday.</p>
+    <div id="system-cards" class="cards"></div>
+    <h3 class="sub-h">Cumulative on-time at looser thresholds</h3>
+    <p class="muted defn">Same numerator (arrived at-or-after schedule), but counting anyone who arrived within the larger window.</p>
+    <div id="system-secondary" class="cards small-cards"></div>
+    <h3 class="sub-h">Delay distribution (1-min buckets)</h3>
+    <p class="muted defn">Each bar = one whole-minute bucket of the schedule-vs-actual delay, counted across all observed stop arrivals in the week.</p>
+    <p class="muted defn">Outliers beyond <code>−15&nbsp;min</code> or <code>+45&nbsp;min</code> are clamped to the boundary buckets.</p>
+    <canvas id="delay-minute-chart" width="900" height="280"></canvas>
+  </section>
+
+  <section>
+    <h2>Schedule compliance</h2>
+    <p class="muted defn">Sum of trips across all 7 days. <strong>Service delivered</strong> is recomputed against the week totals (not an average of per-day rates) so days with more scheduled trips weigh more.</p>
+    <div id="schedule-cards" class="cards"></div>
+  </section>
+
+  <section>
     <h2>Service delivered by day</h2>
     <p class="muted defn">Trips observed running ÷ trips scheduled, per day. Click a bar to drill into that day.</p>
     <canvas id="daily-sd-chart" width="900" height="240"></canvas>
@@ -23,7 +44,7 @@
 
   <section>
     <h2>Delay heatmap by day × hour</h2>
-    <p class="muted defn">Signed median (or p95) of <code>delay_seconds</code> per (day, PT hour) bucket, system-wide. <span style="color:rgb(40,100,180);font-weight:600">Blue</span> = early, white = on-time, <span style="color:rgb(180,40,40);font-weight:600">red</span> = late. Cells with fewer than 10 observations are blank.</p>
+    <p class="muted defn">Signed median (or p95) <strong>delay in minutes</strong> per (day, PT hour) bucket, system-wide. Cell labels are rounded to the nearest minute; hover for the precise value. <span style="color:rgb(40,100,180);font-weight:600">Blue</span> = early, white = on-time, <span style="color:rgb(180,40,40);font-weight:600">red</span> = late. Cells with fewer than 10 observations are blank.</p>
     <div class="hm-controls" id="heatmap-controls">
       <label><input type="radio" name="hm-stat" value="p50" checked> p50 (median)</label>
       <label><input type="radio" name="hm-stat" value="p95"> p95 (tail)</label>

@@ -76,10 +76,56 @@ function render(data) {
   document.getElementById("meta").textContent =
     `Week ${data.week_start} → ${data.week_end} · generated ${data.generated_at}`;
 
+  renderSystemSummary(data);
+  renderScheduleCompliance(data);
   renderDailySD(data);
   renderDelayHeatmap(data);
   renderRouteLineChart(data);
   renderRouteDayGrid(data);
+}
+
+// ---- system summary cards + delay histogram (mirrors daily) ----
+function renderSystemSummary(data) {
+  const s = data.system || {};
+  renderCards("#system-cards", [
+    { label: "Stops observed",   val: intFmt(s.total_observations) },
+    { label: "Vehicles seen",    val: intFmt(s.vehicles_observed) },
+    { label: "On time (≤3 min)", val: `${fmt(s.on_time_pct)}%`, grade: gradeOnTime(s.on_time_pct) },
+    { label: "Late (>3 min)",    val: `${fmt(s.late_pct)}%`,    grade: gradeLate(s.late_pct) },
+    { label: "Early",            val: `${fmt(s.early_pct)}%` },
+    { label: "p50 delay",        val: `${fmt(s.p50_delay_minutes)} min` },
+    { label: "p95 delay",        val: `${fmt(s.p95_delay_minutes)} min` },
+    { label: "Avg speed",        val: `${fmt(s.avg_speed_mph)} mph` },
+  ]);
+  renderCards("#system-secondary", [
+    { label: "Within 5 min", val: `${fmt(s.within_5min_pct)}%`, grade: gradeOnTime(s.within_5min_pct) },
+    { label: "Within 7 min", val: `${fmt(s.within_7min_pct)}%`, grade: gradeOnTime(s.within_7min_pct) },
+  ]);
+  renderDelayMinuteHistogram("delay-minute-chart", data.delay_minute_histogram || []);
+}
+
+// ---- schedule compliance cards ----
+function renderScheduleCompliance(data) {
+  const sc = data.schedule_compliance_total || {};
+  const sdPct = sc.service_delivered_pct || 0;
+  const droppedPct = sc.scheduled_trips
+    ? 100 * (sc.dropped_trips / sc.scheduled_trips)
+    : 0;
+  const notCompletedPct = sc.ran_trips
+    ? 100 * (sc.trips_not_completed / sc.ran_trips)
+    : 0;
+  // Mirrors gradeNotCompleted from app.js — kept inline because weekly's
+  // app.js doesn't load the daily-only helper.
+  const gradeNC = (pct) => gradeColor(1 - pct / 25);
+  renderCards("#schedule-cards", [
+    { label: "Scheduled trips",        val: intFmt(sc.scheduled_trips) },
+    { label: "Observed running",       val: intFmt(sc.ran_trips) },
+    { label: "Service delivered",      val: `${fmt(sdPct)}%`,
+      grade: gradeServiceDelivered(sdPct) },
+    { label: "Dropped / not observed", val: `${intFmt(sc.dropped_trips)} (${fmt(droppedPct)}%)` },
+    { label: "Trips not completed",    val: `${intFmt(sc.trips_not_completed)} (${fmt(notCompletedPct)}%)`,
+      grade: gradeNC(notCompletedPct) },
+  ]);
 }
 
 // ---- chart 1: SD% by day-of-week (bar) ----
@@ -283,7 +329,7 @@ function renderRouteLineChart(data) {
       },
       scales: {
         x: { title: { display: true, text: "hour of day (PT)" }, grid: { display: false } },
-        y: { title: { display: true, text: "delay (min)" }, suggestedMin: -2, suggestedMax: 10 },
+        y: { title: { display: true, text: "delay (min)" }, min: -5, max: 15 },
       },
     },
   });
@@ -335,11 +381,11 @@ function renderRouteLineChart(data) {
     refresh();
   });
 
-  // p50 / p95 toggle.
+  // p50 / p95 toggle. Y-axis stays fixed at [-5, 15] for both — keeping
+  // the scale constant makes p50 ↔ p95 toggling visually comparable.
   document.querySelectorAll('input[name="rline-stat"]').forEach((input) => {
     input.addEventListener("change", (e) => {
       currentStat = e.target.value;
-      chart.options.scales.y.suggestedMax = currentStat === "p95" ? 20 : 10;
       refresh();
     });
   });

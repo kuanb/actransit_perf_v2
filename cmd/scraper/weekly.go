@@ -26,13 +26,29 @@ const (
 var dayNames = [7]string{"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"}
 
 type weeklyStats struct {
-	WeekStart                  string                  `json:"week_start"`
-	WeekEnd                    string                  `json:"week_end"`
-	GeneratedAt                time.Time               `json:"generated_at"`
-	DailyServiceDelivered      []dailyServiceDelivered `json:"daily_service_delivered"`
-	SystemDelayHeatmap         map[string][]delayCell  `json:"system_delay_heatmap"`
-	RouteDelayByHour           map[string][]delayCell  `json:"route_delay_by_hour"`
-	RouteDailyServiceDelivered []routeDailySD          `json:"route_daily_service_delivered"`
+	WeekStart                  string                   `json:"week_start"`
+	WeekEnd                    string                   `json:"week_end"`
+	GeneratedAt                time.Time                `json:"generated_at"`
+	System                     *systemStats             `json:"system"`
+	ScheduleComplianceTotal    weeklyScheduleCompliance `json:"schedule_compliance_total"`
+	DelayMinuteHistogram       []minuteBucket           `json:"delay_minute_histogram"`
+	DailyServiceDelivered      []dailyServiceDelivered  `json:"daily_service_delivered"`
+	SystemDelayHeatmap         map[string][]delayCell   `json:"system_delay_heatmap"`
+	RouteDelayByHour           map[string][]delayCell   `json:"route_delay_by_hour"`
+	RouteDailyServiceDelivered []routeDailySD           `json:"route_daily_service_delivered"`
+}
+
+// weeklyScheduleCompliance is the week-aggregated counterpart to
+// scheduleCompliance. It sums scheduled / ran / dropped / not-completed
+// across the 7 daily files and recomputes the service-delivered ratio
+// against the week's totals (not the average of per-day ratios — those
+// are size-weighted differently).
+type weeklyScheduleCompliance struct {
+	ScheduledTrips      int     `json:"scheduled_trips"`
+	RanTrips            int     `json:"ran_trips"`
+	DroppedTrips        int     `json:"dropped_trips"`
+	TripsNotCompleted   int     `json:"trips_not_completed"`
+	ServiceDeliveredPct float64 `json:"service_delivered_pct"`
 }
 
 type dailyServiceDelivered struct {
@@ -90,6 +106,26 @@ func processWeeklyStats(ctx context.Context, weekEndSat civil.Date) (*weeklyStat
 		return nil, fmt.Errorf("read daily stats: %w", err)
 	}
 	out.DailyServiceDelivered = aggregateDailyServiceDelivered(dailies, weekStart)
+	out.ScheduleComplianceTotal = aggregateScheduleCompliance(dailies)
+
+	sys, err := queryWeeklySystemStats(ctx, weekStart, weekEndSat)
+	if err != nil {
+		return nil, fmt.Errorf("query system stats: %w", err)
+	}
+	// total_trips is meaningful as "bus runs this week" only when summed
+	// across days (a single trip_id repeats across weekdays). We already
+	// have that as scheduled-compliance ran_trips, so mirror it on system
+	// for parity with the daily JSON shape.
+	if sys != nil {
+		sys.TotalTrips = int64(out.ScheduleComplianceTotal.RanTrips)
+	}
+	out.System = sys
+
+	hist, err := queryWeeklyMinuteHistogram(ctx, weekStart, weekEndSat)
+	if err != nil {
+		return nil, fmt.Errorf("query minute histogram: %w", err)
+	}
+	out.DelayMinuteHistogram = hist
 
 	sysHeatmap, err := queryWeeklySystemDelayHeatmap(ctx, weekStart, weekEndSat)
 	if err != nil {
@@ -413,6 +449,126 @@ func queryWeeklyRouteDelayByHour(ctx context.Context, weekStart, weekEnd civil.D
 		out[row.RouteID] = append(out[row.RouteID], cell)
 	}
 	return out, nil
+}
+
+// queryWeeklySystemStats is the week-range counterpart to queryStatsSystem
+// in stats.go: same set of stop-level delay/speed metrics, aggregated
+// across the 7-day partition window.
+func queryWeeklySystemStats(ctx context.Context, weekStart, weekEnd civil.Date) (*systemStats, error) {
+	q := bqClient.Query(fmt.Sprintf(`
+		WITH base AS (
+		  SELECT trip_id, vehicle_id, delay_seconds, leg_avg_speed_mps
+		  FROM `+"`%s.actransit.trip_observations`"+`
+		  WHERE service_date BETWEEN "%s" AND "%s"
+		    AND actual_arrival IS NOT NULL
+		    AND is_stale = FALSE
+		)
+		SELECT
+		  COUNT(*) AS total_observations,
+		  COUNT(DISTINCT vehicle_id) AS vehicles_observed,
+		  ROUND(AVG(IF(delay_seconds BETWEEN 0 AND 180, 1, 0)) * 100, 1) AS on_time_pct,
+		  ROUND(AVG(IF(delay_seconds BETWEEN 0 AND 300, 1, 0)) * 100, 1) AS within_5min_pct,
+		  ROUND(AVG(IF(delay_seconds BETWEEN 0 AND 420, 1, 0)) * 100, 1) AS within_7min_pct,
+		  ROUND(AVG(IF(delay_seconds < 0, 1, 0)) * 100, 1) AS early_pct,
+		  ROUND(AVG(IF(delay_seconds > 180, 1, 0)) * 100, 1) AS late_pct,
+		  APPROX_QUANTILES(delay_seconds, 100)[OFFSET(50)] AS p50_delay_seconds,
+		  APPROX_QUANTILES(delay_seconds, 100)[OFFSET(95)] AS p95_delay_seconds,
+		  ROUND(AVG(leg_avg_speed_mps) * 2.2369, 1) AS avg_speed_mph
+		FROM base
+	`, projectID, weekStart.String(), weekEnd.String()))
+	it, err := q.Read(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var row struct {
+		TotalObservations bigquery.NullInt64   `bigquery:"total_observations"`
+		VehiclesObserved  bigquery.NullInt64   `bigquery:"vehicles_observed"`
+		OnTimePct         bigquery.NullFloat64 `bigquery:"on_time_pct"`
+		Within5MinPct     bigquery.NullFloat64 `bigquery:"within_5min_pct"`
+		Within7MinPct     bigquery.NullFloat64 `bigquery:"within_7min_pct"`
+		EarlyPct          bigquery.NullFloat64 `bigquery:"early_pct"`
+		LatePct           bigquery.NullFloat64 `bigquery:"late_pct"`
+		P50Sec            bigquery.NullInt64   `bigquery:"p50_delay_seconds"`
+		P95Sec            bigquery.NullInt64   `bigquery:"p95_delay_seconds"`
+		AvgSpeedMph       bigquery.NullFloat64 `bigquery:"avg_speed_mph"`
+	}
+	if err := it.Next(&row); err != nil {
+		if err == iterator.Done {
+			return &systemStats{}, nil
+		}
+		return nil, err
+	}
+	return &systemStats{
+		TotalObservations: row.TotalObservations.Int64,
+		VehiclesObserved:  row.VehiclesObserved.Int64,
+		OnTimePct:         row.OnTimePct.Float64,
+		Within5MinPct:     row.Within5MinPct.Float64,
+		Within7MinPct:     row.Within7MinPct.Float64,
+		EarlyPct:          row.EarlyPct.Float64,
+		LatePct:           row.LatePct.Float64,
+		P50DelayMinutes:   round1(float64(row.P50Sec.Int64) / 60.0),
+		P95DelayMinutes:   round1(float64(row.P95Sec.Int64) / 60.0),
+		AvgSpeedMph:       row.AvgSpeedMph.Float64,
+	}, nil
+}
+
+func queryWeeklyMinuteHistogram(ctx context.Context, weekStart, weekEnd civil.Date) ([]minuteBucket, error) {
+	q := bqClient.Query(fmt.Sprintf(`
+		SELECT
+		  CASE
+		    WHEN delay_seconds < -15*60 THEN -15
+		    WHEN delay_seconds >  45*60 THEN  45
+		    ELSE CAST(FLOOR(delay_seconds / 60.0) AS INT64)
+		  END AS minute,
+		  COUNT(*) AS n
+		FROM `+"`%s.actransit.trip_observations`"+`
+		WHERE service_date BETWEEN "%s" AND "%s"
+		  AND actual_arrival IS NOT NULL
+		  AND is_stale = FALSE
+		GROUP BY minute
+		ORDER BY minute
+	`, projectID, weekStart.String(), weekEnd.String()))
+	it, err := q.Read(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var out []minuteBucket
+	for {
+		var row struct {
+			Minute int64 `bigquery:"minute"`
+			N      int64 `bigquery:"n"`
+		}
+		err := it.Next(&row)
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, minuteBucket{Minute: int(row.Minute), Count: row.N})
+	}
+	return out, nil
+}
+
+// aggregateScheduleCompliance sums the schedule-compliance counters from
+// the 7 daily files and recomputes service_delivered_pct against the
+// week totals. Per-day ratios shouldn't be averaged because each day
+// has a different denominator (Sat/Sun service is much smaller).
+func aggregateScheduleCompliance(dailies []*dailyStats) weeklyScheduleCompliance {
+	var sc weeklyScheduleCompliance
+	for _, ds := range dailies {
+		if ds == nil {
+			continue
+		}
+		sc.ScheduledTrips += ds.ScheduleCompliance.ScheduledTrips
+		sc.RanTrips += ds.ScheduleCompliance.RanTrips
+		sc.DroppedTrips += ds.ScheduleCompliance.DroppedTrips
+		sc.TripsNotCompleted += ds.ScheduleCompliance.TripsNotCompleted
+	}
+	if sc.ScheduledTrips > 0 {
+		sc.ServiceDeliveredPct = round1(100 * float64(sc.RanTrips) / float64(sc.ScheduledTrips))
+	}
+	return sc
 }
 
 // queryWeeklyRouteOverallDelay returns the per-route p50 of delay_seconds
