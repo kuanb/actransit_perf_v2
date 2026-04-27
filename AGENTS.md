@@ -167,6 +167,29 @@ trusting the chart — chart alignment periods can hide both gaps and bugs.
 
 ## Known footguns
 
+- **Live `/track-performance` finalizes the same trip many times into BQ
+  (root cause TBD).** Symptom: a single (trip_id, vehicle_id) pair has
+  10–80 distinct `ingested_at` values for one day, all writing the same
+  ~50 stop rows. Some are normal-end (`is_stale=FALSE`), some are stale
+  (`is_stale=TRUE`) — the stale path is the clearest tell, since the
+  same trip stale-fires across consecutive cycles even though
+  `pruneStaleTrips` does `s.InFlight = kept` to remove it. By code
+  review the removal looks correct, but the GCS-persisted state seems
+  to retain the trip across cycles. Backfilled days are clean
+  (`/backfill-day` uses `WriteTruncate`), so the bloat only shows up
+  on days the daily-stats cron runs against live-tracked partitions.
+  The stats queries use `dedupedDayObservationsCTE` /
+  `dedupedRangeObservationsCTE` (stats.go) to mask the bloat at read
+  time. Read-time dedup makes the dashboards correct but storage
+  still grows ~10× faster than necessary; investigation continues
+  via `read_gen` / `write_gen` / `stuck_trips` log fields on every
+  `track-performance ok` entry. To diagnose:
+  ```sh
+  # Worst offenders for a given day:
+  bq query --use_legacy_sql=false 'SELECT trip_id, vehicle_id, COUNT(DISTINCT ingested_at) AS finalize_runs FROM `transit-203605.actransit.trip_observations` WHERE service_date = "<date>" GROUP BY 1,2 ORDER BY finalize_runs DESC LIMIT 10'
+  ```
+
+
 - **`/refresh-gtfs` sits within ~10–20% of the Cloud Run memory limit
   during per-route JSON marshaling.** It was OOM-killed silently at 1 GiB
   (peak ~1.2 GiB), wrote only ~76 of 123 route JSONs, returned 503, and

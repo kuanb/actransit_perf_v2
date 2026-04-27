@@ -580,13 +580,13 @@ func queryRanTrips(ctx context.Context, serviceDate civil.Date) (map[string]stru
 // scan, single query.
 func queryTripsNotCompleted(ctx context.Context, serviceDate civil.Date) (int, *notCompletedDistribution, error) {
 	q := bqClient.Query(fmt.Sprintf(`
-		WITH per_trip AS (
+		WITH %s,
+		per_trip AS (
 		  SELECT
 		    trip_id,
 		    MAX(stop_sequence) AS final_seq,
 		    MAX(IF(actual_arrival IS NOT NULL, stop_sequence, NULL)) AS last_observed_seq
-		  FROM `+"`%s.actransit.trip_observations`"+`
-		  WHERE service_date = "%s"
+		  FROM obs
 		  GROUP BY trip_id
 		),
 		not_completed AS (
@@ -611,7 +611,7 @@ func queryTripsNotCompleted(ctx context.Context, serviceDate civil.Date) (int, *
 		  (SELECT APPROX_QUANTILES(completion_pct, 100)[OFFSET(75)] FROM not_completed) AS p75,
 		  (SELECT APPROX_QUANTILES(completion_pct, 100)[OFFSET(95)] FROM not_completed) AS p95,
 		  ARRAY(SELECT AS STRUCT bucket, n FROM bucketed ORDER BY bucket) AS histogram
-	`, projectID, serviceDate))
+	`, dedupedDayObservationsCTE(serviceDate)))
 	it, err := q.Read(ctx)
 	if err != nil {
 		return 0, nil, err
@@ -651,13 +651,47 @@ func queryTripsNotCompleted(ctx context.Context, serviceDate civil.Date) (int, *
 	}, nil
 }
 
+// dedupedDayObservationsCTE renders a CTE definition named `obs` that
+// selects rows from trip_observations for the given service_date,
+// reduced to one row per (trip_id, stop_sequence). Live tracking can
+// finalize the same trip many times per minute (root cause under
+// investigation — see AGENTS.md "live duplication" footgun); without
+// this dedup, every aggregate is inflated by the duplication factor.
+// Backfilled days are unaffected because /backfill-day uses
+// WriteTruncate. The ORDER BY prefers rows that have a non-null
+// actual_arrival, since the post-completion "fresh re-incarnation" of
+// a trip can otherwise overwrite real arrival data with empty rows.
+func dedupedDayObservationsCTE(sd civil.Date) string {
+	return fmt.Sprintf(`obs AS (
+	  SELECT * FROM `+"`%s.actransit.trip_observations`"+`
+	  WHERE service_date = "%s"
+	  QUALIFY ROW_NUMBER() OVER (
+	    PARTITION BY trip_id, stop_sequence
+	    ORDER BY IF(actual_arrival IS NULL, 1, 0), ingested_at DESC
+	  ) = 1
+	)`, projectID, sd)
+}
+
+// dedupedRangeObservationsCTE is the multi-day variant. Partitions
+// include service_date so each day dedups independently.
+func dedupedRangeObservationsCTE(start, end civil.Date) string {
+	return fmt.Sprintf(`obs AS (
+	  SELECT * FROM `+"`%s.actransit.trip_observations`"+`
+	  WHERE service_date BETWEEN "%s" AND "%s"
+	  QUALIFY ROW_NUMBER() OVER (
+	    PARTITION BY service_date, trip_id, stop_sequence
+	    ORDER BY IF(actual_arrival IS NULL, 1, 0), ingested_at DESC
+	  ) = 1
+	)`, projectID, start, end)
+}
+
 func queryStatsSystem(ctx context.Context, serviceDate civil.Date) (*systemStats, error) {
 	q := bqClient.Query(fmt.Sprintf(`
-		WITH base AS (
+		WITH %s,
+		base AS (
 		  SELECT trip_id, vehicle_id, delay_seconds, leg_avg_speed_mps
-		  FROM `+"`%s.actransit.trip_observations`"+`
-		  WHERE service_date = "%s"
-		    AND actual_arrival IS NOT NULL
+		  FROM obs
+		  WHERE actual_arrival IS NOT NULL
 		    AND is_stale = FALSE
 		)
 		SELECT
@@ -673,7 +707,7 @@ func queryStatsSystem(ctx context.Context, serviceDate civil.Date) (*systemStats
 		  APPROX_QUANTILES(delay_seconds, 100)[OFFSET(95)] AS p95_delay_seconds,
 		  ROUND(AVG(leg_avg_speed_mps) * 2.2369, 1) AS avg_speed_mph
 		FROM base
-	`, projectID, serviceDate))
+	`, dedupedDayObservationsCTE(serviceDate)))
 	it, err := q.Read(ctx)
 	if err != nil {
 		return nil, err
@@ -714,11 +748,11 @@ func queryStatsSystem(ctx context.Context, serviceDate civil.Date) (*systemStats
 
 func queryStatsPerRoute(ctx context.Context, serviceDate civil.Date) ([]routeStats, error) {
 	q := bqClient.Query(fmt.Sprintf(`
-		WITH base AS (
+		WITH %s,
+		base AS (
 		  SELECT route_id, trip_id, delay_seconds, leg_avg_speed_mps
-		  FROM `+"`%s.actransit.trip_observations`"+`
-		  WHERE service_date = "%s"
-		    AND actual_arrival IS NOT NULL
+		  FROM obs
+		  WHERE actual_arrival IS NOT NULL
 		    AND is_stale = FALSE
 		)
 		SELECT
@@ -739,7 +773,7 @@ func queryStatsPerRoute(ctx context.Context, serviceDate civil.Date) ([]routeSta
 		FROM base
 		GROUP BY route_id
 		ORDER BY trips_observed DESC, observations DESC
-	`, projectID, serviceDate))
+	`, dedupedDayObservationsCTE(serviceDate)))
 	it, err := q.Read(ctx)
 	if err != nil {
 		return nil, err
@@ -865,13 +899,13 @@ type observationRow struct {
 
 func queryStatsObservations(ctx context.Context, serviceDate civil.Date) ([]observationRow, error) {
 	q := bqClient.Query(fmt.Sprintf(`
+		WITH %s
 		SELECT route_id, stop_id, scheduled_arrival, delay_seconds
-		FROM `+"`%s.actransit.trip_observations`"+`
-		WHERE service_date = "%s"
-		  AND actual_arrival IS NOT NULL
+		FROM obs
+		WHERE actual_arrival IS NOT NULL
 		  AND scheduled_arrival IS NOT NULL
 		  AND is_stale = FALSE
-	`, projectID, serviceDate))
+	`, dedupedDayObservationsCTE(serviceDate)))
 	it, err := q.Read(ctx)
 	if err != nil {
 		return nil, err
@@ -987,6 +1021,7 @@ func percentileSorted(sorted []float64, p float64) float64 {
 // JSON or the chart's x-axis.
 func queryStatsMinuteHistogram(ctx context.Context, serviceDate civil.Date) ([]minuteBucket, error) {
 	q := bqClient.Query(fmt.Sprintf(`
+		WITH %s
 		SELECT
 		  CASE
 		    WHEN delay_seconds < -15*60 THEN -15
@@ -994,13 +1029,12 @@ func queryStatsMinuteHistogram(ctx context.Context, serviceDate civil.Date) ([]m
 		    ELSE CAST(FLOOR(delay_seconds / 60.0) AS INT64)
 		  END AS minute,
 		  COUNT(*) AS n
-		FROM `+"`%s.actransit.trip_observations`"+`
-		WHERE service_date = "%s"
-		  AND actual_arrival IS NOT NULL
+		FROM obs
+		WHERE actual_arrival IS NOT NULL
 		  AND is_stale = FALSE
 		GROUP BY minute
 		ORDER BY minute
-	`, projectID, serviceDate))
+	`, dedupedDayObservationsCTE(serviceDate)))
 	it, err := q.Read(ctx)
 	if err != nil {
 		return nil, err

@@ -337,19 +337,19 @@ func aggregateRouteDailySD(dailies []*dailyStats, weekStart civil.Date, routeOve
 
 func queryWeeklySystemDelayHeatmap(ctx context.Context, weekStart, weekEnd civil.Date) (map[string][]delayCell, error) {
 	q := bqClient.Query(fmt.Sprintf(`
+		WITH %s
 		SELECT
 		  EXTRACT(DAYOFWEEK FROM service_date) AS dow,
 		  EXTRACT(HOUR FROM actual_arrival AT TIME ZONE "America/Los_Angeles") AS hour,
 		  APPROX_QUANTILES(delay_seconds, 100)[OFFSET(50)] AS p50_sec,
 		  APPROX_QUANTILES(delay_seconds, 100)[OFFSET(95)] AS p95_sec,
 		  COUNT(*) AS n
-		FROM `+"`%s.actransit.trip_observations`"+`
-		WHERE service_date BETWEEN "%s" AND "%s"
-		  AND actual_arrival IS NOT NULL
+		FROM obs
+		WHERE actual_arrival IS NOT NULL
 		  AND is_stale = FALSE
 		GROUP BY dow, hour
 		ORDER BY dow, hour
-	`, projectID, weekStart.String(), weekEnd.String()))
+	`, dedupedRangeObservationsCTE(weekStart, weekEnd)))
 	it, err := q.Read(ctx)
 	if err != nil {
 		return nil, err
@@ -402,20 +402,20 @@ func queryWeeklySystemDelayHeatmap(ctx context.Context, weekStart, weekEnd civil
 
 func queryWeeklyRouteDelayByHour(ctx context.Context, weekStart, weekEnd civil.Date) (map[string][]delayCell, error) {
 	q := bqClient.Query(fmt.Sprintf(`
+		WITH %s
 		SELECT
 		  route_id,
 		  EXTRACT(HOUR FROM actual_arrival AT TIME ZONE "America/Los_Angeles") AS hour,
 		  APPROX_QUANTILES(delay_seconds, 100)[OFFSET(50)] AS p50_sec,
 		  APPROX_QUANTILES(delay_seconds, 100)[OFFSET(95)] AS p95_sec,
 		  COUNT(*) AS n
-		FROM `+"`%s.actransit.trip_observations`"+`
-		WHERE service_date BETWEEN "%s" AND "%s"
-		  AND actual_arrival IS NOT NULL
+		FROM obs
+		WHERE actual_arrival IS NOT NULL
 		  AND is_stale = FALSE
 		GROUP BY route_id, hour
 		HAVING n >= %d
 		ORDER BY route_id, hour
-	`, projectID, weekStart.String(), weekEnd.String(), minObservationsForHourCell))
+	`, dedupedRangeObservationsCTE(weekStart, weekEnd), minObservationsForHourCell))
 	it, err := q.Read(ctx)
 	if err != nil {
 		return nil, err
@@ -456,11 +456,11 @@ func queryWeeklyRouteDelayByHour(ctx context.Context, weekStart, weekEnd civil.D
 // across the 7-day partition window.
 func queryWeeklySystemStats(ctx context.Context, weekStart, weekEnd civil.Date) (*systemStats, error) {
 	q := bqClient.Query(fmt.Sprintf(`
-		WITH base AS (
+		WITH %s,
+		base AS (
 		  SELECT trip_id, vehicle_id, delay_seconds, leg_avg_speed_mps
-		  FROM `+"`%s.actransit.trip_observations`"+`
-		  WHERE service_date BETWEEN "%s" AND "%s"
-		    AND actual_arrival IS NOT NULL
+		  FROM obs
+		  WHERE actual_arrival IS NOT NULL
 		    AND is_stale = FALSE
 		)
 		SELECT
@@ -475,7 +475,7 @@ func queryWeeklySystemStats(ctx context.Context, weekStart, weekEnd civil.Date) 
 		  APPROX_QUANTILES(delay_seconds, 100)[OFFSET(95)] AS p95_delay_seconds,
 		  ROUND(AVG(leg_avg_speed_mps) * 2.2369, 1) AS avg_speed_mph
 		FROM base
-	`, projectID, weekStart.String(), weekEnd.String()))
+	`, dedupedRangeObservationsCTE(weekStart, weekEnd)))
 	it, err := q.Read(ctx)
 	if err != nil {
 		return nil, err
@@ -514,6 +514,7 @@ func queryWeeklySystemStats(ctx context.Context, weekStart, weekEnd civil.Date) 
 
 func queryWeeklyMinuteHistogram(ctx context.Context, weekStart, weekEnd civil.Date) ([]minuteBucket, error) {
 	q := bqClient.Query(fmt.Sprintf(`
+		WITH %s
 		SELECT
 		  CASE
 		    WHEN delay_seconds < -15*60 THEN -15
@@ -521,13 +522,12 @@ func queryWeeklyMinuteHistogram(ctx context.Context, weekStart, weekEnd civil.Da
 		    ELSE CAST(FLOOR(delay_seconds / 60.0) AS INT64)
 		  END AS minute,
 		  COUNT(*) AS n
-		FROM `+"`%s.actransit.trip_observations`"+`
-		WHERE service_date BETWEEN "%s" AND "%s"
-		  AND actual_arrival IS NOT NULL
+		FROM obs
+		WHERE actual_arrival IS NOT NULL
 		  AND is_stale = FALSE
 		GROUP BY minute
 		ORDER BY minute
-	`, projectID, weekStart.String(), weekEnd.String()))
+	`, dedupedRangeObservationsCTE(weekStart, weekEnd)))
 	it, err := q.Read(ctx)
 	if err != nil {
 		return nil, err
@@ -576,17 +576,17 @@ func aggregateScheduleCompliance(dailies []*dailyStats) weeklyScheduleCompliance
 // stability). Used to sort the route grid worst→best.
 func queryWeeklyRouteOverallDelay(ctx context.Context, weekStart, weekEnd civil.Date) (map[string]float64, error) {
 	q := bqClient.Query(fmt.Sprintf(`
+		WITH %s
 		SELECT
 		  route_id,
 		  APPROX_QUANTILES(delay_seconds, 100)[OFFSET(50)] AS p50_sec,
 		  COUNT(*) AS n
-		FROM `+"`%s.actransit.trip_observations`"+`
-		WHERE service_date BETWEEN "%s" AND "%s"
-		  AND actual_arrival IS NOT NULL
+		FROM obs
+		WHERE actual_arrival IS NOT NULL
 		  AND is_stale = FALSE
 		GROUP BY route_id
 		HAVING n >= %d
-	`, projectID, weekStart.String(), weekEnd.String(), minObservationsForHourCell))
+	`, dedupedRangeObservationsCTE(weekStart, weekEnd), minObservationsForHourCell))
 	it, err := q.Read(ctx)
 	if err != nil {
 		return nil, err
