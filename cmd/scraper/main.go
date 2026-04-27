@@ -192,6 +192,12 @@ func handleTrackPerformance(w http.ResponseWriter, r *http.Request) {
 			"trips_missing_shape", stats.TripsMissingShape,
 			"bq_rows_observations", stats.RowsWrittenObs,
 			"bq_rows_probes", stats.RowsWrittenProbes,
+			"in_flight_after_read", stats.InFlightAfterRead,
+			"in_flight_after_update", stats.InFlightAfterUpdate,
+			"in_flight_after_prune", stats.InFlightAfterPrune,
+			"stuck_trips", stats.StuckTrips,
+			"read_gen", stats.ReadGen,
+			"write_gen", stats.WriteGen,
 		)
 	}
 	fmt.Fprintln(w, "ok")

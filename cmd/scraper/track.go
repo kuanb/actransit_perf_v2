@@ -75,6 +75,13 @@ type trackStats struct {
 	RowsWrittenObs       int
 	RowsWrittenProbes    int
 	Conflict             bool
+	// Diagnostics for the live-duplication investigation.
+	InFlightAfterRead    int
+	InFlightAfterUpdate  int
+	InFlightAfterPrune   int
+	StuckTrips           int
+	ReadGen              int64
+	WriteGen             int64
 }
 
 type vehicleSnapshot struct {
@@ -113,11 +120,15 @@ func trackPerformance(ctx context.Context) (trackStats, error) {
 	if err != nil {
 		return stats, fmt.Errorf("read state: %w", err)
 	}
+	inFlightAfterRead := len(s.InFlight)
 
 	now := time.Now().UTC()
 	vehicles := parseVehicleEntities(rawEntities, now)
 	var preempted []inFlightTrip
 	s, stats, preempted = updateInFlightState(s, vehicles, now)
+	stats.ReadGen = gen
+	stats.InFlightAfterRead = inFlightAfterRead
+	stats.InFlightAfterUpdate = len(s.InFlight)
 
 	cache := ensureGTFSCache(ctx)
 	if cache != nil {
@@ -129,7 +140,20 @@ func trackPerformance(ctx context.Context) (trackStats, error) {
 	stale := pruneStaleTrips(&s, now.Add(-staleThreshold))
 	stats.TripsCompleted = len(completed)
 	stats.TripsExpired = len(preempted) + len(completed) + len(stale)
+	stats.InFlightAfterPrune = len(s.InFlight)
 	stats.InFlight = len(s.InFlight)
+
+	// Stuck-trip detector: any in-flight entry whose LastSeenTS is older
+	// than the stale cutoff *should* have been removed by pruneStaleTrips.
+	// If this count is >0 after the cycle's logic, either the prune isn't
+	// sticking or something is re-adding entries — exactly the "live
+	// duplication" symptom we're chasing.
+	staleCutoff := now.Add(-staleThreshold)
+	for _, t := range s.InFlight {
+		if t.LastSeenTS.Before(staleCutoff) {
+			stats.StuckTrips++
+		}
+	}
 
 	normalEnd := append(preempted, completed...)
 	if len(normalEnd) > 0 {
@@ -160,13 +184,15 @@ func trackPerformance(ctx context.Context) (trackStats, error) {
 		slog.Warn("emit trips_finalized failed", "err", err)
 	}
 
-	if err := writeState(ctx, s, gen); err != nil {
+	writeGen, err := writeState(ctx, s, gen)
+	if err != nil {
 		if errors.Is(err, errStateConflict) {
 			stats.Conflict = true
 			return stats, nil
 		}
 		return stats, fmt.Errorf("write state: %w", err)
 	}
+	stats.WriteGen = writeGen
 
 	return stats, nil
 }
@@ -192,6 +218,14 @@ func parseVehicleEntities(raw []json.RawMessage, fallbackNow time.Time) []vehicl
 			continue
 		}
 		trip := v.GetTrip()
+		// Skip vehicles without a service_date — they have no trip
+		// association we can attribute observations or probes to. The
+		// downstream BQ partition column doesn't accept "0000-00-00",
+		// so generating rows for these would just fail the streaming
+		// insert (one log warning per such row, every minute).
+		if trip.GetStartDate() == "" {
+			continue
+		}
 		ts := fallbackNow
 		if v.GetTimestamp() != 0 {
 			ts = time.Unix(int64(v.GetTimestamp()), 0).UTC()
@@ -364,22 +398,24 @@ func readState(ctx context.Context) (stateFile, int64, error) {
 // unclear, but with a single-writer guarantee the precondition is gating
 // against a race that doesn't exist. Last-write-wins is safe here.
 //
-// The ifGeneration parameter is preserved for the debug log only.
-func writeState(ctx context.Context, s stateFile, ifGeneration int64) error {
+// Returns the new GCS object generation so callers can correlate the read
+// generation of cycle T+1 with the write generation of cycle T (mismatches
+// would indicate a concurrent writer competing for state.json).
+func writeState(ctx context.Context, s stateFile, ifGeneration int64) (int64, error) {
 	payload, err := json.Marshal(s)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	w := gcsClient.Bucket(bucketName).Object(stateObjectKey).NewWriter(ctx)
 	w.ContentType = "application/json"
 	if _, err := w.Write(payload); err != nil {
 		_ = w.Close()
-		return err
+		return 0, err
 	}
 	if err := w.Close(); err != nil {
-		return fmt.Errorf("close state.json (read_gen=%d): %w", ifGeneration, err)
+		return 0, fmt.Errorf("close state.json (read_gen=%d): %w", ifGeneration, err)
 	}
-	return nil
+	return w.Attrs().Generation, nil
 }
 
 // projectInFlightProbes fills DistAlongRouteM and NearestStopSeq on each
