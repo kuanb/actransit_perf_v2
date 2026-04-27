@@ -22,10 +22,14 @@ resource "google_billing_budget" "monthly_cap" {
     projects = ["projects/${var.project_id}"]
   }
 
+  # $10/mo cap. Steady-state usage runs ~$1.50–2/mo; the higher cap
+  # gives headroom for occasional backfill-heavy weeks (~$0.30/day for
+  # a few days during multi-day BQ writes + load jobs) without firing
+  # the 50% threshold on routine maintenance.
   amount {
     specified_amount {
       currency_code = "USD"
-      units         = "5"
+      units         = "10"
     }
   }
 
