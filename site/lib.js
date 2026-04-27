@@ -68,6 +68,18 @@ function routeBadge(r) {
   return `<span class="route-badge" style="background:#${bg};color:#${fg}">${r.route_id}</span>${nSuffix}`;
 }
 
+// pickTextColor picks black or white based on the perceived luminance
+// of an "rgb(r,g,b)" CSS color, so foreground text stays legible against
+// any background in a colormap that spans dark→light→dark.
+function pickTextColor(rgbStr) {
+  const m = rgbStr && rgbStr.match(/rgb\((\d+)\s*,\s*(\d+)\s*,\s*(\d+)\)/);
+  if (!m) return "#1a1a1a";
+  const r = +m[1], g = +m[2], b = +m[3];
+  // Standard relative-luminance approximation (Rec. 709 coefficients).
+  const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return lum > 150 ? "#1a1a1a" : "#ffffff";
+}
+
 // delayDivergingColor maps a signed delay value (minutes) to a CSS color
 // on a 3-stop gradient: blue (early) → white (on-time / mid) → red (late).
 // `lo`, `mid`, `hi` set the scale: anything ≤ lo is saturated blue,

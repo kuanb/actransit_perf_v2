@@ -157,12 +157,19 @@ function renderDelayHeatmap(data) {
       for (let h = 0; h < 24; h++) {
         const cell = cells[h] || { hour: h, n: 0 };
         const v = cell[stat];
-        const color = delayDivergingColor(v, lo, mid, hi) || "#f0f0f0";
-        const tip =
-          v === null || v === undefined
-            ? `${day} ${h}:00 PT — no data (n=${intFmt(cell.n || 0)})`
-            : `${day} ${h}:00 PT — ${stat} = ${fmt(v)} min (n=${intFmt(cell.n)})`;
-        html += `<div class="hm-cell" style="background:${color}" title="${tip}"></div>`;
+        const isMissing = v === null || v === undefined;
+        const color = isMissing ? "#f0f0f0" : delayDivergingColor(v, lo, mid, hi);
+        const txtColor = isMissing ? "transparent" : pickTextColor(color);
+        // Round to nearest int for display; signed so direction is obvious.
+        // Hover shows the precise value via the title attribute.
+        const rounded = isMissing ? "" : Math.round(v);
+        const display = isMissing
+          ? ""
+          : rounded > 0 ? `+${rounded}` : `${rounded}`;
+        const tip = isMissing
+          ? `${day} ${h}:00 PT — no data (n=${intFmt(cell.n || 0)})`
+          : `${day} ${h}:00 PT — ${stat} = ${fmt(v)} min (n=${intFmt(cell.n)})`;
+        html += `<div class="hm-cell" style="background:${color};color:${txtColor}" title="${tip}">${display}</div>`;
       }
     }
     html += `</div>`;
