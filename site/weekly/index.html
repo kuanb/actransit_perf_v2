@@ -33,12 +33,21 @@
 
   <section>
     <h2>Per-route delay by hour</h2>
-    <p class="muted defn">Each line = one route's delay across the day (PT hours). The 10 routes with the worst week-overall median delay are bold-colored; the rest fade to gray to show the system band.</p>
+    <p class="muted defn">Each line = one route's delay across the day (PT hours). All routes are drawn; the 10 with the worst week-overall median delay are pre-selected (bold-colored). Click any chip below to add or remove a route.</p>
     <div class="hm-controls">
       <label><input type="radio" name="rline-stat" value="p50" checked> p50 (median)</label>
       <label><input type="radio" name="rline-stat" value="p95"> p95 (tail)</label>
     </div>
     <canvas id="route-line-chart" width="900" height="320"></canvas>
+    <div class="route-select">
+      <div class="route-select-controls">
+        <input type="text" id="route-search" placeholder="Search route…">
+        <button id="route-select-reset" type="button">Reset to top 10 worst</button>
+        <button id="route-select-clear" type="button">Hide all</button>
+        <span class="route-select-count muted" id="route-select-count"></span>
+      </div>
+      <div class="route-chips" id="route-chips"></div>
+    </div>
   </section>
 
   <section>

@@ -200,51 +200,72 @@ function renderDelayHeatmap(data) {
 // ---- chart 3: per-route delay by hour ----
 function renderRouteLineChart(data) {
   const ctx = document.getElementById("route-line-chart").getContext("2d");
-  const routes = Object.keys(data.route_delay_by_hour).sort();
 
-  // Top-10 worst by week-overall p50. The route_daily_service_delivered
-  // list is already sorted worst→best in the JSON.
-  const topWorstIds = data.route_daily_service_delivered
-    .filter((r) => r.overall_p50_delay_min !== null)
-    .slice(0, 10)
+  // Routes that have at least one hour of data, in worst→best order
+  // (route_daily_service_delivered is already sorted by week's p50).
+  const hasHourly = data.route_delay_by_hour;
+  const routesInLineChart = data.route_daily_service_delivered
+    .filter((r) => hasHourly[r.route_id])
     .map((r) => r.route_id);
-  const topWorstSet = new Set(topWorstIds);
 
   const routeMeta = {};
   for (const r of data.route_daily_service_delivered) {
     routeMeta[r.route_id] = { color: r.color, text_color: r.text_color };
   }
 
-  const buildDatasets = (stat) =>
-    routes.map((rid) => {
+  const initialSelected = routesInLineChart.slice(0, 10);
+  const selected = new Set(initialSelected);
+  let currentStat = "p50";
+
+  // Render the chip list (one chip per route, sorted worst→best). Clicking
+  // a chip toggles whether that route is bold-colored in the chart.
+  const chipsEl = document.getElementById("route-chips");
+  chipsEl.innerHTML = routesInLineChart
+    .map((rid) => {
+      const m = routeMeta[rid] || {};
+      const color = `#${m.color || "555555"}`;
+      const text = `#${m.text_color || "FFFFFF"}`;
+      const sel = selected.has(rid);
+      return `<button type="button" class="route-chip ${sel ? "is-selected" : ""}" data-rid="${rid}" style="--route-color:${color};--route-text:${text}" title="Toggle route ${rid}">${rid}</button>`;
+    })
+    .join("");
+
+  const countEl = document.getElementById("route-select-count");
+  const updateCount = () => {
+    countEl.textContent = `${selected.size} of ${routesInLineChart.length} highlighted`;
+  };
+  updateCount();
+
+  const buildDatasets = () =>
+    routesInLineChart.map((rid) => {
       const points = data.route_delay_by_hour[rid] || [];
       const byHour = new Array(24).fill(null);
-      for (const p of points) byHour[p.hour] = p[stat];
-      const isOutlier = topWorstSet.has(rid);
+      for (const p of points) byHour[p.hour] = p[currentStat];
+      const isSel = selected.has(rid);
       const color = `#${(routeMeta[rid] && routeMeta[rid].color) || "555555"}`;
       return {
         label: rid,
         data: byHour,
         spanGaps: false,
-        borderColor: isOutlier ? color : "rgba(150,150,150,0.22)",
-        backgroundColor: isOutlier ? color : "rgba(150,150,150,0.22)",
-        borderWidth: isOutlier ? 2.5 : 1,
-        pointRadius: isOutlier ? 2 : 0,
-        order: isOutlier ? 0 : 1,
+        borderColor: isSel ? color : "rgba(150,150,150,0.18)",
+        backgroundColor: isSel ? color : "rgba(150,150,150,0.18)",
+        borderWidth: isSel ? 2.5 : 1,
+        pointRadius: isSel ? 2 : 0,
+        order: isSel ? 0 : 1,
       };
     });
 
   const labels = Array.from({ length: 24 }, (_, h) => h);
   const chart = new Chart(ctx, {
     type: "line",
-    data: { labels, datasets: buildDatasets("p50") },
+    data: { labels, datasets: buildDatasets() },
     options: {
       plugins: {
         legend: {
           display: true,
           labels: {
-            // Only show legend entries for the bold-colored outlier routes.
-            filter: (legend) => topWorstSet.has(legend.text),
+            // Only show legend entries for selected (bold-colored) routes.
+            filter: (legend) => selected.has(legend.text),
             boxWidth: 14,
             boxHeight: 2,
           },
@@ -254,7 +275,7 @@ function renderRouteLineChart(data) {
             title: (ctx) => `${ctx[0].label}:00 PT`,
             label: (ctx) => {
               if (ctx.parsed.y === null) return null;
-              const tag = topWorstSet.has(ctx.dataset.label) ? " ★" : "";
+              const tag = selected.has(ctx.dataset.label) ? " ★" : "";
               return `Route ${ctx.dataset.label}${tag}: ${fmt(ctx.parsed.y)} min`;
             },
           },
@@ -267,12 +288,59 @@ function renderRouteLineChart(data) {
     },
   });
 
+  const refresh = () => {
+    chart.data.datasets = buildDatasets();
+    chart.update();
+    updateCount();
+  };
+
+  // Chip toggle.
+  chipsEl.addEventListener("click", (e) => {
+    const btn = e.target.closest(".route-chip");
+    if (!btn) return;
+    const rid = btn.dataset.rid;
+    if (selected.has(rid)) {
+      selected.delete(rid);
+      btn.classList.remove("is-selected");
+    } else {
+      selected.add(rid);
+      btn.classList.add("is-selected");
+    }
+    refresh();
+  });
+
+  // Search filter.
+  document.getElementById("route-search").addEventListener("input", (e) => {
+    const q = e.target.value.toLowerCase().trim();
+    chipsEl.querySelectorAll(".route-chip").forEach((chip) => {
+      const match = !q || chip.dataset.rid.toLowerCase().includes(q);
+      chip.classList.toggle("hidden", !match);
+    });
+  });
+
+  // Reset / clear.
+  document.getElementById("route-select-reset").addEventListener("click", () => {
+    selected.clear();
+    initialSelected.forEach((rid) => selected.add(rid));
+    chipsEl.querySelectorAll(".route-chip").forEach((chip) => {
+      chip.classList.toggle("is-selected", selected.has(chip.dataset.rid));
+    });
+    refresh();
+  });
+  document.getElementById("route-select-clear").addEventListener("click", () => {
+    selected.clear();
+    chipsEl.querySelectorAll(".route-chip").forEach((chip) => {
+      chip.classList.remove("is-selected");
+    });
+    refresh();
+  });
+
+  // p50 / p95 toggle.
   document.querySelectorAll('input[name="rline-stat"]').forEach((input) => {
     input.addEventListener("change", (e) => {
-      chart.data.datasets = buildDatasets(e.target.value);
-      // p95 wants more headroom on the y-axis.
-      chart.options.scales.y.suggestedMax = e.target.value === "p95" ? 20 : 10;
-      chart.update();
+      currentStat = e.target.value;
+      chart.options.scales.y.suggestedMax = currentStat === "p95" ? 20 : 10;
+      refresh();
     });
   });
 }
