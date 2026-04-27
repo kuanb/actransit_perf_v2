@@ -61,9 +61,9 @@ required APIs enabled, and a Terraform state bucket at
 
 ```sh
 make tf-init                # only the first time
-make release TAG=vN         # build + push image, then terraform apply (use this for code changes)
-make build TAG=vN           # just build + push (rare; use release instead)
-make deploy TAG=vN          # just terraform apply at a known-good tag (for infra-only changes)
+make release                # build + deploy at HEAD's git SHA (use this for code changes)
+make deploy                 # terraform apply at the currently-running tag (infra-only changes)
+make build                  # just build (rare; use release instead)
 make invoke                 # curl /scrape with your identity token
 make logs                   # recent Cloud Run logs
 ```
@@ -73,18 +73,22 @@ can't accidentally deploy a tag whose build hasn't finished pushing.
 
 ### Versioning
 
-The Go scraper is shipped as a container image tagged `vN` (`v1`, `v2`, ...) in
-Artifact Registry. The tag is just an integer marker — there's no semver, no
-automation. Bump it manually whenever the image content needs to change:
+Image tags are auto-derived from the current git short SHA (e.g.
+`abc1234`). Every commit ships under a unique tag — no semver, no
+manual bumping, no chance of re-tagging an old SHA and Cloud Run silently
+keeping the prior digest. If the working tree is dirty, the tag is
+suffixed `-dirty` and `make release` prompts before building it.
 
-| Change                                  | Command                       |
-|-----------------------------------------|-------------------------------|
-| Go code (`cmd/`, future `internal/`)    | `make release TAG=vN`         |
-| `Dockerfile` or `go.mod` / `go.sum`     | `make release TAG=vN`         |
-| Terraform only (`infra/*.tf`)           | `make deploy TAG=<current>`   |
+| Change                                  | Command           |
+|-----------------------------------------|-------------------|
+| Go code (`cmd/`, future `internal/`)    | `make release`    |
+| `Dockerfile` or `go.mod` / `go.sum`     | `make release`    |
+| Terraform only (`infra/*.tf`)           | `make deploy`     |
 
-For pure Terraform changes, pass the **current** tag (don't omit `TAG=`) so
-Terraform doesn't silently downgrade the image to the variable's default (`v1`).
+`make deploy` queries Cloud Run for the currently-running image and
+applies Terraform against that tag, so it physically can't downgrade or
+default to `v1`. Override either default with `TAG=` (e.g.
+`make release TAG=hotfix1` for a friendly name).
 
 ### Finding the current version
 
@@ -103,7 +107,7 @@ gcloud artifacts docker tags list \
 Old tags stay in Artifact Registry. Roll back by deploying a prior tag:
 
 ```sh
-make deploy TAG=v1
+make deploy TAG=<prior-sha>
 ```
 
 Cloud Run will roll a new revision pointing at the old image. The faster

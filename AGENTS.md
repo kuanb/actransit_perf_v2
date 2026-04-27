@@ -117,17 +117,23 @@ push. Don't bypass hooks (`--no-verify`) without an explicit request.
 
 ## Deploy commands
 
-See README.md "Deploy" for the full reference. The two you'll use:
+`make` auto-derives the image tag from the current git short SHA, so every
+commit ships under a unique tag (no chance of re-tagging an old SHA and
+Cloud Run silently keeping the prior digest). If the working tree has
+uncommitted changes, the tag is suffixed `-dirty` and `make release` prompts
+before building it.
 
 ```sh
-make release TAG=vN         # build + push image, terraform apply  (Go changes)
-make deploy  TAG=<current>  # terraform apply at known-good tag    (infra-only)
+make release         # build + deploy at HEAD's git SHA
+make deploy          # terraform apply at the *currently-running* tag
+make build           # build image only, no deploy
 ```
 
-For pure Terraform changes, **always pass the current tag** — omitting it
-silently downgrades the image to the variable's default `v1`. Find the
-deployed tag with `gcloud run services describe actransit-scraper
---region us-west1 --format='value(spec.template.spec.containers[].image)'`.
+`make deploy` without `TAG=` queries Cloud Run for the live image and
+applies Terraform against that — physically incapable of downgrading or
+defaulting to `v1`. Pass `TAG=` to override either default (e.g.
+`make release TAG=hotfix1` for a friendly name, or `make deploy TAG=abc1234`
+to ship infra at a specific build).
 
 After deploy, `make smoke` hits the live service end-to-end.
 
@@ -205,9 +211,6 @@ trusting the chart — chart alignment periods can hide both gaps and bugs.
   This is transient backend flakiness, not a schema/quota problem. The
   warning log is appropriate; don't add elaborate retry logic unless the
   rate climbs above ~1/day.
-
-- **`make deploy` without `TAG=` rolls the image back to `v1`.** Always
-  pass an explicit tag.
 
 - **`gcloud logging read --freshness=Xm` window is the only way to scope
   Cloud Run logs efficiently.** Without it you'll wait minutes and time out.

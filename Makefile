@@ -1,7 +1,17 @@
 PROJECT_ID := transit-203605
 REGION     := us-west1
 REPO       := actransit-scraper
+SERVICE    := actransit-scraper
 IMAGE      := $(REGION)-docker.pkg.dev/$(PROJECT_ID)/$(REPO)/scraper
+
+# Auto-derive the image tag from git: short SHA, plus "-dirty" when the
+# working tree has uncommitted changes to tracked files. This makes every
+# commit a unique image tag (no chance of re-tagging an old SHA and Cloud
+# Run silently keeping the prior digest) and gates accidental shipping of
+# uncommitted code (release prompts before building a -dirty tag).
+GIT_SHA  := $(shell git rev-parse --short HEAD 2>/dev/null)
+DIRTY    := $(shell git diff-index --quiet HEAD -- 2>/dev/null || echo "-dirty")
+AUTO_TAG := $(GIT_SHA)$(DIRTY)
 
 .PHONY: tf-init tf-plan tf-apply tf-fmt build deploy release logs invoke run-local test smoke hooks-install backfill
 
@@ -17,20 +27,41 @@ tf-apply:
 tf-fmt:
 	cd infra && terraform fmt -recursive
 
+# build defaults TAG to AUTO_TAG (current git short SHA, +-dirty if uncommitted).
+# Override with `make build TAG=...` for a friendly name (e.g. hotfix1).
 build:
-	@test -n "$(TAG)" || (echo "usage: make build TAG=v1" && exit 1)
-	gcloud builds submit --tag $(IMAGE):$(TAG)
+	@T=$${TAG:-$(AUTO_TAG)}; \
+	test -n "$$T" || (echo "ERROR: couldn't determine tag (no TAG= and git unreadable)" && exit 1); \
+	echo "==> building $(IMAGE):$$T"; \
+	gcloud builds submit --tag $(IMAGE):$$T
 
+# deploy defaults TAG to whatever's currently running on Cloud Run. So a
+# bare `make deploy` applies infra changes against the live image — it
+# physically can't downgrade or accidentally pin to v1. Pass TAG= to
+# override (e.g. when shipping a build-then-deploy in two separate steps).
 deploy:
-	@test -n "$(TAG)" || (echo "usage: make deploy TAG=v1" && exit 1)
-	@gcloud artifacts docker tags list $(IMAGE) --format='value(TAG)' | grep -qx '$(TAG)' \
-		|| (echo "ERROR: image tag '$(TAG)' not found in Artifact Registry. Run 'make build TAG=$(TAG)' first." && exit 1)
-	cd infra && terraform apply -var "image_tag=$(TAG)"
+	@if [ -n "$$TAG" ]; then T="$$TAG"; else \
+	  IMG=$$(gcloud run services describe $(SERVICE) --region=$(REGION) \
+	    --format='value(spec.template.spec.containers[].image)' 2>/dev/null); \
+	  case "$$IMG" in *@*) echo "ERROR: live image is digest-pinned (no tag). Pass TAG= explicitly." && exit 1;; esac; \
+	  T="$${IMG##*:}"; fi; \
+	test -n "$$T" || (echo "ERROR: no TAG= and couldn't read currently-deployed tag" && exit 1); \
+	gcloud artifacts docker tags list $(IMAGE) --format='value(TAG)' | grep -qx "$$T" \
+	  || (echo "ERROR: tag '$$T' not in Artifact Registry — run 'make build TAG=$$T' first" && exit 1); \
+	echo "==> deploying $$T"; \
+	cd infra && terraform apply -var "image_tag=$$T"
 
+# release builds + deploys at the auto-derived tag. If the working tree is
+# dirty, prompts before proceeding so you don't accidentally ship uncommitted
+# code under a -dirty suffix.
 release:
-	@test -n "$(TAG)" || (echo "usage: make release TAG=v1" && exit 1)
-	$(MAKE) build TAG=$(TAG)
-	$(MAKE) deploy TAG=$(TAG)
+	@T=$${TAG:-$(AUTO_TAG)}; \
+	case "$$T" in \
+	  *-dirty) \
+	    echo "WARN: working tree is dirty; tag will be '$$T' (uncommitted code)"; \
+	    read -p "Proceed? [y/N] " yn; [ "$$yn" = "y" ] || (echo "aborted." && exit 1);; \
+	esac; \
+	$(MAKE) build TAG=$$T && $(MAKE) deploy TAG=$$T
 
 logs:
 	gcloud logging read 'resource.labels.service_name="actransit-scraper" AND jsonPayload.msg!=""' --limit 50 --freshness=15m \
