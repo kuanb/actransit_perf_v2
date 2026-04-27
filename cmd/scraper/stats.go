@@ -59,11 +59,28 @@ type systemStats struct {
 }
 
 type scheduleCompliance struct {
-	ScheduledTrips       int      `json:"scheduled_trips"`
-	RanTrips             int      `json:"ran_trips"`
-	DroppedTrips         int      `json:"dropped_trips"`
-	TripsNotCompleted    int      `json:"trips_not_completed"`
-	DroppedTripIDsSample []string `json:"dropped_trip_ids_sample"`
+	ScheduledTrips                int                       `json:"scheduled_trips"`
+	RanTrips                      int                       `json:"ran_trips"`
+	DroppedTrips                  int                       `json:"dropped_trips"`
+	TripsNotCompleted             int                       `json:"trips_not_completed"`
+	TripsNotCompletedDistribution *notCompletedDistribution `json:"trips_not_completed_distribution,omitempty"`
+	DroppedTripIDsSample          []string                  `json:"dropped_trip_ids_sample"`
+}
+
+// notCompletedDistribution describes how far through their route the
+// trips counted in TripsNotCompleted got, in stops-observed-of-stops-
+// scheduled terms (last_obs_seq / final_seq * 100). Helps tell the
+// difference between "buses bailed at the last 1–2 stops" (90%+) vs
+// "GPS dropped mid-route" (40–60%) vs "trip never started past the
+// first few stops" (<10%).
+type notCompletedDistribution struct {
+	P5Pct     float64 `json:"p5_pct"`
+	P25Pct    float64 `json:"p25_pct"`
+	P50Pct    float64 `json:"p50_pct"`
+	P75Pct    float64 `json:"p75_pct"`
+	P95Pct    float64 `json:"p95_pct"`
+	// 10 buckets, each a 10% slice: index 0 = [0, 10), …, index 9 = [90, 100).
+	Histogram []int64 `json:"histogram"`
 }
 
 type routeStats struct {
@@ -129,7 +146,7 @@ func generateDailyStats(ctx context.Context, serviceDate civil.Date) (*dailyStat
 	if err != nil {
 		return nil, fmt.Errorf("query ran trips: %w", err)
 	}
-	notCompleted, err := queryTripsNotCompleted(ctx, serviceDate)
+	notCompleted, notCompletedDist, err := queryTripsNotCompleted(ctx, serviceDate)
 	if err != nil {
 		return nil, fmt.Errorf("query trips not completed: %w", err)
 	}
@@ -239,11 +256,12 @@ func generateDailyStats(ctx context.Context, serviceDate civil.Date) (*dailyStat
 		GeneratedAt: time.Now().UTC(),
 		System:      *sys,
 		ScheduleCompliance: scheduleCompliance{
-			ScheduledTrips:       len(scheduled),
-			RanTrips:             ranInSchedule,
-			DroppedTrips:         len(dropped),
-			TripsNotCompleted:    notCompleted,
-			DroppedTripIDsSample: sample,
+			ScheduledTrips:                len(scheduled),
+			RanTrips:                      ranInSchedule,
+			DroppedTrips:                  len(dropped),
+			TripsNotCompleted:             notCompleted,
+			TripsNotCompletedDistribution: notCompletedDist,
+			DroppedTripIDsSample:          sample,
 		},
 		DistortionHistogram:  distHist,
 		DelayMinuteHistogram: minuteHist,
@@ -556,11 +574,11 @@ func queryRanTrips(ctx context.Context, serviceDate civil.Date) (map[string]stru
 }
 
 // queryTripsNotCompleted counts trips that ran (had ≥1 stop arrival
-// observed) but never reached their final scheduled stop. Per trip:
-// compare MAX(stop_sequence with actual_arrival NOT NULL) against
-// MAX(stop_sequence). If less, the bus broke down mid-route, was
-// reassigned mid-trip, or we lost GPS before completion.
-func queryTripsNotCompleted(ctx context.Context, serviceDate civil.Date) (int, error) {
+// observed) but never reached their final scheduled stop, AND returns
+// a percentile + 10-bucket histogram of how far through the route those
+// not-completed trips got (last_obs_seq / final_seq * 100). One BQ
+// scan, single query.
+func queryTripsNotCompleted(ctx context.Context, serviceDate civil.Date) (int, *notCompletedDistribution, error) {
 	q := bqClient.Query(fmt.Sprintf(`
 		WITH per_trip AS (
 		  SELECT
@@ -570,23 +588,67 @@ func queryTripsNotCompleted(ctx context.Context, serviceDate civil.Date) (int, e
 		  FROM `+"`%s.actransit.trip_observations`"+`
 		  WHERE service_date = "%s"
 		  GROUP BY trip_id
+		),
+		not_completed AS (
+		  SELECT 100.0 * last_observed_seq / final_seq AS completion_pct
+		  FROM per_trip
+		  WHERE last_observed_seq IS NOT NULL
+		    AND last_observed_seq < final_seq
+		    AND final_seq > 0
+		),
+		bucketed AS (
+		  SELECT
+		    LEAST(CAST(FLOOR(completion_pct / 10) AS INT64), 9) AS bucket,
+		    COUNT(*) AS n
+		  FROM not_completed
+		  GROUP BY bucket
 		)
-		SELECT COUNT(*) AS n
-		FROM per_trip
-		WHERE last_observed_seq IS NOT NULL
-		  AND last_observed_seq < final_seq
+		SELECT
+		  (SELECT COUNT(*) FROM not_completed) AS n,
+		  (SELECT APPROX_QUANTILES(completion_pct, 100)[OFFSET(5)]  FROM not_completed) AS p5,
+		  (SELECT APPROX_QUANTILES(completion_pct, 100)[OFFSET(25)] FROM not_completed) AS p25,
+		  (SELECT APPROX_QUANTILES(completion_pct, 100)[OFFSET(50)] FROM not_completed) AS p50,
+		  (SELECT APPROX_QUANTILES(completion_pct, 100)[OFFSET(75)] FROM not_completed) AS p75,
+		  (SELECT APPROX_QUANTILES(completion_pct, 100)[OFFSET(95)] FROM not_completed) AS p95,
+		  ARRAY(SELECT AS STRUCT bucket, n FROM bucketed ORDER BY bucket) AS histogram
 	`, projectID, serviceDate))
 	it, err := q.Read(ctx)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	var row struct {
-		N int64 `bigquery:"n"`
+		N         bigquery.NullInt64   `bigquery:"n"`
+		P5        bigquery.NullFloat64 `bigquery:"p5"`
+		P25       bigquery.NullFloat64 `bigquery:"p25"`
+		P50       bigquery.NullFloat64 `bigquery:"p50"`
+		P75       bigquery.NullFloat64 `bigquery:"p75"`
+		P95       bigquery.NullFloat64 `bigquery:"p95"`
+		Histogram []struct {
+			Bucket int64 `bigquery:"bucket"`
+			N      int64 `bigquery:"n"`
+		} `bigquery:"histogram"`
 	}
 	if err := it.Next(&row); err != nil {
-		return 0, err
+		return 0, nil, err
 	}
-	return int(row.N), nil
+	count := int(row.N.Int64)
+	if count == 0 {
+		return 0, nil, nil
+	}
+	hist := make([]int64, 10)
+	for _, b := range row.Histogram {
+		if b.Bucket >= 0 && b.Bucket < 10 {
+			hist[b.Bucket] = b.N
+		}
+	}
+	return count, &notCompletedDistribution{
+		P5Pct:     round1(row.P5.Float64),
+		P25Pct:    round1(row.P25.Float64),
+		P50Pct:    round1(row.P50.Float64),
+		P75Pct:    round1(row.P75.Float64),
+		P95Pct:    round1(row.P95.Float64),
+		Histogram: hist,
+	}, nil
 }
 
 func queryStatsSystem(ctx context.Context, serviceDate civil.Date) (*systemStats, error) {

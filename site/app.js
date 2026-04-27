@@ -326,6 +326,52 @@ function render(data) {
       grade: gradeNotCompleted(notCompletedPct) },
   ]);
 
+  // ---- not-completed completion-pct distribution ----
+  const ncDist = sc.trips_not_completed_distribution;
+  const ncSection = document.getElementById("not-completed-section");
+  if (ncDist && ncDist.histogram && ncDist.histogram.some((n) => n > 0)) {
+    ncSection.hidden = false;
+    document.getElementById("not-completed-summary").innerHTML =
+      `Across ${intFmt(notCompleted)} not-completed trips: ` +
+      `p5 <strong>${fmt(ncDist.p5_pct)}%</strong> · ` +
+      `p25 <strong>${fmt(ncDist.p25_pct)}%</strong> · ` +
+      `p50 <strong>${fmt(ncDist.p50_pct)}%</strong> · ` +
+      `p75 <strong>${fmt(ncDist.p75_pct)}%</strong> · ` +
+      `p95 <strong>${fmt(ncDist.p95_pct)}%</strong> of stops observed.`;
+    const ncLabels = ["0–10", "10–20", "20–30", "30–40", "40–50",
+                      "50–60", "60–70", "70–80", "80–90", "90–100"];
+    const ncCtx = document.getElementById("not-completed-chart").getContext("2d");
+    new Chart(ncCtx, {
+      type: "bar",
+      data: {
+        labels: ncLabels,
+        datasets: [{
+          label: "Trips",
+          data: ncDist.histogram,
+          backgroundColor: "#d99694",
+          borderWidth: 0,
+        }],
+      },
+      options: {
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              title: (ctx) => `${ctx[0].label}% complete`,
+              label: (ctx) => `${ctx.raw.toLocaleString()} trip${ctx.raw === 1 ? "" : "s"}`,
+            },
+          },
+        },
+        scales: {
+          x: { title: { display: true, text: "% of stops observed (last_obs_seq ÷ final_seq)" }, grid: { display: false } },
+          y: { beginAtZero: true, title: { display: true, text: "trips" }, ticks: { precision: 0 } },
+        },
+      },
+    });
+  } else {
+    ncSection.hidden = true;
+  }
+
   // ---- distortion histogram (42 buckets: under, 40 × 5%, over) ----
   const dh = data.distortion_histogram || { buckets: [], counts: [] };
   const distCtx = document.getElementById("histogram-chart").getContext("2d");

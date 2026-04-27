@@ -40,6 +40,13 @@
     <p class="muted defn"><strong>Dropped trips</strong> = scheduled trips with no observed arrivals.</p>
     <p class="muted defn"><strong>Trips not completed</strong> = trips that ran but never reached their final scheduled stop (bus broke down, was reassigned mid-trip, or GPS dropped out before the end of the route).</p>
     <div id="schedule-cards" class="cards"></div>
+
+    <div id="not-completed-section" hidden>
+      <h3 class="sub-h">How far did "not completed" trips get?</h3>
+      <p class="muted defn">For each trip counted as "not completed," what fraction of its scheduled stops were observed (<code>last_observed_stop_seq / final_stop_seq</code>). A heavy tail near 90–100% means buses are bailing on the very last stop or two; a flatter shape means GPS is dropping mid-route.</p>
+      <p class="muted defn" id="not-completed-summary"></p>
+      <canvas id="not-completed-chart" width="900" height="200"></canvas>
+    </div>
   </section>
 
   <section>
