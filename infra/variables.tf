@@ -19,3 +19,8 @@ variable "image_tag" {
   description = "Tag of the scraper container image in Artifact Registry"
   default     = "v1"
 }
+
+variable "billing_account_id" {
+  type        = string
+  description = "Cloud Billing account ID that owns the project (e.g. 0106AD-BA7AD7-261A86); used for budget alerts."
+}

@@ -13,11 +13,13 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"cloud.google.com/go/bigquery"
 	"cloud.google.com/go/civil"
 	"cloud.google.com/go/storage"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/api/iterator"
 )
 
@@ -26,6 +28,11 @@ const (
 	backfillSourcePrefix    = "maptime/"
 	backfillWindowStartHrPT = 3 // 03:00 PT on the target date
 	backfillWindowEndHrPT   = 6 // 06:00 PT on the day after the target date
+	// Concurrent GCS object reads during backfill. Each maptime/{ts}.csv
+	// is small (a few hundred KB) but the bucket has ~1500 of them per
+	// day's window; sequential reads dominate wall time at ~5–10 min.
+	// 10 workers brings that to <2 min with negligible memory pressure.
+	backfillWorkerCount = 10
 )
 
 type backfillStats struct {
@@ -149,22 +156,16 @@ func processBackfillDay(ctx context.Context, serviceDate civil.Date, force bool)
 }
 
 // readBackfillCSVs lists gs://ac-transit/maptime/{unix}.csv objects whose
-// numeric filename falls in [startUnix, endUnix], reads each, and returns
-// the parsed snapshots filtered to rows where start_date == yyyymmdd.
+// numeric filename falls in [startUnix, endUnix] and reads each
+// concurrently (worker pool), returning the parsed snapshots filtered
+// to rows where start_date == yyyymmdd. Snapshot order isn't preserved;
+// reconstructTrips sorts by TS downstream.
 //
-// Filenames are unix seconds, all 10 digits in our window, so lex ordering
-// matches numeric ordering — a Prefix+StartOffset+EndOffset list scan is
-// efficient. We still re-validate each name in case the bucket contains
-// unrelated files.
+// Filenames are unix seconds, all 10 digits in our window, so lex
+// ordering matches numeric ordering — a Prefix+StartOffset+EndOffset
+// list scan is efficient. We still re-validate each name in case the
+// bucket contains unrelated files.
 func readBackfillCSVs(ctx context.Context, startUnix, endUnix int64, yyyymmdd string) ([]vehicleSnapshot, int, int, int, int, error) {
-	var (
-		snapshots []vehicleSnapshot
-		listed    int
-		read      int
-		rowsRead  int
-		rowsKept  int
-	)
-
 	bucket := gcsClient.Bucket(backfillSourceBucket)
 	q := &storage.Query{
 		Prefix:      backfillSourcePrefix,
@@ -172,46 +173,71 @@ func readBackfillCSVs(ctx context.Context, startUnix, endUnix int64, yyyymmdd st
 		EndOffset:   fmt.Sprintf("%s%010d.csv", backfillSourcePrefix, endUnix+1),
 	}
 	if err := q.SetAttrSelection([]string{"Name"}); err != nil {
-		return nil, listed, read, rowsRead, rowsKept, fmt.Errorf("set attr selection: %w", err)
+		return nil, 0, 0, 0, 0, fmt.Errorf("set attr selection: %w", err)
 	}
 
-	it := bucket.Objects(ctx, q)
+	var (
+		mu        sync.Mutex
+		snapshots []vehicleSnapshot
+		listed    int
+		read      int
+		rowsRead  int
+		rowsKept  int
+	)
+
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(backfillWorkerCount)
+
+	fetchAndParse := func(name string) error {
+		base := strings.TrimPrefix(name, backfillSourcePrefix)
+		base = strings.TrimSuffix(base, ".csv")
+		ts, perr := strconv.ParseInt(base, 10, 64)
+		if perr != nil || ts < startUnix || ts > endUnix {
+			return nil
+		}
+		rc, err := bucket.Object(name).NewReader(gctx)
+		if err != nil {
+			return fmt.Errorf("open %s: %w", name, err)
+		}
+		body, err := io.ReadAll(rc)
+		_ = rc.Close()
+		if err != nil {
+			return fmt.Errorf("read %s: %w", name, err)
+		}
+		fileSnaps, fr, fk, perr := parseBackfillCSV(body, yyyymmdd)
+		if perr != nil {
+			// Per-file parse failures are non-fatal: log and move on.
+			// A network error from GCS would have been caught above.
+			slog.Warn("skipping malformed csv", "key", name, "err", perr)
+			return nil
+		}
+		mu.Lock()
+		read++
+		rowsRead += fr
+		rowsKept += fk
+		snapshots = append(snapshots, fileSnaps...)
+		mu.Unlock()
+		return nil
+	}
+
+	it := bucket.Objects(gctx, q)
 	for {
 		attrs, ierr := it.Next()
 		if ierr == iterator.Done {
 			break
 		}
 		if ierr != nil {
+			// Drain in-flight workers before returning so we don't leak goroutines.
+			_ = g.Wait()
 			return nil, listed, read, rowsRead, rowsKept, fmt.Errorf("list %s: %w", backfillSourcePrefix, ierr)
 		}
 		listed++
+		name := attrs.Name
+		g.Go(func() error { return fetchAndParse(name) })
+	}
 
-		base := strings.TrimPrefix(attrs.Name, backfillSourcePrefix)
-		base = strings.TrimSuffix(base, ".csv")
-		ts, perr := strconv.ParseInt(base, 10, 64)
-		if perr != nil || ts < startUnix || ts > endUnix {
-			continue
-		}
-
-		rc, oerr := bucket.Object(attrs.Name).NewReader(ctx)
-		if oerr != nil {
-			return nil, listed, read, rowsRead, rowsKept, fmt.Errorf("open %s: %w", attrs.Name, oerr)
-		}
-		body, rerr := io.ReadAll(rc)
-		_ = rc.Close()
-		if rerr != nil {
-			return nil, listed, read, rowsRead, rowsKept, fmt.Errorf("read %s: %w", attrs.Name, rerr)
-		}
-		read++
-
-		fileSnaps, fr, fk, perr := parseBackfillCSV(body, yyyymmdd)
-		if perr != nil {
-			slog.Warn("skipping malformed csv", "key", attrs.Name, "err", perr)
-			continue
-		}
-		rowsRead += fr
-		rowsKept += fk
-		snapshots = append(snapshots, fileSnaps...)
+	if err := g.Wait(); err != nil {
+		return nil, listed, read, rowsRead, rowsKept, err
 	}
 	return snapshots, listed, read, rowsRead, rowsKept, nil
 }

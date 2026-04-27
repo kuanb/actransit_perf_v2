@@ -7,6 +7,38 @@ resource "google_monitoring_notification_channel" "email" {
   }
 }
 
+# Spend cap. Catches accidental cost spikes (a runaway BQ query, a
+# backfill stuck in a loop, an enabled-by-mistake API). Alerts at
+# 50% / 90% / 100% of the monthly budget; default-IAM recipients
+# disabled so the only notification path is our existing email channel
+# (avoids dupes since the project owner == alert_email anyway). Requires
+# billingbudgets.googleapis.com enabled on the project — one time:
+#   gcloud services enable billingbudgets.googleapis.com --project=<id>
+resource "google_billing_budget" "monthly_cap" {
+  billing_account = var.billing_account_id
+  display_name    = "actransit project monthly budget"
+
+  budget_filter {
+    projects = ["projects/${var.project_id}"]
+  }
+
+  amount {
+    specified_amount {
+      currency_code = "USD"
+      units         = "5"
+    }
+  }
+
+  threshold_rules { threshold_percent = 0.5 }
+  threshold_rules { threshold_percent = 0.9 }
+  threshold_rules { threshold_percent = 1.0 }
+
+  all_updates_rule {
+    monitoring_notification_channels = [google_monitoring_notification_channel.email.id]
+    disable_default_iam_recipients   = true
+  }
+}
+
 resource "google_monitoring_alert_policy" "scraper_5xx" {
   display_name = "actransit-scraper 5xx errors"
   combiner     = "OR"
