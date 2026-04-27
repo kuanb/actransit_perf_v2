@@ -125,6 +125,7 @@ func main() {
 	http.HandleFunc("/refresh-gtfs", handleRefreshGTFS)
 	http.HandleFunc("/track-performance", handleTrackPerformance)
 	http.HandleFunc("/generate-daily-stats", handleGenerateDailyStats)
+	http.HandleFunc("/generate-weekly-stats", handleGenerateWeeklyStats)
 	http.HandleFunc("/backfill-day", handleBackfillDay)
 	http.HandleFunc("/", handleHealth)
 
@@ -258,6 +259,37 @@ func handleBackfillDay(w http.ResponseWriter, r *http.Request) {
 		"vehicles", stats.VehiclesObserved,
 		"obs_inserted", stats.ObsRowsInserted,
 		"probes_inserted", stats.ProbeRowsInserted,
+	)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(stats)
+}
+
+func handleGenerateWeeklyStats(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	weekEndStr := r.URL.Query().Get("week_end")
+	var weekEnd civil.Date
+	if weekEndStr != "" {
+		parsed, err := civil.ParseDate(weekEndStr)
+		if err != nil {
+			http.Error(w, "invalid week_end: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		weekEnd = parsed
+	} else {
+		weekEnd = defaultWeekEndSaturday(time.Now())
+	}
+	stats, err := processWeeklyStats(r.Context(), weekEnd)
+	if err != nil {
+		slog.Error("generate-weekly-stats failed", "week_end", weekEnd.String(), "err", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	slog.Info("generate-weekly-stats ok",
+		"duration_ms", time.Since(start).Milliseconds(),
+		"week_start", stats.WeekStart,
+		"week_end", stats.WeekEnd,
+		"routes", len(stats.RouteDailyServiceDelivered),
+		"route_hourly_routes", len(stats.RouteDelayByHour),
 	)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(stats)
