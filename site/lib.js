@@ -58,10 +58,33 @@ function gradeServiceDelivered(pct) {
   return gradeColor((pct - 90) / (99 - 90));
 }
 
-// Stop-level SD uses a tighter delivery window (−1 to +7 min), so
-// observed percentages sit lower than trip-level. Scale: 40% = red, 75% = green.
+// Multi-stop gradient interpolator keyed to absolute percentage values.
+// stops must be sorted ascending by pct. Values outside the range clamp.
+function gradePctStops(pct, stops) {
+  pct = Math.max(stops[0].pct, Math.min(stops[stops.length - 1].pct, pct));
+  let lo = stops[0], hi = stops[1];
+  for (let i = 0; i < stops.length - 1; i++) {
+    if (pct <= stops[i + 1].pct) { lo = stops[i]; hi = stops[i + 1]; break; }
+  }
+  const f = (pct - lo.pct) / (hi.pct - lo.pct);
+  const r = Math.round(lo.rgb[0] + (hi.rgb[0] - lo.rgb[0]) * f);
+  const g = Math.round(lo.rgb[1] + (hi.rgb[1] - lo.rgb[1]) * f);
+  const b = Math.round(lo.rgb[2] + (hi.rgb[2] - lo.rgb[2]) * f);
+  const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+  return { bg: `rgb(${r},${g},${b})`, fg: lum < 110 ? "#ffffff" : "#1a1a1a" };
+}
+
+// Stop-level SD colour scale. Anything ≥95% is green; the scale
+// transitions through orange at 90%, into reds at 80–75%, and
+// clamps to darkest red at 65% and below.
 function gradeStopSD(pct) {
-  return gradeColor((pct - 40) / (75 - 40));
+  return gradePctStops(pct, [
+    { pct: 65, rgb: [110,  10,  15] }, // darkest red — clamps here and below
+    { pct: 75, rgb: [173,  30,  35] }, // dark red
+    { pct: 80, rgb: [210,  65,  40] }, // medium red
+    { pct: 90, rgb: [232, 150,  35] }, // orange
+    { pct: 95, rgb: [140, 190, 110] }, // green
+  ]);
 }
 
 function routeBadge(r) {
