@@ -16,34 +16,68 @@ async function loadIndex() {
 
 function renderDateSelector(dates, current) {
   const el = document.getElementById("date-selector");
-  if (!dates.length && !current) {
-    el.innerHTML = "";
-    return;
-  }
-  const last10 = dates.slice(0, 10);
-  const customSelected = current && !last10.includes(current);
-  el.innerHTML = `
-    <label>View date:
-      <select id="date-dropdown">
-        <option value="" ${!current ? "selected" : ""}>Latest</option>
-        ${last10.map((d) => `<option value="${d}" ${d === current ? "selected" : ""}>${d}</option>`).join("")}
-        ${customSelected ? `<option value="${current}" selected>${current}</option>` : ""}
-        ${dates.length > 10 ? `<option value="__more__">Older date…</option>` : ""}
-      </select>
-    </label>
-  `;
-  document.getElementById("date-dropdown").addEventListener("change", (e) => {
-    const v = e.target.value;
-    if (v === "__more__") {
-      const oldest = dates[dates.length - 1];
-      const newest = dates[0];
-      const picked = prompt(`Enter a date (YYYY-MM-DD).\nAvailable range: ${oldest} – ${newest}`, "");
-      if (picked && /^\d{4}-\d{2}-\d{2}$/.test(picked)) navigateTo(picked);
-      else e.target.value = current || "";
-      return;
+  if (!dates.length && !current) { el.innerHTML = ""; return; }
+
+  const dateSet = new Set(dates);
+  const pivot = current || dates[0] || new Date().toISOString().slice(0, 10);
+  const [py, pm] = pivot.split("-").map(Number);
+  let viewYear = py, viewMonth = pm; // viewMonth is 1-indexed
+
+  const DAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+  const MONTHS = ["January","February","March","April","May","June",
+                  "July","August","September","October","November","December"];
+
+  const oldest = dates[dates.length - 1] || pivot;
+  const newest = dates[0] || pivot;
+  const [minY, minM] = oldest.split("-").map(Number);
+  const [maxY, maxM] = newest.split("-").map(Number);
+
+  function render() {
+    const daysInMonth = new Date(viewYear, viewMonth, 0).getDate();
+    const firstDow   = new Date(viewYear, viewMonth - 1, 1).getDay();
+
+    const beforeMin = viewYear < minY || (viewYear === minY && viewMonth <= minM);
+    const afterMax  = viewYear > maxY || (viewYear === maxY && viewMonth >= maxM);
+
+    let html = `<div class="cal">
+      <div class="cal-nav">
+        <button class="cal-btn" data-a="py" ${viewYear <= minY ? "disabled" : ""} title="Previous year">«</button>
+        <button class="cal-btn" data-a="pm" ${beforeMin ? "disabled" : ""} title="Previous month">‹</button>
+        <span class="cal-title">${MONTHS[viewMonth - 1]} ${viewYear}</span>
+        <button class="cal-btn" data-a="nm" ${afterMax ? "disabled" : ""} title="Next month">›</button>
+        <button class="cal-btn" data-a="ny" ${viewYear >= maxY ? "disabled" : ""} title="Next year">»</button>
+      </div>
+      <div class="cal-grid">`;
+    for (const d of DAYS) html += `<div class="cal-dow">${d}</div>`;
+    for (let i = 0; i < firstDow; i++) html += `<div class="cal-day cal-empty"></div>`;
+    for (let d = 1; d <= daysInMonth; d++) {
+      const ds = `${viewYear}-${String(viewMonth).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+      const has = dateSet.has(ds);
+      const cur = ds === current;
+      if (has) {
+        html += `<button class="cal-day cal-has${cur ? " cal-cur" : ""}" data-date="${ds}" title="${ds}">${d}</button>`;
+      } else {
+        html += `<div class="cal-day cal-none" title="${ds}">${d}</div>`;
+      }
     }
-    navigateTo(v || null);
-  });
+    html += `</div></div>`;
+    el.innerHTML = html;
+
+    el.querySelectorAll(".cal-btn[data-a]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const a = btn.dataset.a;
+        if (a === "pm") { if (--viewMonth < 1)  { viewMonth = 12; viewYear--; } }
+        if (a === "nm") { if (++viewMonth > 12) { viewMonth = 1;  viewYear++; } }
+        if (a === "py") viewYear--;
+        if (a === "ny") viewYear++;
+        render();
+      });
+    });
+    el.querySelectorAll(".cal-has").forEach(btn =>
+      btn.addEventListener("click", () => navigateTo(btn.dataset.date))
+    );
+  }
+  render();
 }
 
 function navigateTo(date) {
