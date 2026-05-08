@@ -58,6 +58,12 @@ function gradeServiceDelivered(pct) {
   return gradeColor((pct - 90) / (99 - 90));
 }
 
+// Stop-level SD uses a tighter delivery window (−1 to +7 min), so
+// observed percentages sit lower than trip-level. Scale: 40% = red, 75% = green.
+function gradeStopSD(pct) {
+  return gradeColor((pct - 40) / (75 - 40));
+}
+
 function routeBadge(r) {
   const bg = r.color || "FFFFFF";
   const fg = r.text_color || "000000";

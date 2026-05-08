@@ -9,15 +9,16 @@
 </head>
 <body>
   <header>
-    <a class="header-link header-link-stack" href="https://kuanbutts.com/actransit/" target="_blank" rel="noopener">
-      View live map →
-    </a>
-    <a class="header-link header-link-stack header-link-second" href="weekly/">
-      View weekly →
-    </a>
-    <h1>AC Transit performance</h1>
-    <div id="meta" class="muted"></div>
-    <div id="date-selector"></div>
+    <div class="header-body">
+      <h1>AC Transit performance</h1>
+      <div id="meta" class="muted"></div>
+      <div id="date-selector"></div>
+    </div>
+    <nav class="header-nav">
+      <a href="https://kuanbutts.com/actransit/" target="_blank" rel="noopener">Live map →</a>
+      <a href="" aria-current="page">Daily</a>
+      <a href="weekly/">Weekly →</a>
+    </nav>
   </header>
 
   <section>
@@ -39,8 +40,8 @@
 
   <section>
     <h2>Schedule compliance</h2>
-    <p class="muted defn"><strong>Service delivered</strong> = percent of trips scheduled today that we observed running (≥1 stop arrival recorded). 99%+ is good, under 90% is concerning.</p>
-    <p class="muted defn"><strong>Dropped trips</strong> = scheduled trips with no observed arrivals.</p>
+    <p class="muted defn"><strong>Service delivered</strong> = percent of scheduled stop-arrivals that occurred within the rider-experience window: no more than <strong>1 minute early</strong> and no more than <strong>7 minutes late</strong> (<code>−60 s ≤ delay ≤ 420 s</code>). Stops outside that window — whether the bus never came, ran too early, or ran too late — count against the score. This is intentionally stricter than an operator's internal on-time definition: a bus that runs 10 minutes late delivered its trip but did not deliver the service a rider waiting at the stop needed.</p>
+    <p class="muted defn"><strong>Observed running</strong> = trips with at least one recorded stop arrival (regardless of delay). <strong>Dropped trips</strong> = scheduled trips with no observed arrivals at all.</p>
     <p class="muted defn"><strong>Trips not completed</strong> = trips that ran but never reached their final scheduled stop (bus broke down, was reassigned mid-trip, or GPS dropped out before the end of the route).</p>
     <div id="schedule-cards" class="cards"></div>
 
@@ -75,7 +76,7 @@
           <tr>
             <th data-key="route_id">Route</th>
             <th>Δ distribution</th>
-            <th data-key="service_delivered_pct">Service delivered %</th>
+            <th data-key="stop_sd_pct">Service delivered %</th>
             <th data-key="on_time_pct">On time % (≤3 min)</th>
             <th data-key="p50_delay_minutes">p50 delay (min)</th>
             <th class="expand-th"></th>

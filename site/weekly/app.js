@@ -391,11 +391,15 @@ function renderRouteLineChart(data) {
   });
 }
 
-// ---- chart 4: route × day SD% grid ----
+// ---- chart 4: route × day SD% grid (stop-level, −1 to +7 min window) ----
 function renderRouteDayGrid(data) {
   const container = document.getElementById("route-day-grid");
-  const routes = data.route_daily_service_delivered;
   const days = data.daily_service_delivered;
+
+  // Sort by week_stop_n descending (most-observed routes first).
+  const routes = [...data.route_daily_service_delivered].sort(
+    (a, b) => (b.week_stop_n || 0) - (a.week_stop_n || 0)
+  );
 
   let html = `<div class="rdgrid">`;
   // Header row
@@ -405,19 +409,21 @@ function renderRouteDayGrid(data) {
   }
   // Route rows
   for (const r of routes) {
+    const n = r.week_stop_n || 0;
     const p50Suffix =
       r.overall_p50_delay_min !== null && r.overall_p50_delay_min !== undefined
-        ? `<span class="rdgrid-p50">p50 ${fmt(r.overall_p50_delay_min)}m</span>`
-        : "";
+        ? `<span class="rdgrid-p50">p50 ${fmt(r.overall_p50_delay_min)}m · n=${intFmt(n)}</span>`
+        : n > 0 ? `<span class="rdgrid-p50">n=${intFmt(n)}</span>` : "";
     const badgeR = { route_id: r.route_id, color: r.color, text_color: r.text_color };
     html += `<div class="rdgrid-rlabel">${routeBadge(badgeR)}${p50Suffix}</div>`;
     for (const cell of r.by_day) {
-      if (cell.pct === null || cell.pct === undefined) {
+      const pct = cell.stop_sd_pct;
+      if (pct === null || pct === undefined) {
         html += `<div class="rdgrid-cell rdgrid-empty" title="${r.route_id} ${cell.day} — no data">—</div>`;
       } else {
-        const grade = gradeServiceDelivered(cell.pct);
-        const tip = `${r.route_id} ${cell.day} ${cell.service_date}: ${fmt(cell.pct)}% delivered`;
-        html += `<div class="rdgrid-cell" style="background:${grade.bg};color:${grade.fg}" title="${tip}" data-date="${cell.service_date}">${fmt(cell.pct, 0)}</div>`;
+        const grade = gradeStopSD(pct);
+        const tip = `${r.route_id} ${cell.day} ${cell.service_date}: ${fmt(pct)}% stops delivered on time (n=${intFmt(cell.stop_n)})`;
+        html += `<div class="rdgrid-cell" style="background:${grade.bg};color:${grade.fg}" title="${tip}" data-date="${cell.service_date}">${fmt(pct, 0)}</div>`;
       }
     }
   }

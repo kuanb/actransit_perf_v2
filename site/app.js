@@ -179,10 +179,10 @@ function render(data) {
 
   // ---- schedule compliance ----
   const sc = data.schedule_compliance;
-  const sdPct = sc.scheduled_trips
+  const tripSDPct = sc.scheduled_trips
     ? (100 * sc.ran_trips) / sc.scheduled_trips
     : 0;
-  const droppedPct = 100 - sdPct;
+  const droppedPct = 100 - tripSDPct;
 
   // Trips that ran but never reached their final scheduled stop, as a
   // percent of trips that ran. Counts buses that broke down mid-route,
@@ -190,11 +190,15 @@ function render(data) {
   const notCompleted = sc.trips_not_completed || 0;
   const notCompletedPct = sc.ran_trips ? (100 * notCompleted) / sc.ran_trips : 0;
 
+  const stopSD = sc.stop_sd_pct;
+  const stopSDCard = stopSD !== null && stopSD !== undefined
+    ? { label: "Service delivered", val: `${fmt(stopSD)}%`, grade: gradeStopSD(stopSD) }
+    : { label: "Service delivered", val: `${fmt(tripSDPct)}%`, grade: gradeServiceDelivered(tripSDPct) };
+
   renderCards("#schedule-cards", [
     { label: "Scheduled trips",        val: intFmt(sc.scheduled_trips) },
     { label: "Observed running",       val: intFmt(sc.ran_trips) },
-    { label: "Service delivered",      val: `${fmt(sdPct)}%`,
-      grade: gradeServiceDelivered(sdPct) },
+    stopSDCard,
     { label: "Dropped / not observed", val: `${intFmt(sc.dropped_trips)} (${fmt(droppedPct)}%)` },
     { label: "Trips not completed",    val: `${intFmt(notCompleted)} (${fmt(notCompletedPct)}%)`,
       grade: gradeNotCompleted(notCompletedPct) },
@@ -316,7 +320,7 @@ function render(data) {
 
   // ---- routes table ----
   const tbody = document.querySelector("#routes-table tbody");
-  let sortKey = "service_delivered_pct";
+  let sortKey = "stop_sd_pct";
   let sortDir = -1; // descending
   // Set of route_ids whose detail row is currently expanded. Persists
   // across sort/re-render so a column-header click doesn't collapse rows.
@@ -340,15 +344,20 @@ function render(data) {
 
     tbody.innerHTML = rows
       .map((r) => {
-        const sd = r.service_delivered_pct;
-        const sdTitle = `ran ${intFmt(r.ran_trips)} of ${intFmt(r.scheduled_trips)} scheduled`;
+        const sd = r.stop_sd_pct !== null && r.stop_sd_pct !== undefined
+          ? r.stop_sd_pct : r.service_delivered_pct;
+        const sdGrade = r.stop_sd_pct !== null && r.stop_sd_pct !== undefined
+          ? gradeStopSD : gradeServiceDelivered;
+        const sdTitle = r.stop_sd_pct !== null && r.stop_sd_pct !== undefined
+          ? `${fmt(r.stop_sd_pct)}% of scheduled stops delivered on time (−1 to +7 min)`
+          : `ran ${intFmt(r.ran_trips)} of ${intFmt(r.scheduled_trips)} scheduled`;
         const isOpen = expanded.has(r.route_id);
         const detailHidden = isOpen ? "" : "hidden";
         return `
       <tr class="route-row ${isOpen ? "is-open" : ""}" data-rid="${r.route_id}">
         <td>${routeBadge(r)}</td>
         <td>${routeBoxPlot(r)}</td>
-        <td ${cellGrade(sd, gradeServiceDelivered)} title="${sdTitle}">${sd === null ? "—" : fmt(sd)}</td>
+        <td ${cellGrade(sd, sdGrade)} title="${sdTitle}">${sd === null ? "—" : fmt(sd)}</td>
         <td ${cellGrade(r.on_time_pct, gradeOnTime)}>${fmt(r.on_time_pct)}</td>
         <td>${fmt(r.p50_delay_minutes)}</td>
         <td class="expand-cell" aria-hidden="true">${isOpen ? "▾" : "▸"}</td>
@@ -358,7 +367,7 @@ function render(data) {
           <dl class="route-detail-list">
             <div><dt>Trips observed</dt><dd>${intFmt(r.trips_observed)}${r.scheduled_trips ? ` (of ${intFmt(r.scheduled_trips)} scheduled)` : ""}</dd></div>
             <div><dt>Stop arrivals</dt><dd>${intFmt(r.observations)}</dd></div>
-            <div><dt>Service delivered</dt><dd>${sd === null ? "—" : `${fmt(sd)}%`}</dd></div>
+            <div><dt>Service delivered (stops, −1 to +7 min)</dt><dd>${r.stop_sd_pct !== null && r.stop_sd_pct !== undefined ? `${fmt(r.stop_sd_pct)}%` : "—"}</dd></div>
             <div><dt>On time (≤3 min)</dt><dd>${fmt(r.on_time_pct)}%</dd></div>
             <div><dt>Within 5 min</dt><dd>${fmt(r.within_5min_pct)}%</dd></div>
             <div><dt>Within 7 min</dt><dd>${fmt(r.within_7min_pct)}%</dd></div>

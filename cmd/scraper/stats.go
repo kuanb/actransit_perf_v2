@@ -65,6 +65,10 @@ type scheduleCompliance struct {
 	TripsNotCompleted             int                       `json:"trips_not_completed"`
 	TripsNotCompletedDistribution *notCompletedDistribution `json:"trips_not_completed_distribution,omitempty"`
 	DroppedTripIDsSample          []string                  `json:"dropped_trip_ids_sample"`
+	// Stop-level service delivery: fraction of scheduled stop-arrivals that
+	// occurred within the rider-experience window (−1 min to +7 min).
+	StopSDPct *float64 `json:"stop_sd_pct,omitempty"`
+	StopSDN   int64    `json:"stop_sd_n,omitempty"`
 }
 
 // notCompletedDistribution describes how far through their route the
@@ -105,6 +109,7 @@ type routeStats struct {
 	ScheduledTrips      int      `json:"scheduled_trips"`
 	RanTrips            int      `json:"ran_trips"`
 	ServiceDeliveredPct *float64 `json:"service_delivered_pct"`
+	StopSDPct           *float64 `json:"stop_sd_pct,omitempty"`
 }
 
 type bqStatsStats struct {
@@ -173,6 +178,10 @@ func generateDailyStats(ctx context.Context, serviceDate civil.Date) (*dailyStat
 	if err != nil {
 		return nil, fmt.Errorf("query route stats: %w", err)
 	}
+	routeStopSD, err := queryDailyRouteStopSD(ctx, serviceDate)
+	if err != nil {
+		return nil, fmt.Errorf("query route stop sd: %w", err)
+	}
 	minuteHist, err := queryStatsMinuteHistogram(ctx, serviceDate)
 	if err != nil {
 		return nil, fmt.Errorf("query minute histogram: %w", err)
@@ -206,6 +215,7 @@ func generateDailyStats(ctx context.Context, serviceDate civil.Date) (*dailyStat
 		routes = append(routes, routeStats{RouteID: rid})
 	}
 
+	var sysStopTotalN, sysStopDeliveredN int64
 	for i := range routes {
 		rid := routes[i].RouteID
 		if c, ok := colors[rid]; ok {
@@ -222,6 +232,12 @@ func generateDailyStats(ctx context.Context, serviceDate civil.Date) (*dailyStat
 		if sched > 0 {
 			pct := round1(100 * float64(ran) / float64(sched))
 			routes[i].ServiceDeliveredPct = &pct
+		}
+		if pt, ok := routeStopSD[rid]; ok {
+			pct := pt.Pct
+			routes[i].StopSDPct = &pct
+			sysStopTotalN += pt.TotalN
+			sysStopDeliveredN += pt.DeliveredN
 		}
 		if vals, ok := distByRoute[rid]; ok && len(vals) > 0 {
 			sort.Float64s(vals)
@@ -251,18 +267,25 @@ func generateDailyStats(ctx context.Context, serviceDate civil.Date) (*dailyStat
 		sample = sample[:20]
 	}
 
+	sc := scheduleCompliance{
+		ScheduledTrips:                len(scheduled),
+		RanTrips:                      ranInSchedule,
+		DroppedTrips:                  len(dropped),
+		TripsNotCompleted:             notCompleted,
+		TripsNotCompletedDistribution: notCompletedDist,
+		DroppedTripIDsSample:          sample,
+		StopSDN:                       sysStopTotalN,
+	}
+	if sysStopTotalN > 0 {
+		pct := round1(100.0 * float64(sysStopDeliveredN) / float64(sysStopTotalN))
+		sc.StopSDPct = &pct
+	}
+
 	out := &dailyStats{
-		ServiceDate: serviceDate.String(),
-		GeneratedAt: time.Now().UTC(),
-		System:      *sys,
-		ScheduleCompliance: scheduleCompliance{
-			ScheduledTrips:                len(scheduled),
-			RanTrips:                      ranInSchedule,
-			DroppedTrips:                  len(dropped),
-			TripsNotCompleted:             notCompleted,
-			TripsNotCompletedDistribution: notCompletedDist,
-			DroppedTripIDsSample:          sample,
-		},
+		ServiceDate:        serviceDate.String(),
+		GeneratedAt:        time.Now().UTC(),
+		System:             *sys,
+		ScheduleCompliance: sc,
 		DistortionHistogram:  distHist,
 		DelayMinuteHistogram: minuteHist,
 		Routes:               routes,
@@ -541,6 +564,50 @@ func loadRouteColors(zr *zip.Reader) (map[string]colorPair, error) {
 			t = "000000"
 		}
 		out[col(row, idx, "route_id")] = colorPair{color: c, text: t}
+	}
+	return out, nil
+}
+
+// queryDailyRouteStopSD counts stop-level service delivery per route for the
+// given service_date. A stop is "delivered" when the bus arrived no earlier
+// than 1 min before schedule and no later than 7 min after
+// (delay_seconds BETWEEN -60 AND 420). The denominator is all deduped rows
+// in trip_observations for that route/day, including stops where the bus
+// never arrived (actual_arrival IS NULL). Returns map[route_id]routeStopSDPoint.
+func queryDailyRouteStopSD(ctx context.Context, serviceDate civil.Date) (map[string]routeStopSDPoint, error) {
+	q := bqClient.Query(fmt.Sprintf(`
+		WITH %s
+		SELECT
+		  route_id,
+		  COUNT(*) AS total_n,
+		  COUNTIF(actual_arrival IS NOT NULL AND delay_seconds BETWEEN -60 AND 420) AS delivered_n
+		FROM obs
+		GROUP BY route_id
+		ORDER BY route_id
+	`, dedupedDayObservationsCTE(serviceDate)))
+	it, err := q.Read(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]routeStopSDPoint)
+	for {
+		var row struct {
+			RouteID    string `bigquery:"route_id"`
+			TotalN     int64  `bigquery:"total_n"`
+			DeliveredN int64  `bigquery:"delivered_n"`
+		}
+		err := it.Next(&row)
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		pct := 0.0
+		if row.TotalN > 0 {
+			pct = round1(100.0 * float64(row.DeliveredN) / float64(row.TotalN))
+		}
+		out[row.RouteID] = routeStopSDPoint{TotalN: row.TotalN, DeliveredN: row.DeliveredN, Pct: pct}
 	}
 	return out, nil
 }

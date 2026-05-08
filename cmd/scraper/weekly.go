@@ -76,12 +76,21 @@ type routeDailySD struct {
 	ByDay              []routeDailySDByDay `json:"by_day"`
 	Color              string              `json:"color"`
 	TextColor          string              `json:"text_color"`
+	WeekStopN          int64               `json:"week_stop_n"`
 }
 
 type routeDailySDByDay struct {
 	Day         string   `json:"day"`
 	ServiceDate string   `json:"service_date"`
 	Pct         *float64 `json:"pct"`
+	StopSDPct   *float64 `json:"stop_sd_pct"`
+	StopN       int64    `json:"stop_n"`
+}
+
+type routeStopSDPoint struct {
+	TotalN     int64
+	DeliveredN int64
+	Pct        float64
 }
 
 // processWeeklyStats reads the 7 already-computed daily stats files for
@@ -143,7 +152,11 @@ func processWeeklyStats(ctx context.Context, weekEndSat civil.Date) (*weeklyStat
 	if err != nil {
 		return nil, fmt.Errorf("query route overall: %w", err)
 	}
-	out.RouteDailyServiceDelivered = aggregateRouteDailySD(dailies, weekStart, routeOverall)
+	routeStopSD, err := queryWeeklyRouteStopSD(ctx, weekStart, weekEndSat)
+	if err != nil {
+		return nil, fmt.Errorf("query route stop sd: %w", err)
+	}
+	out.RouteDailyServiceDelivered = aggregateRouteDailySD(dailies, weekStart, routeOverall, routeStopSD)
 
 	payload, err := json.MarshalIndent(out, "", "  ")
 	if err != nil {
@@ -247,7 +260,57 @@ func aggregateDailyServiceDelivered(dailies []*dailyStats, weekStart civil.Date)
 // matrix [route_id][day_idx] of SD%, attaches each route's overall p50
 // delay (in seconds, from BQ) for sorting, and sorts worst→best so the
 // frontend can render the grid top-down without re-sorting.
-func aggregateRouteDailySD(dailies []*dailyStats, weekStart civil.Date, routeOverallSec map[string]float64) []routeDailySD {
+// queryWeeklyRouteStopSD computes stop-level service delivery for each
+// (route_id, service_date) in the week. A stop is counted as "delivered"
+// when the bus arrived no earlier than 1 minute before schedule and no
+// later than 7 minutes after (delay_seconds BETWEEN -60 AND 420). The
+// denominator is all deduped rows in trip_observations for that route/day,
+// including stops where actual_arrival is NULL (bus never reached that stop).
+// Returns map[route_id][service_date_string]routeStopSDPoint.
+func queryWeeklyRouteStopSD(ctx context.Context, weekStart, weekEnd civil.Date) (map[string]map[string]routeStopSDPoint, error) {
+	q := bqClient.Query(fmt.Sprintf(`
+		WITH %s
+		SELECT
+		  route_id,
+		  FORMAT_DATE('%%Y-%%m-%%d', service_date) AS service_date_str,
+		  COUNT(*) AS total_n,
+		  COUNTIF(actual_arrival IS NOT NULL AND delay_seconds BETWEEN -60 AND 420) AS delivered_n
+		FROM obs
+		GROUP BY route_id, service_date
+		ORDER BY route_id, service_date
+	`, dedupedRangeObservationsCTE(weekStart, weekEnd)))
+	it, err := q.Read(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]map[string]routeStopSDPoint)
+	for {
+		var row struct {
+			RouteID        string `bigquery:"route_id"`
+			ServiceDateStr string `bigquery:"service_date_str"`
+			TotalN         int64  `bigquery:"total_n"`
+			DeliveredN     int64  `bigquery:"delivered_n"`
+		}
+		err := it.Next(&row)
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := out[row.RouteID]; !ok {
+			out[row.RouteID] = make(map[string]routeStopSDPoint)
+		}
+		pct := 0.0
+		if row.TotalN > 0 {
+			pct = round1(100.0 * float64(row.DeliveredN) / float64(row.TotalN))
+		}
+		out[row.RouteID][row.ServiceDateStr] = routeStopSDPoint{TotalN: row.TotalN, DeliveredN: row.DeliveredN, Pct: pct}
+	}
+	return out, nil
+}
+
+func aggregateRouteDailySD(dailies []*dailyStats, weekStart civil.Date, routeOverallSec map[string]float64, stopSD map[string]map[string]routeStopSDPoint) []routeDailySD {
 	type accum struct {
 		rid       string
 		color     string
@@ -312,12 +375,23 @@ func aggregateRouteDailySD(dailies []*dailyStats, weekStart civil.Date, routeOve
 	out := make([]routeDailySD, 0, len(items))
 	for _, it := range items {
 		byDay := make([]routeDailySDByDay, 7)
+		var weekStopN int64
 		for i := 0; i < 7; i++ {
-			byDay[i] = routeDailySDByDay{
+			sd := weekStart.AddDays(i).String()
+			cell := routeDailySDByDay{
 				Day:         dayNames[i],
-				ServiceDate: weekStart.AddDays(i).String(),
+				ServiceDate: sd,
 				Pct:         it.a.byDay[i],
 			}
+			if routeMap, ok := stopSD[it.a.rid]; ok {
+				if pt, ok := routeMap[sd]; ok {
+					pct := pt.Pct
+					cell.StopSDPct = &pct
+					cell.StopN = pt.TotalN
+					weekStopN += pt.TotalN
+				}
+			}
+			byDay[i] = cell
 		}
 		var p50Min *float64
 		if it.hasP50 {
@@ -330,6 +404,7 @@ func aggregateRouteDailySD(dailies []*dailyStats, weekStart civil.Date, routeOve
 			ByDay:              byDay,
 			Color:              it.a.color,
 			TextColor:          it.a.textColor,
+			WeekStopN:          weekStopN,
 		})
 	}
 	return out
