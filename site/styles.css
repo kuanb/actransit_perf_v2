@@ -284,6 +284,15 @@ tr.route-detail[hidden] { display: none; }
 }
 .route-controls button:hover { background: #f0f0f0; border-color: #b0b0b0; }
 .route-controls button:active { background: #e6e6e6; }
+#route-filter {
+  font-family: inherit;
+  font-size: 12px;
+  padding: 4px 8px;
+  border: 1px solid #c8c8c8;
+  border-radius: 4px;
+  width: 140px;
+}
+#route-filter:focus { outline: none; border-color: #1971c2; }
 
 .boxplot {
   display: block;

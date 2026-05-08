@@ -356,12 +356,15 @@ function render(data) {
   const tbody = document.querySelector("#routes-table tbody");
   let sortKey = "stop_sd_pct";
   let sortDir = -1; // descending
+  let filterQ = "";
   // Set of route_ids whose detail row is currently expanded. Persists
   // across sort/re-render so a column-header click doesn't collapse rows.
   const expanded = new Set();
 
   function renderRoutes() {
-    const rows = [...data.routes].sort((a, b) => {
+    const rows = [...data.routes].filter(r =>
+      !filterQ || r.route_id.toLowerCase().includes(filterQ)
+    ).sort((a, b) => {
       const av = a[sortKey];
       const bv = b[sortKey];
       if (av === null || av === undefined) return 1;
@@ -437,6 +440,11 @@ function render(data) {
       else { sortKey = k; sortDir = -1; }
       renderRoutes();
     });
+  });
+
+  document.getElementById("route-filter").addEventListener("input", (e) => {
+    filterQ = e.target.value.toLowerCase().trim();
+    renderRoutes();
   });
 
   document.getElementById("routes-expand-all").addEventListener("click", () => {
