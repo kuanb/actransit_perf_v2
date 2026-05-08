@@ -408,6 +408,12 @@ func writeState(ctx context.Context, s stateFile, ifGeneration int64) (int64, er
 	}
 	w := gcsClient.Bucket(bucketName).Object(stateObjectKey).NewWriter(ctx)
 	w.ContentType = "application/json"
+	// Without this, GCS defaults to Cache-Control: public, max-age=3600 on
+	// publicly-readable objects, which causes readState to see ~60-min-stale
+	// state.json — every cycle then mass-stale-prunes and mass-preempts trips
+	// against an out-of-date in-flight set, finalizing the same trip every
+	// minute with a single-probe lifecycle that can never detect arrivals.
+	w.CacheControl = "no-cache, max-age=0"
 	if _, err := w.Write(payload); err != nil {
 		_ = w.Close()
 		return 0, err
