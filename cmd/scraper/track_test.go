@@ -540,11 +540,11 @@ func TestApplyTrailingStopFallback(t *testing.T) {
 		}
 	})
 
-	t.Run("walks backward attributing multiple trailing stops within tolerance", func(t *testing.T) {
-		// fixture stops: 0, 200, 500. Place bus's max at 380 — within
-		// tolerance of stop 3 (500 - 380 = 120 < 150) AND stop 2 (200
-		// is behind max so already-attributed already by precondition).
-		// Make stop 2 NOT pre-attributed: walk backward should set both.
+	t.Run("walks backward attributing only stops within tolerance of max progress", func(t *testing.T) {
+		// fixture stops: 0, 200, 500. Bus's max at 380 — within
+		// tolerance of stop 3 (500 - 380 = 120 < 150) but NOT stop 2
+		// (380 - 200 = 180 > 150). Stop 3 gets attributed; stop 2 is
+		// behind max by more than tolerance so the walk breaks there.
 		final := t0.Add(8 * time.Minute)
 		trip := &inFlightTrip{
 			VehicleID: "V1", RouteID: "R1", TripID: "T1",
@@ -555,14 +555,43 @@ func TestApplyTrailingStopFallback(t *testing.T) {
 			StopArrivals: map[int]time.Time{1: t0},
 		}
 		added := applyTrailingStopFallback(trip, cache, 150)
-		if added != 2 {
-			t.Fatalf("added = %d, want 2 (both 2 and 3 attributed)", added)
-		}
-		if got := trip.StopArrivals[2]; !got.Equal(final) {
-			t.Fatalf("StopArrivals[2] = %v, want %v", got, final)
+		if added != 1 {
+			t.Fatalf("added = %d, want 1 (only stop 3 within tolerance)", added)
 		}
 		if got := trip.StopArrivals[3]; !got.Equal(final) {
 			t.Fatalf("StopArrivals[3] = %v, want %v", got, final)
+		}
+		if _, ok := trip.StopArrivals[2]; ok {
+			t.Fatalf("StopArrivals[2] was set; stop 2 is 180m behind max (> 150 tol) and should not be attributed")
+		}
+	})
+
+	t.Run("single probe near end of route does not back-fill earlier stops", func(t *testing.T) {
+		// Reproduces the BQ-data corruption seen on 2026-05-08+: a
+		// vehicle's only probe lands near the last stop, so maxDist
+		// sits near the end. Pre-fix, the walk attributed maxTS to
+		// every earlier stop because the dist diff was negative (never
+		// > tolerance), producing 50+ rows with a single actual_arrival
+		// timestamp and cascading false +30..+60 min delays.
+		first := t0.Add(60 * time.Minute)
+		trip := &inFlightTrip{
+			VehicleID: "V1", RouteID: "R1", TripID: "T1",
+			Probes: []probe{
+				{TS: first, DistAlongRouteM: 490},
+			},
+		}
+		added := applyTrailingStopFallback(trip, cache, 150)
+		if added != 1 {
+			t.Fatalf("added = %d, want 1 (only stop 3 within tolerance)", added)
+		}
+		if _, ok := trip.StopArrivals[1]; ok {
+			t.Fatalf("StopArrivals[1] was set; stop 1 is 490m behind max and must not be back-filled")
+		}
+		if _, ok := trip.StopArrivals[2]; ok {
+			t.Fatalf("StopArrivals[2] was set; stop 2 is 290m behind max (> 150 tol) and must not be back-filled")
+		}
+		if got, ok := trip.StopArrivals[3]; !ok || !got.Equal(first) {
+			t.Fatalf("StopArrivals[3] = %v ok=%v, want %v", got, ok, first)
 		}
 	})
 

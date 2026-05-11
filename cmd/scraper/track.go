@@ -496,10 +496,12 @@ func detectStopArrivals(s *stateFile, cache *gtfsCache, stats *trackStats) {
 // trip when the bus's last GPS report fell shy of the last scheduled
 // stop's projected distance. Walking backward from the final stop, for
 // each missing stop within toleranceMeters of the bus's max observed
-// dist_along_route, it attributes the time of the max-progress probe
-// as approximate arrival. Stops once it hits an already-attributed
-// stop (we've reached territory that arrivalForStop covered) or a
-// stop too far ahead of max progress.
+// dist_along_route (in either direction), it attributes the time of
+// the max-progress probe as approximate arrival. Stops once it hits an
+// already-attributed stop (we've reached territory that arrivalForStop
+// covered) or a stop more than tolerance behind max progress — that
+// stop was never witnessed by the bus, so attributing maxTS would
+// falsely claim arrival at a stop the bus never reached.
 //
 // Caller MUST invoke ONLY at finalization. Applying this during
 // in-flight tracking would prematurely mark the last stop as arrived
@@ -538,6 +540,16 @@ func applyTrailingStopFallback(t *inFlightTrip, cache *gtfsCache, toleranceMeter
 			break
 		}
 		if stop.DistAlongRoute-maxDist > toleranceMeters {
+			break
+		}
+		// Symmetric break: once we've walked back past maxDist by more
+		// than tolerance, the bus was never observed at or past this
+		// stop. Without this, a single-probe trip whose only fix lands
+		// near the last stop attributes maxTS to *every* earlier stop,
+		// producing cascading false delays (e.g. a 5:30 stop tagged
+		// 6:22 → +52 min). Found post-1ddb365: with probes finally
+		// accumulating correctly, this branch became load-bearing.
+		if maxDist-stop.DistAlongRoute > toleranceMeters {
 			break
 		}
 		t.StopArrivals[stop.StopSequence] = maxTS
