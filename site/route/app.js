@@ -528,6 +528,18 @@ async function boot() {
   updateInfoPanel();
 
   document.getElementById("loading").classList.add("hidden");
+
+  if (!data.stopStats) {
+    const banner = document.createElement("div");
+    banner.id = "no-stats-banner";
+    banner.innerHTML = `
+      <strong>Stop adherence data not available yet for week ${weekEnd || "selected"}.</strong>
+      Route shape and stops are shown, but circle colors and sizes require weekly stats to be generated.
+      <button onclick="this.parentElement.remove()" style="margin-left:10px;cursor:pointer;background:none;border:1px solid #856404;border-radius:3px;padding:1px 6px;color:#856404;font-size:11px">Dismiss</button>
+    `;
+    document.getElementById("map-wrap").appendChild(banner);
+  }
+
   initMap();
 }
 
