@@ -219,7 +219,9 @@ function initMap() {
   map.on("mouseenter", STOPS_OUTER, (e) => {
     map.getCanvas().style.cursor = "pointer";
     const props = e.features[0].properties;
-    const delayMin = (v) => v !== null ? (v / 60).toFixed(1) + " min" : "—";
+    // Mapbox GL serializes null JSON properties as the string "null"
+    const numProp = (v) => (v === null || v === "null" || v === undefined) ? null : Number(v);
+    const delayMin = (v) => { const n = numProp(v); return n !== null && !isNaN(n) ? (n / 60).toFixed(1) + " min" : "—"; };
     popup.setLngLat(e.lngLat)
       .setHTML(`
         <strong>${props.stop_name}</strong><br>
@@ -228,7 +230,7 @@ function initMap() {
           <tr><td style="padding:1px 6px 1px 0;color:#666">p50 delay</td><td>${delayMin(props.p50_delay_s)}</td></tr>
           <tr><td style="padding:1px 6px 1px 0;color:#666">p95 delay</td><td>${delayMin(props.p95_delay_s)}</td></tr>
           <tr><td style="padding:1px 6px 1px 0;color:#666">std dev</td><td>${delayMin(props.stddev_delay_s)}</td></tr>
-          <tr><td style="padding:1px 6px 1px 0;color:#666">observations</td><td>${props.n !== null ? Number(props.n).toLocaleString() : "—"}</td></tr>
+          <tr><td style="padding:1px 6px 1px 0;color:#666">observations</td><td>${numProp(props.n) !== null ? Number(props.n).toLocaleString() : "—"}</td></tr>
         </table>
       `)
       .addTo(map);
