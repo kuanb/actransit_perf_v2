@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AC Transit route map</title>
+  <link rel="stylesheet" href="../styles.css">
+  <link href="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css" rel="stylesheet">
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.js"></script>
+  <style>
+    /* Route map page overrides: full-viewport layout, no max-width clamp */
+    body {
+      max-width: none;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+    header {
+      padding: 10px 20px;
+      margin-bottom: 0;
+      flex-shrink: 0;
+      z-index: 10;
+    }
+    #map-wrap {
+      flex: 1;
+      position: relative;
+      min-height: 0;
+    }
+    #map {
+      position: absolute;
+      inset: 0;
+    }
+
+    /* ── map overlay controls ───────────────────────────── */
+    .map-ctrl {
+      position: absolute;
+      z-index: 5;
+      background: rgba(255,255,255,0.95);
+      border-radius: 6px;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.18);
+      padding: 8px 10px;
+      font-size: 13px;
+    }
+    #ctrl-dir { top: 12px; left: 12px; display: flex; gap: 6px; align-items: center; }
+    #ctrl-mode { top: 12px; right: 12px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+
+    .ctrl-btn {
+      background: #fff;
+      border: 1px solid #bbb;
+      border-radius: 4px;
+      padding: 4px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      color: #333;
+      transition: background 0.1s, color 0.1s;
+    }
+    .ctrl-btn:hover:not(:disabled) { background: #f0f0f0; }
+    .ctrl-btn.active {
+      background: #1971c2;
+      color: #fff;
+      border-color: #1971c2;
+    }
+    .ctrl-btn:disabled {
+      opacity: 0.38;
+      cursor: default;
+    }
+    .ctrl-sep {
+      width: 1px;
+      height: 20px;
+      background: #ddd;
+      flex-shrink: 0;
+    }
+    #ctrl-dir label { font-size: 12px; color: #555; font-weight: 500; margin-right: 2px; }
+    #ctrl-mode label { font-size: 12px; color: #555; font-weight: 500; margin-right: 2px; }
+
+    /* ── info panel (below mode controls, right side) ──── */
+    #info-panel {
+      position: absolute;
+      z-index: 5;
+      top: 58px;
+      right: 12px;
+      width: 300px;
+      background: rgba(255,255,255,0.93);
+      border-radius: 6px;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.15);
+      padding: 10px 12px;
+      font-size: 12px;
+      line-height: 1.55;
+      color: #444;
+    }
+    #info-panel.collapsed #info-body { display: none; }
+    #info-toggle {
+      background: none;
+      border: none;
+      cursor: pointer;
+      float: right;
+      font-size: 12px;
+      color: #888;
+      padding: 0;
+      line-height: 1;
+      margin-left: 6px;
+    }
+    #info-toggle:hover { color: #333; }
+    #info-title { font-weight: 600; font-size: 12px; color: #222; margin-bottom: 6px; }
+    #info-body p { margin: 0 0 6px; }
+    #info-body p:last-child { margin-bottom: 0; }
+
+    /* ── legend (bottom-left) ───────────────────────────── */
+    #legend {
+      position: absolute;
+      z-index: 5;
+      bottom: 30px;
+      left: 12px;
+      background: rgba(255,255,255,0.93);
+      border-radius: 6px;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.15);
+      padding: 8px 10px;
+      font-size: 11px;
+      color: #444;
+      min-width: 180px;
+    }
+    #legend-title { font-weight: 600; margin-bottom: 5px; font-size: 11px; }
+    .legend-bar {
+      height: 10px;
+      border-radius: 3px;
+      background: linear-gradient(to right, #2ecc71, #f39c12, #e74c3c);
+      margin-bottom: 4px;
+    }
+    .legend-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: #666;
+    }
+    .legend-size-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 6px;
+    }
+    .legend-dot {
+      border-radius: 50%;
+      background: rgba(46,204,113,0.55);
+      border: 2px solid #111;
+      flex-shrink: 0;
+    }
+    .legend-size-label { font-size: 10px; color: #666; }
+
+    /* ── loading / error overlay ─────────────────────────── */
+    #loading {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255,255,255,0.85);
+      z-index: 20;
+      font-size: 15px;
+      color: #555;
+    }
+    #loading.hidden { display: none; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-body">
+      <h1 id="page-title">AC Transit — route map</h1>
+      <div id="meta" class="muted"></div>
+    </div>
+    <nav class="header-nav">
+      <a href="https://kuanbutts.com/actransit/" target="_blank" rel="noopener">Live map →</a>
+      <a href="../">Daily →</a>
+      <a href="../weekly/">Weekly →</a>
+      <a href="" aria-current="page">Route map</a>
+    </nav>
+  </header>
+
+  <div id="map-wrap">
+    <div id="map"></div>
+
+    <!-- Direction toggle (top-left) -->
+    <div class="map-ctrl" id="ctrl-dir">
+      <label>Direction</label>
+      <button class="ctrl-btn active" id="btn-dir0" data-dir="0">Outbound (0)</button>
+      <button class="ctrl-btn" id="btn-dir1" data-dir="1">Inbound (1)</button>
+    </div>
+
+    <!-- Mode + percentile toggle (top-right) -->
+    <div class="map-ctrl" id="ctrl-mode">
+      <label>View</label>
+      <button class="ctrl-btn active" id="btn-p95" data-pct="p95">p95</button>
+      <button class="ctrl-btn" id="btn-p50" data-pct="p50">p50</button>
+      <div class="ctrl-sep"></div>
+      <button class="ctrl-btn" id="btn-vol">Volatility</button>
+    </div>
+
+    <!-- Metric explanation panel (top-right, below mode controls) -->
+    <div id="info-panel">
+      <div id="info-title">
+        <button id="info-toggle" title="Collapse">▲</button>
+        About this view
+      </div>
+      <div id="info-body">
+        <p id="info-text"></p>
+        <p class="muted" style="font-size:11px">
+          <strong>Circle color:</strong> green = on time, yellow = moderately late, red = significantly delayed.<br>
+          <strong>Circle size:</strong> larger = more extreme delay or variability at that stop.
+        </p>
+      </div>
+    </div>
+
+    <!-- Color + size legend (bottom-left) -->
+    <div id="legend">
+      <div id="legend-title">Schedule adherence</div>
+      <div class="legend-bar" id="legend-bar"></div>
+      <div class="legend-labels" id="legend-labels">
+        <span>on time / early</span>
+        <span>7 min late</span>
+        <span>very late</span>
+      </div>
+      <div class="legend-size-row">
+        <div class="legend-dot" style="width:12px;height:12px;background:rgba(46,204,113,0.55)"></div>
+        <span class="legend-size-label">small = mild</span>
+        <div class="legend-dot" style="width:22px;height:22px;margin-left:6px;background:rgba(231,76,60,0.55)"></div>
+        <span class="legend-size-label">large = severe</span>
+      </div>
+    </div>
+
+    <!-- Loading overlay -->
+    <div id="loading">Loading route data…</div>
+  </div>
+
+  <script src="../lib.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

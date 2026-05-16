@@ -468,12 +468,24 @@ canvas { max-width: 100%; height: auto !important; }
   padding: 4px;
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
+  position: relative;
 }
 .rdgrid-p50 {
   font-size: 11px;
   color: #888;
   white-space: nowrap;
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: opacity 0.15s, max-width 0.15s;
+  max-width: 200px;
+  opacity: 1;
+}
+.rdgrid-rlabel:hover .rdgrid-p50 {
+  opacity: 0;
+  max-width: 0;
+  pointer-events: none;
 }
 .rdgrid-cell {
   text-align: center;
@@ -487,6 +499,32 @@ canvas { max-width: 100%; height: auto !important; }
   color: #999;
   cursor: default;
 }
+.rdgrid-map-btn {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 600;
+  color: #1971c2;
+  text-decoration: none;
+  flex-shrink: 0;
+  white-space: nowrap;
+  padding: 3px 0;
+  border: 1px solid #1971c2;
+  border-radius: 3px;
+  background: #fff;
+  text-align: center;
+  max-width: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s, max-width 0.15s, padding 0.15s;
+}
+.rdgrid-rlabel:hover .rdgrid-map-btn {
+  max-width: 120px;
+  padding: 3px 8px;
+  opacity: 1;
+  pointer-events: auto;
+}
+.rdgrid-map-btn:hover { background: #1971c2; color: #fff; }
 
 footer {
   margin-top: 60px;

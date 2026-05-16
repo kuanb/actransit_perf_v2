@@ -395,6 +395,7 @@ function renderRouteLineChart(data) {
 function renderRouteDayGrid(data) {
   const container = document.getElementById("route-day-grid");
   const days = data.daily_service_delivered;
+  const weekEndParam = data.week_end || "";
 
   // Sort by week_stop_n descending (most-observed routes first).
   const routes = [...data.route_daily_service_delivered].sort(
@@ -415,7 +416,8 @@ function renderRouteDayGrid(data) {
         ? `<span class="rdgrid-p50">p50 ${fmt(r.overall_p50_delay_min)}m · n=${intFmt(n)}</span>`
         : n > 0 ? `<span class="rdgrid-p50">n=${intFmt(n)}</span>` : "";
     const badgeR = { route_id: r.route_id, color: r.color, text_color: r.text_color };
-    html += `<div class="rdgrid-rlabel">${routeBadge(badgeR)}${p50Suffix}</div>`;
+    const mapHref = `../route/?week_end=${encodeURIComponent(weekEndParam)}&route_id=${encodeURIComponent(r.route_id)}`;
+    html += `<div class="rdgrid-rlabel">${routeBadge(badgeR)}${p50Suffix}<a class="rdgrid-map-btn" href="${mapHref}" title="Evaluate route ${r.route_id} stop adherence on map">Map analysis</a></div>`;
     for (const cell of r.by_day) {
       const pct = cell.stop_sd_pct;
       if (pct === null || pct === undefined) {

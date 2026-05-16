@@ -186,6 +186,9 @@ func processWeeklyStats(ctx context.Context, weekEndSat civil.Date) (*weeklyStat
 	if err := updateWeeklyIndex(ctx, weekEndSat.String()); err != nil {
 		return out, fmt.Errorf("update weekly index: %w", err)
 	}
+	if err := generateAllRouteStopWeeklyStats(ctx, weekStart, weekEndSat); err != nil {
+		slog.Warn("route stop weekly stats failed (non-fatal)", "err", err)
+	}
 	return out, nil
 }
 
