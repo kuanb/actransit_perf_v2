@@ -5,7 +5,7 @@
 const GCS_BASE = "https://storage.googleapis.com/transit-203605-actransit-cache";
 const isLocal = ["localhost", "127.0.0.1"].includes(window.location.hostname);
 // Public Mapbox token — same key used on https://kuanbutts.com/actransit/
-const MAPBOX_TOKEN = "REPLACE_WITH_MAPBOX_TOKEN";
+const MAPBOX_TOKEN = "pk.eyJ1Ijoia3VhbmIiLCJhIjoiY21wN3VneDJkMDd5ZDJzcTFtM2w1d3V1ZSJ9.y5iV4TyPeSLLm3B6KN3vvA";
 
 const fmt = (v, d = 1) =>
   v === null || v === undefined ? "—" : Number(v).toFixed(d);
