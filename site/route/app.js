@@ -118,17 +118,11 @@ async function loadData() {
     return null;
   }
 
-  let gtfsURL, statsURL;
-  if (isLocal) {
-    gtfsURL = "data/gtfs_route.json";
-    statsURL = "data/route_stop_stats.json";
-  } else {
-    const safe = sanitizeRouteID(routeID);
-    gtfsURL  = `${GCS_BASE}/gtfs/processed/route_${safe}.json`;
-    statsURL = weekEnd
-      ? `${GCS_BASE}/stats/weekly/route_stops/${weekEnd}/${safe}.json`
-      : null;
-  }
+  const safe = sanitizeRouteID(routeID);
+  const gtfsURL  = `${GCS_BASE}/gtfs/processed/route_${safe}.json`;
+  const statsURL = weekEnd
+    ? `${GCS_BASE}/stats/weekly/route_stops/${weekEnd}/${safe}.json`
+    : null;
 
   try {
     const [gtfs, stopStats] = await Promise.all([
