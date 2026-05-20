@@ -7,15 +7,16 @@
   <link rel="stylesheet" href="../styles.css">
   <link href="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css" rel="stylesheet">
   <script src="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
   <style>
-    /* Route map page overrides: full-viewport layout, no max-width clamp */
+    /* Route page overrides: scrollable body so the wait-time section
+       can sit above the map without crushing it. */
     body {
       max-width: none;
       padding: 0;
       display: flex;
       flex-direction: column;
-      height: 100vh;
-      overflow: hidden;
+      min-height: 100vh;
     }
     header {
       padding: 10px 20px;
@@ -24,13 +25,66 @@
       z-index: 10;
     }
     #map-wrap {
-      flex: 1;
+      flex: none;
       position: relative;
-      min-height: 0;
+      height: 70vh;
+      min-height: 520px;
     }
     #map {
       position: absolute;
       inset: 0;
+    }
+
+    /* ── wait-time section (above the map) ───────────────── */
+    #wait-time-section {
+      padding: 14px 20px 18px;
+      border-bottom: 1px solid #e5e5e5;
+      margin: 0;
+    }
+    #wait-details > summary {
+      cursor: pointer;
+      list-style: none;
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      padding: 4px 0;
+      user-select: none;
+    }
+    #wait-details > summary::-webkit-details-marker { display: none; }
+    #wait-details > summary::before {
+      content: "▸";
+      display: inline-block;
+      width: 0.9em;
+      color: #888;
+      transition: transform 0.15s ease;
+    }
+    #wait-details[open] > summary::before { transform: rotate(90deg); }
+    .wt-title { font-weight: 600; font-size: 16px; }
+    .wt-sub { font-size: 12px; }
+    .wt-body { margin-top: 10px; }
+    .wt-body .defn { font-size: 12px; line-height: 1.55; }
+    .wt-body .defn a { color: #1971c2; }
+    .wt-charts {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 18px;
+      margin-top: 16px;
+    }
+    @media (min-width: 980px) {
+      .wt-charts { grid-template-columns: 1fr 1fr; }
+    }
+    .wt-charts canvas { max-height: 260px; }
+    #wait-cards { margin-top: 10px; }
+    #wait-cards .card .val { font-size: 22px; }
+    #wait-cards.cards { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+    #wait-empty {
+      margin: 10px 0 0;
+      padding: 10px 12px;
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      color: #856404;
+      border-radius: 6px;
+      font-size: 12px;
     }
 
     /* ── map overlay controls ───────────────────────────── */
@@ -193,6 +247,58 @@
       <a href="" aria-current="page">Route map</a>
     </nav>
   </header>
+
+  <section id="wait-time-section">
+    <details id="wait-details" open>
+      <summary>
+        <span class="wt-title">Passenger wait-time distribution</span>
+        <span class="muted wt-sub" id="wait-sub">Past week · weekday vs weekend</span>
+      </summary>
+      <div class="wt-body">
+        <p class="muted defn">
+          Inspired by Jason Cole's
+          <a href="https://jasmcole.com/2015/04/04/bus-teresis" target="_blank" rel="noopener">Bus-teresis</a>
+          analysis, which charts <em>median wait time</em> at a stop as
+          the time a passenger arriving at a uniformly random moment
+          would have to wait for the next bus. Cole worked from the TfL
+          "next bus" prediction feed; we don't have predictions, so we
+          derive the same quantity from observed arrivals.
+        </p>
+        <p class="muted defn">
+          <strong>How it's computed.</strong> For every (stop, day) we
+          line up consecutive bus arrivals on this route and measure the
+          gap between them (the <em>headway</em>). Under the inspection
+          paradox a random passenger lands in a gap of length
+          <code>h</code> with probability proportional to <code>h</code>
+          and then waits uniformly on <code>(0, h)</code>, so the
+          wait-time density is <code>(1 − F<sub>H</sub>(w)) / E[H]</code>
+          and the mean wait is <code>E[H²] / (2 · E[H])</code>. The
+          histogram below is exactly that density, normalized; the cards
+          show the mean and median wait.
+        </p>
+        <p class="muted defn">
+          <strong>Caveats.</strong> Headways shorter than 30 s are
+          dropped (finalize-time duplicate rows) and headways longer
+          than 90 min are dropped (route overnight shutdown). Each stop
+          on the route contributes equally — we don't have ridership
+          weights, so a quiet end-of-line stop counts the same as a
+          busy downtown stop.
+        </p>
+        <div id="wait-cards" class="cards"></div>
+        <div class="wt-charts">
+          <div>
+            <h3 class="sub-h">Wait-time distribution (0–60 min)</h3>
+            <canvas id="wait-hist-chart" width="900" height="240"></canvas>
+          </div>
+          <div>
+            <h3 class="sub-h">Median wait by hour of day (PT)</h3>
+            <canvas id="wait-hour-chart" width="900" height="240"></canvas>
+          </div>
+        </div>
+        <div id="wait-empty" hidden></div>
+      </div>
+    </details>
+  </section>
 
   <div id="map-wrap">
     <div id="map"></div>

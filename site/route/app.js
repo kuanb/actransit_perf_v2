@@ -1,5 +1,5 @@
 // Route-level map investigation page.
-// URL params: ?week_end=YYYY-MM-DD&route_id=<id>&pct=p95|p50&mode=adherence|volatility&dir=0|1
+// URL params: ?week_end=YYYY-MM-DD&route_id=<id>&pct=p95|p50&mode=adherence|volatility&dir=0|1&stats=open|closed
 
 const params = new URLSearchParams(window.location.search);
 const weekEnd = params.get("week_end") || "";
@@ -7,6 +7,7 @@ const routeID = params.get("route_id") || "";
 let activeDir = parseInt(params.get("dir") || "0", 10);
 let activePct = params.get("pct") || "p95"; // "p50" | "p95"
 let activeMode = params.get("mode") || "adherence"; // "adherence" | "volatility"
+let statsOpen = (params.get("stats") || "open") !== "closed";
 
 // ── colour + size helpers ──────────────────────────────────────────────────
 
@@ -103,6 +104,8 @@ function syncURL() {
   url.searchParams.set("dir", String(activeDir));
   url.searchParams.set("pct", activePct);
   url.searchParams.set("mode", activeMode);
+  if (statsOpen) url.searchParams.delete("stats");
+  else url.searchParams.set("stats", "closed");
   window.history.replaceState(null, "", url.toString());
 }
 
@@ -123,13 +126,17 @@ async function loadData() {
   const statsURL = weekEnd
     ? `${GCS_BASE}/stats/weekly/route_stops/${weekEnd}/${safe}.json`
     : null;
+  const waitURL = weekEnd
+    ? `${GCS_BASE}/stats/weekly/route_wait/${weekEnd}/${safe}.json`
+    : null;
 
   try {
-    const [gtfs, stopStats] = await Promise.all([
+    const [gtfs, stopStats, waitStats] = await Promise.all([
       fetchJSON(gtfsURL),
       statsURL ? fetchJSON(statsURL).catch(() => null) : Promise.resolve(null),
+      waitURL  ? fetchJSON(waitURL).catch(() => null)  : Promise.resolve(null),
     ]);
-    return { gtfs, stopStats };
+    return { gtfs, stopStats, waitStats };
   } catch (e) {
     document.getElementById("loading").textContent = `Failed to load data: ${e.message}`;
     return null;
@@ -517,6 +524,18 @@ async function boot() {
     document.getElementById("meta").textContent = `Week ending ${weekEnd}`;
   }
 
+  // Reflect statsOpen into the <details> element + listen for changes.
+  const details = document.getElementById("wait-details");
+  if (details) {
+    details.open = statsOpen;
+    details.addEventListener("toggle", () => {
+      statsOpen = details.open;
+      syncURL();
+    });
+  }
+
+  renderWaitTime(data.waitStats);
+
   updateDirButtons();
   updateModeButtons();
   updateInfoPanel();
@@ -535,6 +554,185 @@ async function boot() {
   }
 
   initMap();
+}
+
+// ── wait-time section rendering ────────────────────────────────────────────
+
+const WAIT_HIST_VISIBLE_BINS = 60; // show only [0, 60) min in the histogram
+const WAIT_DAY_TYPE_COLORS = {
+  weekday: "#1971c2",
+  weekend: "#d6336c",
+};
+
+function fmtMaybeMin(v) {
+  return v === null || v === undefined ? "—" : `${Number(v).toFixed(1)} min`;
+}
+
+function renderWaitTime(wait) {
+  const empty = document.getElementById("wait-empty");
+
+  if (!wait || !wait.days || Object.keys(wait.days).length === 0) {
+    document.getElementById("wait-cards").innerHTML = "";
+    empty.textContent = weekEnd
+      ? "Wait-time stats not yet computed for this week — check back after the next Sunday roll-up."
+      : "Open this page via a route's map link on the weekly dashboard to load wait-time stats.";
+    empty.hidden = false;
+    return;
+  }
+  empty.hidden = true;
+
+  const wd = wait.days.weekday || {};
+  const we = wait.days.weekend || {};
+  const wdS = wd.summary || {};
+  const weS = we.summary || {};
+
+  renderCards("#wait-cards", [
+    {
+      label: "Median wait — weekday",
+      val: fmtMaybeMin(wdS.median_wait_min),
+    },
+    {
+      label: "Mean wait — weekday",
+      val: fmtMaybeMin(wdS.mean_wait_min),
+    },
+    {
+      label: "Median wait — weekend",
+      val: fmtMaybeMin(weS.median_wait_min),
+    },
+    {
+      label: "Mean wait — weekend",
+      val: fmtMaybeMin(weS.mean_wait_min),
+    },
+  ]);
+
+  renderWaitHistogram(wd.histogram, we.histogram);
+  renderWaitHourLine(wd.by_hour, we.by_hour);
+}
+
+function renderWaitHistogram(weekdayHist, weekendHist) {
+  const canvas = document.getElementById("wait-hist-chart");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const labels = [];
+  for (let i = 0; i < WAIT_HIST_VISIBLE_BINS; i++) labels.push(String(i));
+
+  const slice = (h) => {
+    if (!h || !Array.isArray(h.density)) return null;
+    return h.density.slice(0, WAIT_HIST_VISIBLE_BINS);
+  };
+  const wdD = slice(weekdayHist);
+  const weD = slice(weekendHist);
+
+  const datasets = [];
+  if (wdD) datasets.push({
+    label: "weekday",
+    data: wdD,
+    backgroundColor: "rgba(25,113,194,0.40)",
+    borderColor: WAIT_DAY_TYPE_COLORS.weekday,
+    borderWidth: 1,
+    barPercentage: 1.0,
+    categoryPercentage: 1.0,
+  });
+  if (weD) datasets.push({
+    label: "weekend",
+    data: weD,
+    backgroundColor: "rgba(214,51,108,0.40)",
+    borderColor: WAIT_DAY_TYPE_COLORS.weekend,
+    borderWidth: 1,
+    barPercentage: 1.0,
+    categoryPercentage: 1.0,
+  });
+
+  new Chart(ctx, {
+    type: "bar",
+    data: { labels, datasets },
+    options: {
+      plugins: {
+        legend: { display: true, position: "top", labels: { boxWidth: 14 } },
+        tooltip: {
+          callbacks: {
+            title: (ctx) => `${ctx[0].label}–${parseInt(ctx[0].label, 10) + 1} min`,
+            label: (ctx) => `${ctx.dataset.label}: ${(ctx.parsed.y * 100).toFixed(2)}% of riders`,
+          },
+        },
+      },
+      scales: {
+        x: {
+          title: { display: true, text: "wait (min)" },
+          grid: { display: false },
+          ticks: { autoSkip: true, maxTicksLimit: 13 },
+          stacked: false,
+        },
+        y: {
+          title: { display: true, text: "density (per min)" },
+          beginAtZero: true,
+          stacked: false,
+          ticks: { callback: (v) => `${(v * 100).toFixed(0)}%` },
+        },
+      },
+    },
+  });
+}
+
+function renderWaitHourLine(weekdayHours, weekendHours) {
+  const canvas = document.getElementById("wait-hour-chart");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+
+  const seriesFor = (hours) => {
+    const out = new Array(24).fill(null);
+    if (!Array.isArray(hours)) return out;
+    for (const c of hours) {
+      if (c.hour >= 0 && c.hour < 24) out[c.hour] = c.median_wait_min ?? null;
+    }
+    return out;
+  };
+
+  const labels = Array.from({ length: 24 }, (_, h) => h);
+  const datasets = [
+    {
+      label: "weekday",
+      data: seriesFor(weekdayHours),
+      borderColor: WAIT_DAY_TYPE_COLORS.weekday,
+      backgroundColor: WAIT_DAY_TYPE_COLORS.weekday,
+      borderWidth: 2,
+      pointRadius: 2,
+      spanGaps: false,
+      tension: 0.2,
+    },
+    {
+      label: "weekend",
+      data: seriesFor(weekendHours),
+      borderColor: WAIT_DAY_TYPE_COLORS.weekend,
+      backgroundColor: WAIT_DAY_TYPE_COLORS.weekend,
+      borderWidth: 2,
+      pointRadius: 2,
+      spanGaps: false,
+      tension: 0.2,
+    },
+  ];
+
+  new Chart(ctx, {
+    type: "line",
+    data: { labels, datasets },
+    options: {
+      plugins: {
+        legend: { display: true, position: "top", labels: { boxWidth: 14 } },
+        tooltip: {
+          callbacks: {
+            title: (ctx) => `${ctx[0].label}:00 PT`,
+            label: (ctx) => ctx.parsed.y === null
+              ? `${ctx.dataset.label}: no data`
+              : `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)} min`,
+          },
+        },
+      },
+      scales: {
+        x: { title: { display: true, text: "hour of day (PT)" }, grid: { display: false } },
+        y: { title: { display: true, text: "median wait (min)" }, beginAtZero: true },
+      },
+    },
+  });
 }
 
 boot();
