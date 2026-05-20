@@ -71,9 +71,19 @@
       margin-top: 16px;
     }
     @media (min-width: 980px) {
-      .wt-charts { grid-template-columns: 1fr 1fr; }
+      .wt-charts {
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: auto auto;
+        grid-template-areas:
+          "hist hour"
+          "hist tail";
+      }
+      .wt-hist { grid-area: hist; }
+      .wt-hour { grid-area: hour; }
+      .wt-tail { grid-area: tail; }
     }
     .wt-charts canvas { max-height: 260px; }
+    .wt-charts .wt-hist canvas { max-height: 540px; }
     #wait-cards { margin-top: 10px; }
     #wait-cards .card .val { font-size: 22px; }
     #wait-cards.cards { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
@@ -286,13 +296,17 @@
         </p>
         <div id="wait-cards" class="cards"></div>
         <div class="wt-charts">
-          <div>
+          <div class="wt-hist">
             <h3 class="sub-h">Wait-time distribution (0–60 min)</h3>
-            <canvas id="wait-hist-chart" width="900" height="240"></canvas>
+            <canvas id="wait-hist-chart" width="900" height="540"></canvas>
           </div>
-          <div>
+          <div class="wt-hour">
             <h3 class="sub-h">Median wait by hour of day (PT)</h3>
             <canvas id="wait-hour-chart" width="900" height="240"></canvas>
+          </div>
+          <div class="wt-tail">
+            <h3 class="sub-h">P95 / P99 wait by hour of day (PT)</h3>
+            <canvas id="wait-hour-tail-chart" width="900" height="240"></canvas>
           </div>
         </div>
         <div id="wait-empty" hidden></div>

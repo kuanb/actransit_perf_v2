@@ -97,8 +97,56 @@ func TestRouteWait_EmptyInput(t *testing.T) {
 	if _, ok := medianFromDensity(hist); ok {
 		t.Errorf("medianFromDensity should return !ok for zero density")
 	}
+	if _, ok := percentileFromDensity(hist, 0.95); ok {
+		t.Errorf("percentileFromDensity(0.95) should return !ok for zero density")
+	}
 	if got := closedFormMeanWaitFromMass(make([]float64, waitHistBins)); got != 0 {
 		t.Errorf("mean wait of empty mass: want 0, got %v", got)
+	}
+}
+
+// Uniform headway H=10 → wait density uniform on [0, 10) with mass 0.1
+// per 1-min bin. Cumulative crosses p at exactly w = 10 * p, so:
+//
+//	p95 = 9.5  (cumulative 0.9 after bin 9, +0.5 of bin 9's mass)
+//	p99 = 9.9  (cumulative 0.9 after bin 9, +0.9 of bin 9's mass)
+func TestRouteWait_PercentileFromDensityUniform(t *testing.T) {
+	heads := make([]float64, 100)
+	for i := range heads {
+		heads[i] = 10.0
+	}
+	hist := densityFromMass(binMassFromHeadways(heads, waitHistBins))
+
+	p95, ok := percentileFromDensity(hist, 0.95)
+	if !ok {
+		t.Fatal("percentileFromDensity(0.95) returned !ok")
+	}
+	if !approxEqual(p95, 9.5, 0.05) {
+		t.Errorf("p95 wait: want ~9.5, got %v", p95)
+	}
+
+	p99, ok := percentileFromDensity(hist, 0.99)
+	if !ok {
+		t.Fatal("percentileFromDensity(0.99) returned !ok")
+	}
+	if !approxEqual(p99, 9.9, 0.05) {
+		t.Errorf("p99 wait: want ~9.9, got %v", p99)
+	}
+}
+
+// medianFromDensity must agree with percentileFromDensity(h, 0.5)
+// since the former is now a wrapper around the latter.
+func TestRouteWait_PercentileWrapperMatchesMedian(t *testing.T) {
+	heads := []float64{5, 5, 5, 30}
+	hist := densityFromMass(binMassFromHeadways(heads, waitHistBins))
+
+	med, mok := medianFromDensity(hist)
+	p50, pok := percentileFromDensity(hist, 0.5)
+	if mok != pok {
+		t.Fatalf("ok flag mismatch: median=%v p50=%v", mok, pok)
+	}
+	if med != p50 {
+		t.Errorf("medianFromDensity (%v) != percentileFromDensity(0.5) (%v)", med, p50)
 	}
 }
 

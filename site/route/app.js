@@ -587,26 +587,19 @@ function renderWaitTime(wait) {
   const weS = we.summary || {};
 
   renderCards("#wait-cards", [
-    {
-      label: "Median wait — weekday",
-      val: fmtMaybeMin(wdS.median_wait_min),
-    },
-    {
-      label: "Mean wait — weekday",
-      val: fmtMaybeMin(wdS.mean_wait_min),
-    },
-    {
-      label: "Median wait — weekend",
-      val: fmtMaybeMin(weS.median_wait_min),
-    },
-    {
-      label: "Mean wait — weekend",
-      val: fmtMaybeMin(weS.mean_wait_min),
-    },
+    { label: "Median wait — weekday", val: fmtMaybeMin(wdS.median_wait_min) },
+    { label: "Mean wait — weekday",   val: fmtMaybeMin(wdS.mean_wait_min) },
+    { label: "p95 wait — weekday",    val: fmtMaybeMin(wdS.p95_wait_min) },
+    { label: "p99 wait — weekday",    val: fmtMaybeMin(wdS.p99_wait_min) },
+    { label: "Median wait — weekend", val: fmtMaybeMin(weS.median_wait_min) },
+    { label: "Mean wait — weekend",   val: fmtMaybeMin(weS.mean_wait_min) },
+    { label: "p95 wait — weekend",    val: fmtMaybeMin(weS.p95_wait_min) },
+    { label: "p99 wait — weekend",    val: fmtMaybeMin(weS.p99_wait_min) },
   ]);
 
   renderWaitHistogram(wd.histogram, we.histogram);
   renderWaitHourLine(wd.by_hour, we.by_hour);
+  renderWaitHourTail(wd.by_hour, we.by_hour);
 }
 
 function renderWaitHistogram(weekdayHist, weekendHist) {
@@ -647,23 +640,25 @@ function renderWaitHistogram(weekdayHist, weekendHist) {
     type: "bar",
     data: { labels, datasets },
     options: {
+      indexAxis: "y",
       plugins: {
         legend: { display: true, position: "top", labels: { boxWidth: 14 } },
         tooltip: {
           callbacks: {
             title: (ctx) => `${ctx[0].label}–${parseInt(ctx[0].label, 10) + 1} min`,
-            label: (ctx) => `${ctx.dataset.label}: ${(ctx.parsed.y * 100).toFixed(2)}% of riders`,
+            label: (ctx) => `${ctx.dataset.label}: ${(ctx.parsed.x * 100).toFixed(2)}% of riders`,
           },
         },
       },
       scales: {
-        x: {
+        y: {
           title: { display: true, text: "wait (min)" },
           grid: { display: false },
           ticks: { autoSkip: true, maxTicksLimit: 13 },
+          reverse: true,
           stacked: false,
         },
-        y: {
+        x: {
           title: { display: true, text: "density (per min)" },
           beginAtZero: true,
           stacked: false,
@@ -730,6 +725,76 @@ function renderWaitHourLine(weekdayHours, weekendHours) {
       scales: {
         x: { title: { display: true, text: "hour of day (PT)" }, grid: { display: false } },
         y: { title: { display: true, text: "median wait (min)" }, beginAtZero: true },
+      },
+    },
+  });
+}
+
+// renderWaitHourTail draws p95 + p99 wait by hour of day. Solid lines
+// are p95, dashed are p99. Weekday and weekend share the colour palette
+// with the median chart so the eye links related series.
+function renderWaitHourTail(weekdayHours, weekendHours) {
+  const canvas = document.getElementById("wait-hour-tail-chart");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+
+  const seriesFor = (hours, key) => {
+    const out = new Array(24).fill(null);
+    if (!Array.isArray(hours)) return out;
+    for (const c of hours) {
+      if (c.hour >= 0 && c.hour < 24) out[c.hour] = c[key] ?? null;
+    }
+    return out;
+  };
+
+  const labels = Array.from({ length: 24 }, (_, h) => h);
+  const blue = WAIT_DAY_TYPE_COLORS.weekday;
+  const pink = WAIT_DAY_TYPE_COLORS.weekend;
+  const datasets = [
+    {
+      label: "weekday p95",
+      data: seriesFor(weekdayHours, "p95_wait_min"),
+      borderColor: blue, backgroundColor: blue,
+      borderWidth: 2, pointRadius: 2, spanGaps: false, tension: 0.2,
+    },
+    {
+      label: "weekday p99",
+      data: seriesFor(weekdayHours, "p99_wait_min"),
+      borderColor: blue, backgroundColor: blue,
+      borderWidth: 2, borderDash: [4, 4], pointRadius: 2, spanGaps: false, tension: 0.2,
+    },
+    {
+      label: "weekend p95",
+      data: seriesFor(weekendHours, "p95_wait_min"),
+      borderColor: pink, backgroundColor: pink,
+      borderWidth: 2, pointRadius: 2, spanGaps: false, tension: 0.2,
+    },
+    {
+      label: "weekend p99",
+      data: seriesFor(weekendHours, "p99_wait_min"),
+      borderColor: pink, backgroundColor: pink,
+      borderWidth: 2, borderDash: [4, 4], pointRadius: 2, spanGaps: false, tension: 0.2,
+    },
+  ];
+
+  new Chart(ctx, {
+    type: "line",
+    data: { labels, datasets },
+    options: {
+      plugins: {
+        legend: { display: true, position: "top", labels: { boxWidth: 14 } },
+        tooltip: {
+          callbacks: {
+            title: (ctx) => `${ctx[0].label}:00 PT`,
+            label: (ctx) => ctx.parsed.y === null
+              ? `${ctx.dataset.label}: no data`
+              : `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)} min`,
+          },
+        },
+      },
+      scales: {
+        x: { title: { display: true, text: "hour of day (PT)" }, grid: { display: false } },
+        y: { title: { display: true, text: "wait (min)" }, beginAtZero: true },
       },
     },
   });

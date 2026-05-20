@@ -42,6 +42,8 @@ type routeWaitSummary struct {
 	P50HeadwayMin  *float64 `json:"p50_headway_min"`
 	MeanWaitMin    *float64 `json:"mean_wait_min"`
 	MedianWaitMin  *float64 `json:"median_wait_min"`
+	P95WaitMin     *float64 `json:"p95_wait_min"`
+	P99WaitMin     *float64 `json:"p99_wait_min"`
 }
 
 type routeWaitHourCell struct {
@@ -50,6 +52,8 @@ type routeWaitHourCell struct {
 	P50HeadwayMin *float64 `json:"p50_headway_min"`
 	MeanWaitMin   *float64 `json:"mean_wait_min"`
 	MedianWaitMin *float64 `json:"median_wait_min"`
+	P95WaitMin    *float64 `json:"p95_wait_min"`
+	P99WaitMin    *float64 `json:"p99_wait_min"`
 }
 
 type routeWaitHistogram struct {
@@ -162,6 +166,14 @@ func generateAllRouteWaitTimeStats(ctx context.Context, weekStart, weekEnd civil
 				v := round1(mean)
 				cellOut.MeanWaitMin = &v
 			}
+			if v, ok := percentileFromDensity(hist, 0.95); ok {
+				v = round1(v)
+				cellOut.P95WaitMin = &v
+			}
+			if v, ok := percentileFromDensity(hist, 0.99); ok {
+				v = round1(v)
+				cellOut.P99WaitMin = &v
+			}
 			hourCells = append(hourCells, cellOut)
 		}
 		block.ByHour = hourCells
@@ -170,6 +182,14 @@ func generateAllRouteWaitTimeStats(ctx context.Context, weekStart, weekEnd civil
 		if median, ok := medianFromDensity(block.Histogram); ok {
 			v := median
 			block.Summary.MedianWaitMin = &v
+		}
+		if v, ok := percentileFromDensity(block.Histogram, 0.95); ok {
+			v = round1(v)
+			block.Summary.P95WaitMin = &v
+		}
+		if v, ok := percentileFromDensity(block.Histogram, 0.99); ok {
+			v = round1(v)
+			block.Summary.P99WaitMin = &v
 		}
 		r.Days[k.DayType] = block
 	}
@@ -390,11 +410,11 @@ func densityFromMass(mass []float64) routeWaitHistogram {
 	return routeWaitHistogram{BinLoMin: binLo, Density: density}
 }
 
-// medianFromDensity returns the wait-time median (in minutes) given a
-// unit-width binned density, by walking the cumulative sum until it
-// crosses 0.5 and linearly interpolating within the crossing bin.
-// Returns (0, false) when the density is empty/degenerate.
-func medianFromDensity(h routeWaitHistogram) (float64, bool) {
+// percentileFromDensity returns the wait-time percentile (in minutes)
+// given a unit-width binned density, by walking the cumulative sum
+// until it crosses p (0..1) and linearly interpolating within the
+// crossing bin. Returns (0, false) when the density is empty/degenerate.
+func percentileFromDensity(h routeWaitHistogram, p float64) (float64, bool) {
 	totalDensity := 0.0
 	for _, d := range h.Density {
 		totalDensity += d
@@ -405,16 +425,21 @@ func medianFromDensity(h routeWaitHistogram) (float64, bool) {
 	cum := 0.0
 	for i, d := range h.Density {
 		next := cum + d
-		if next >= 0.5 {
+		if next >= p {
 			if d <= 0 {
 				return float64(i), true
 			}
-			frac := (0.5 - cum) / d
+			frac := (p - cum) / d
 			return round1(float64(i) + frac), true
 		}
 		cum = next
 	}
 	return float64(len(h.Density) - 1), true
+}
+
+// medianFromDensity is a thin wrapper around percentileFromDensity at p=0.5.
+func medianFromDensity(h routeWaitHistogram) (float64, bool) {
+	return percentileFromDensity(h, 0.5)
 }
 
 // closedFormMeanWaitFromMass computes E[H^2]/(2 E[H]) from raw
