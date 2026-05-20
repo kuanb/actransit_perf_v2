@@ -284,6 +284,75 @@ function render(data) {
     ncSection.hidden = true;
   }
 
+  // ---- volume by 15-min PT window (stacked by route) ----
+  // Field is absent on stats files generated before this chart shipped;
+  // hide the section instead of rendering an empty canvas.
+  const vh = data.volume_15min_histogram;
+  const volSection = document.getElementById("volume-section");
+  if (vh && Array.isArray(vh.routes) && vh.routes.length > 0) {
+    volSection.hidden = false;
+    const labels = Array.from({ length: 96 }, (_, i) => {
+      const h = Math.floor(i / 4);
+      const m = (i % 4) * 15;
+      return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+    });
+    const datasets = vh.routes.map((r) => ({
+      label: r.route_id,
+      data: r.counts,
+      backgroundColor: `#${r.color}`,
+      borderWidth: 0,
+      stack: "vol",
+    }));
+    const volCtx = document.getElementById("volume-15min-chart").getContext("2d");
+    new Chart(volCtx, {
+      type: "bar",
+      data: { labels, datasets },
+      options: {
+        plugins: {
+          legend: { position: "bottom", labels: { boxWidth: 12, padding: 8 } },
+          tooltip: {
+            callbacks: {
+              title: (ctx) => {
+                const i = ctx[0].dataIndex;
+                const nextH = Math.floor((i + 1) / 4);
+                const nextM = ((i + 1) % 4) * 15;
+                const end = i === 95 ? "24:00"
+                  : `${String(nextH).padStart(2, "0")}:${String(nextM).padStart(2, "0")}`;
+                return `${labels[i]}–${end} PT`;
+              },
+              label: (ctx) => `${ctx.dataset.label} · ${ctx.raw.toLocaleString()}`,
+              footer: (ctx) => {
+                const i = ctx[0].dataIndex;
+                const tot = (vh.totals && vh.totals[i]) || 0;
+                return `Total: ${tot.toLocaleString()}`;
+              },
+            },
+          },
+        },
+        scales: {
+          x: {
+            stacked: true,
+            title: { display: true, text: "time of day (PT)" },
+            grid: { display: false },
+            ticks: {
+              autoSkip: false,
+              maxRotation: 0,
+              callback: (v, i) => (i % 8 === 0 ? labels[i] : ""),
+            },
+          },
+          y: {
+            stacked: true,
+            beginAtZero: true,
+            title: { display: true, text: "stop arrivals" },
+            ticks: { precision: 0 },
+          },
+        },
+      },
+    });
+  } else {
+    volSection.hidden = true;
+  }
+
   // ---- distortion histogram (42 buckets: under, 40 × 5%, over) ----
   const dh = data.distortion_histogram || { buckets: [], counts: [] };
   const distCtx = document.getElementById("histogram-chart").getContext("2d");

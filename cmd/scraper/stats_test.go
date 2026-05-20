@@ -330,6 +330,85 @@ func TestPercentileSorted(t *testing.T) {
 	}
 }
 
+func TestBuildVolumeHistogram(t *testing.T) {
+	mk := func(at int, n int64) []int64 {
+		c := make([]int64, 96)
+		c[at] = n
+		return c
+	}
+	byRoute := map[string][]int64{
+		"1":  mk(10, 100),
+		"6":  mk(10, 80),
+		"18": mk(10, 60),
+		"51": mk(10, 50),
+		"57": mk(10, 40),
+		"72": mk(10, 30),
+		"NL": mk(10, 25),
+		"O":  mk(10, 20),
+		"F":  mk(10, 15),
+		"G":  mk(10, 12),
+		"H":  mk(10, 8),
+		"J":  mk(10, 7),
+	}
+	colors := map[string]colorPair{
+		"1":  {color: "AA0000", text: "FFFFFF"},
+		"6":  {color: "BB0000", text: "FFFFFF"},
+		"18": {color: "CC0000", text: "FFFFFF"},
+		"51": {color: "DD0000", text: "FFFFFF"},
+		"57": {color: "EE0000", text: "FFFFFF"},
+		"72": {color: "FF0000", text: "FFFFFF"},
+		"NL": {color: "00AA00", text: "FFFFFF"},
+		"O":  {color: "00BB00", text: "FFFFFF"},
+		"F":  {color: "00CC00", text: "FFFFFF"},
+		"G":  {color: "00DD00", text: "FFFFFF"},
+		// "H" and "J" intentionally absent — should still roll into "Other".
+	}
+	got := buildVolumeHistogram(byRoute, colors, 10)
+
+	if len(got.Routes) != 11 {
+		t.Fatalf("len(Routes) = %d, want 11 (top 10 + Other)", len(got.Routes))
+	}
+	if got.Routes[0].RouteID != "1" || got.Routes[0].Color != "AA0000" {
+		t.Fatalf("top route = %+v, want id=1 color=AA0000", got.Routes[0])
+	}
+	last := got.Routes[len(got.Routes)-1]
+	if last.RouteID != "Other" {
+		t.Fatalf("last series = %s, want Other", last.RouteID)
+	}
+	if last.Counts[10] != 8+7 {
+		t.Fatalf("Other counts[10] = %d, want %d", last.Counts[10], 8+7)
+	}
+
+	var systemAt10 int64
+	for _, r := range byRoute {
+		systemAt10 += r[10]
+	}
+	if got.Totals[10] != systemAt10 {
+		t.Fatalf("Totals[10] = %d, want %d (sum across all routes)", got.Totals[10], systemAt10)
+	}
+	if len(got.Totals) != 96 {
+		t.Fatalf("len(Totals) = %d, want 96", len(got.Totals))
+	}
+}
+
+func TestBuildVolumeHistogramNoOtherWhenWithinTopN(t *testing.T) {
+	byRoute := map[string][]int64{
+		"1": {1: 5},
+		"2": {1: 3},
+	}
+	byRoute["1"] = append(byRoute["1"], make([]int64, 94)...)
+	byRoute["2"] = append(byRoute["2"], make([]int64, 94)...)
+	got := buildVolumeHistogram(byRoute, map[string]colorPair{}, 10)
+	if len(got.Routes) != 2 {
+		t.Fatalf("len(Routes) = %d, want 2 (no Other when all fit in topN)", len(got.Routes))
+	}
+	for _, r := range got.Routes {
+		if r.RouteID == "Other" {
+			t.Fatalf("unexpected Other series when nothing collapses")
+		}
+	}
+}
+
 func TestRound1(t *testing.T) {
 	cases := []struct {
 		in   float64

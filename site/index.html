@@ -53,6 +53,13 @@
     </div>
   </section>
 
+  <section id="volume-section" hidden>
+    <h2>Observed arrivals by time of day</h2>
+    <p class="muted defn">Each bar = total stop arrivals we recorded in a 15-minute window, from PT midnight to midnight, stacked by route. Top-10 routes (by total arrivals for the day) are colored individually; everything else is grouped into <strong>Other</strong>.</p>
+    <p class="muted defn">A "data point" here is one finalized (trip, stop) observation — the same denominator used by every other chart on this page.</p>
+    <canvas id="volume-15min-chart" width="900" height="320"></canvas>
+  </section>
+
   <section>
     <h2>Headway distortion</h2>
     <p class="muted defn">For each observed stop arrival, we compare the bus's lateness/earliness to the scheduled gap to its <strong>neighboring scheduled trip</strong> at the same stop on the same route.</p>

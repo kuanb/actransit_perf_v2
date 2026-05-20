@@ -31,7 +31,25 @@ type dailyStats struct {
 	ScheduleCompliance   scheduleCompliance  `json:"schedule_compliance"`
 	DistortionHistogram  distortionHistogram `json:"distortion_histogram"`
 	DelayMinuteHistogram []minuteBucket      `json:"delay_minute_histogram"`
+	VolumeHistogram      volumeHistogram     `json:"volume_15min_histogram"`
 	Routes               []routeStats        `json:"routes"`
+}
+
+// volumeHistogram: 96 fifteen-minute buckets covering one PT day (00:00 →
+// 23:45), counting observed stop arrivals per bucket. Routes is the top-N
+// routes by daily volume plus a synthetic "Other" series. Totals is the
+// across-all-routes sum per bucket — independent of the top-N reduction
+// so the y-axis reflects true daily volume even when "Other" is hidden.
+type volumeHistogram struct {
+	Routes []volumeRouteSeries `json:"routes"`
+	Totals []int64             `json:"totals"`
+}
+
+type volumeRouteSeries struct {
+	RouteID   string  `json:"route_id"`
+	Color     string  `json:"color"`
+	TextColor string  `json:"text_color"`
+	Counts    []int64 `json:"counts"`
 }
 
 type distortionHistogram struct {
@@ -186,6 +204,10 @@ func generateDailyStats(ctx context.Context, serviceDate civil.Date) (*dailyStat
 	if err != nil {
 		return nil, fmt.Errorf("query minute histogram: %w", err)
 	}
+	volumeByRoute, err := queryStatsVolume15Min(ctx, serviceDate)
+	if err != nil {
+		return nil, fmt.Errorf("query volume 15min histogram: %w", err)
+	}
 
 	scheduleByStop, err := loadScheduleByStop(zr, serviceDate, activeServices)
 	if err != nil {
@@ -288,6 +310,7 @@ func generateDailyStats(ctx context.Context, serviceDate civil.Date) (*dailyStat
 		ScheduleCompliance: sc,
 		DistortionHistogram:  distHist,
 		DelayMinuteHistogram: minuteHist,
+		VolumeHistogram:      buildVolumeHistogram(volumeByRoute, colors, 10),
 		Routes:               routes,
 	}
 
@@ -1122,6 +1145,119 @@ func queryStatsMinuteHistogram(ctx context.Context, serviceDate civil.Date) ([]m
 		out = append(out, minuteBucket{Minute: int(row.Minute), Count: row.N})
 	}
 	return out, nil
+}
+
+// queryStatsVolume15Min counts observed stop arrivals per (route, 15-min PT
+// window) for the given service_date. Bucket 0 = [00:00, 00:15) PT,
+// bucket 95 = [23:45, 24:00). Owl runs whose actual_arrival lands after the
+// next PT midnight (bucket ≥ 96) are dropped; the service_date filter in the
+// CTE already restricts to one calendar partition, so the leakage is small.
+func queryStatsVolume15Min(ctx context.Context, serviceDate civil.Date) (map[string][]int64, error) {
+	q := bqClient.Query(fmt.Sprintf(`
+		WITH %s
+		SELECT
+		  route_id,
+		  CAST(FLOOR(TIMESTAMP_DIFF(
+		    actual_arrival,
+		    TIMESTAMP(DATETIME("%s 00:00:00"), "America/Los_Angeles"),
+		    MINUTE
+		  ) / 15.0) AS INT64) AS bucket,
+		  COUNT(*) AS n
+		FROM obs
+		WHERE actual_arrival IS NOT NULL
+		  AND is_stale = FALSE
+		GROUP BY route_id, bucket
+		HAVING bucket BETWEEN 0 AND 95
+	`, dedupedDayObservationsCTE(serviceDate), serviceDate))
+	it, err := q.Read(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string][]int64)
+	for {
+		var row struct {
+			RouteID string `bigquery:"route_id"`
+			Bucket  int64  `bigquery:"bucket"`
+			N       int64  `bigquery:"n"`
+		}
+		err := it.Next(&row)
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		counts, ok := out[row.RouteID]
+		if !ok {
+			counts = make([]int64, 96)
+			out[row.RouteID] = counts
+		}
+		counts[row.Bucket] = row.N
+	}
+	return out, nil
+}
+
+// buildVolumeHistogram collapses the raw per-route 96-bucket map into a
+// top-N (by daily total) series plus a single "Other" rollup, attaching
+// colors from the route-color map. Totals across ALL routes are returned
+// separately so the chart can show true daily volume independent of the
+// top-N reduction.
+func buildVolumeHistogram(byRoute map[string][]int64, colors map[string]colorPair, topN int) volumeHistogram {
+	type routeTotal struct {
+		id    string
+		total int64
+	}
+	totals := make([]routeTotal, 0, len(byRoute))
+	system := make([]int64, 96)
+	for rid, counts := range byRoute {
+		var sum int64
+		for i, c := range counts {
+			sum += c
+			system[i] += c
+		}
+		totals = append(totals, routeTotal{id: rid, total: sum})
+	}
+	sort.Slice(totals, func(i, j int) bool {
+		if totals[i].total != totals[j].total {
+			return totals[i].total > totals[j].total
+		}
+		return totals[i].id < totals[j].id
+	})
+
+	out := volumeHistogram{Routes: make([]volumeRouteSeries, 0, topN+1), Totals: system}
+	other := make([]int64, 96)
+	var otherSum int64
+	for i, rt := range totals {
+		if i < topN {
+			c := colors[rt.id]
+			if c.color == "" {
+				c.color = "FFFFFF"
+			}
+			if c.text == "" {
+				c.text = "000000"
+			}
+			out.Routes = append(out.Routes, volumeRouteSeries{
+				RouteID:   rt.id,
+				Color:     c.color,
+				TextColor: c.text,
+				Counts:    byRoute[rt.id],
+			})
+			continue
+		}
+		for j, n := range byRoute[rt.id] {
+			other[j] += n
+		}
+		otherSum += rt.total
+	}
+	if otherSum > 0 {
+		out.Routes = append(out.Routes, volumeRouteSeries{
+			RouteID:   "Other",
+			Color:     "888888",
+			TextColor: "FFFFFF",
+			Counts:    other,
+		})
+	}
+	return out
 }
 
 func nullableMinutes(v bigquery.NullInt64) *float64 {
