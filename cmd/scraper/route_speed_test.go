@@ -30,7 +30,7 @@ func TestSummarizeSpeed_SingleBin(t *testing.T) {
 	}
 	// Percentiles all fall inside the single populated bin [10.0, 10.5).
 	for label, ptr := range map[string]*float64{
-		"p50": s.P50Mph, "p95": s.P95Mph, "p99": s.P99Mph,
+		"p5": s.P5Mph, "p50": s.P50Mph, "p95": s.P95Mph, "p99": s.P99Mph,
 	} {
 		if ptr == nil {
 			t.Errorf("%s: nil", label)
@@ -94,7 +94,7 @@ func TestSummarizeSpeed_Empty(t *testing.T) {
 	if s.N != 0 {
 		t.Errorf("N: got %d, want 0", s.N)
 	}
-	if s.MeanMph != nil || s.StddevMph != nil || s.P50Mph != nil || s.P95Mph != nil || s.P99Mph != nil {
+	if s.MeanMph != nil || s.StddevMph != nil || s.P5Mph != nil || s.P50Mph != nil || s.P95Mph != nil || s.P99Mph != nil {
 		t.Errorf("expected all summary fields nil; got %+v", s)
 	}
 }

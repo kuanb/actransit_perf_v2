@@ -35,6 +35,7 @@ const (
 type routeSpeedSummary struct {
 	N         int64    `json:"n"`
 	MeanMph   *float64 `json:"mean_mph"`
+	P5Mph     *float64 `json:"p5_mph"`
 	P50Mph    *float64 `json:"p50_mph"`
 	P95Mph    *float64 `json:"p95_mph"`
 	P99Mph    *float64 `json:"p99_mph"`
@@ -45,6 +46,7 @@ type routeSpeedHourCell struct {
 	Hour      int      `json:"hour"`
 	N         int64    `json:"n"`
 	MeanMph   *float64 `json:"mean_mph"`
+	P5Mph     *float64 `json:"p5_mph"`
 	P50Mph    *float64 `json:"p50_mph"`
 	P95Mph    *float64 `json:"p95_mph"`
 	P99Mph    *float64 `json:"p99_mph"`
@@ -292,6 +294,7 @@ func summarizeSpeedHistogramCell(hour int, bins []int64) routeSpeedHourCell {
 		Hour:      hour,
 		N:         s.N,
 		MeanMph:   s.MeanMph,
+		P5Mph:     s.P5Mph,
 		P50Mph:    s.P50Mph,
 		P95Mph:    s.P95Mph,
 		P99Mph:    s.P99Mph,
@@ -333,6 +336,10 @@ func summarizeSpeedHistogramSummary(bins []int64) routeSpeedSummary {
 		}
 		stddev := round1(math.Sqrt(variance))
 		out.StddevMph = &stddev
+	}
+	if v, ok := speedPercentileFromBins(bins, n, 0.05); ok {
+		v = round1(v)
+		out.P5Mph = &v
 	}
 	if v, ok := speedPercentileFromBins(bins, n, 0.50); ok {
 		v = round1(v)

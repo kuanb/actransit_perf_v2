@@ -1206,8 +1206,26 @@ function renderSpeedCentralChart(canvasId, weekdayHours, weekendHours) {
   const ctx = canvas.getContext("2d");
   const blue = SPEED_DAY_TYPE_COLORS.weekday;
   const pink = SPEED_DAY_TYPE_COLORS.weekend;
+  const blueBand = "rgba(25, 113, 194, 0.12)";
+  const pinkBand = "rgba(214, 51, 108, 0.12)";
   const labels = Array.from({ length: 24 }, (_, h) => h);
+  // Order matters: fill: "-1" on the p95 line targets the immediately
+  // preceding p5 dataset to draw the shaded 5–95 band.
   const datasets = [
+    {
+      label: "weekday p5",
+      data: speedSeriesFor(weekdayHours, "p5_mph"),
+      borderColor: "transparent", backgroundColor: blueBand,
+      pointRadius: 0, pointHitRadius: 0, spanGaps: false, tension: 0.2,
+      fill: false, bandFill: true, bandDayType: "weekday", bandSide: "p5",
+    },
+    {
+      label: "weekday 5–95 band",
+      data: speedSeriesFor(weekdayHours, "p95_mph"),
+      borderColor: "transparent", backgroundColor: blueBand,
+      pointRadius: 0, pointHitRadius: 0, spanGaps: false, tension: 0.2,
+      fill: "-1", bandFill: true, bandDayType: "weekday", bandSide: "p95",
+    },
     {
       label: "weekday mean",
       data: speedSeriesFor(weekdayHours, "mean_mph"),
@@ -1219,6 +1237,20 @@ function renderSpeedCentralChart(canvasId, weekdayHours, weekendHours) {
       data: speedSeriesFor(weekdayHours, "p50_mph"),
       borderColor: blue, backgroundColor: blue,
       borderWidth: 2, borderDash: [4, 4], pointRadius: 2, spanGaps: false, tension: 0.2,
+    },
+    {
+      label: "weekend p5",
+      data: speedSeriesFor(weekendHours, "p5_mph"),
+      borderColor: "transparent", backgroundColor: pinkBand,
+      pointRadius: 0, pointHitRadius: 0, spanGaps: false, tension: 0.2,
+      fill: false, bandFill: true, bandDayType: "weekend", bandSide: "p5",
+    },
+    {
+      label: "weekend 5–95 band",
+      data: speedSeriesFor(weekendHours, "p95_mph"),
+      borderColor: "transparent", backgroundColor: pinkBand,
+      pointRadius: 0, pointHitRadius: 0, spanGaps: false, tension: 0.2,
+      fill: "-1", bandFill: true, bandDayType: "weekend", bandSide: "p95",
     },
     {
       label: "weekend mean",
@@ -1236,7 +1268,7 @@ function renderSpeedCentralChart(canvasId, weekdayHours, weekendHours) {
   new Chart(ctx, {
     type: "line",
     data: { labels, datasets },
-    options: speedChartOptions("speed (mph)"),
+    options: speedCentralChartOptions(),
   });
 }
 
@@ -1308,6 +1340,61 @@ function speedChartOptions(yLabel) {
     scales: {
       x: { title: { display: true, text: "hour of day (PT)" }, grid: { display: false } },
       y: { title: { display: true, text: yLabel }, beginAtZero: true },
+    },
+  };
+}
+
+// Variant of speedChartOptions for the central chart, where two of the
+// datasets per day-type are invisible band fills (p5 lower edge + p95
+// upper edge with fill: "-1"). The band datasets are filtered out of
+// the legend and the per-row tooltip; a single "5–95: lo–hi mph" line
+// is injected per day-type via afterBody so the popup still reports
+// the band range alongside mean and p50.
+function speedCentralChartOptions() {
+  return {
+    interaction: { mode: "index", intersect: false },
+    plugins: {
+      legend: {
+        display: true,
+        position: "top",
+        labels: {
+          boxWidth: 14,
+          font: { size: 10 },
+          filter: (item, data) => !data.datasets[item.datasetIndex].bandFill,
+        },
+      },
+      tooltip: {
+        filter: (item) => !item.dataset.bandFill,
+        callbacks: {
+          title: (ctx) => `${ctx[0].label}:00 PT`,
+          label: (ctx) => ctx.parsed.y === null
+            ? `${ctx.dataset.label}: no data`
+            : `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)} mph`,
+          afterBody: (ctxs) => {
+            if (!ctxs.length) return [];
+            const chart = ctxs[0].chart;
+            const idx = ctxs[0].dataIndex;
+            const lo = {}, hi = {};
+            for (const ds of chart.data.datasets) {
+              if (!ds.bandFill) continue;
+              const v = ds.data[idx];
+              if (ds.bandSide === "p5") lo[ds.bandDayType] = v;
+              if (ds.bandSide === "p95") hi[ds.bandDayType] = v;
+            }
+            const lines = [];
+            for (const dayType of ["weekday", "weekend"]) {
+              const a = lo[dayType], b = hi[dayType];
+              if (a == null || b == null) continue;
+              lines.push(`${dayType} 5–95: ${a.toFixed(1)}–${b.toFixed(1)} mph`);
+            }
+            return lines;
+          },
+        },
+      },
+    },
+    scales: {
+      x: { title: { display: true, text: "hour of day (PT)" }, grid: { display: false } },
+      y: { title: { display: true, text: "speed (mph)" }, beginAtZero: true },
     },
   };
 }
