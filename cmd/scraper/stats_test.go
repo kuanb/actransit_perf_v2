@@ -368,12 +368,28 @@ func TestBuildVolumeHistogram(t *testing.T) {
 	if len(got.Routes) != 11 {
 		t.Fatalf("len(Routes) = %d, want 11 (top 10 + Other)", len(got.Routes))
 	}
-	if got.Routes[0].RouteID != "1" || got.Routes[0].Color != "AA0000" {
-		t.Fatalf("top route = %+v, want id=1 color=AA0000", got.Routes[0])
+	if got.Routes[0].RouteID != "1" {
+		t.Fatalf("top route = %+v, want id=1", got.Routes[0])
+	}
+	// Top-N routes ignore GTFS route_color (AC Transit uses too few distinct
+	// hues) and each get a unique rainbow color. Other stays grey.
+	seen := map[string]string{}
+	for i := 0; i < 10; i++ {
+		r := got.Routes[i]
+		if len(r.Color) != 6 {
+			t.Fatalf("Routes[%d].Color = %q, want 6-char hex", i, r.Color)
+		}
+		if prev, dup := seen[r.Color]; dup {
+			t.Fatalf("Routes[%d] color %s already used by route %s", i, r.Color, prev)
+		}
+		seen[r.Color] = r.RouteID
 	}
 	last := got.Routes[len(got.Routes)-1]
 	if last.RouteID != "Other" {
 		t.Fatalf("last series = %s, want Other", last.RouteID)
+	}
+	if last.Color != "888888" {
+		t.Fatalf("Other color = %s, want 888888", last.Color)
 	}
 	if last.Counts[10] != 8+7 {
 		t.Fatalf("Other counts[10] = %d, want %d", last.Counts[10], 8+7)
