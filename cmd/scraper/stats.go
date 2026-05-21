@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -1199,14 +1198,11 @@ func queryStatsVolume15Min(ctx context.Context, serviceDate civil.Date) (map[str
 }
 
 // buildVolumeHistogram collapses the raw per-route 96-bucket map into a
-// top-N (by daily total) series plus a single "Other" rollup. Top-N routes
-// get distinct hues from an evenly-spaced HSL rainbow rather than the
-// GTFS route_color, which AC Transit draws from a tiny palette (most
-// routes are one of two reds or two greens) and would otherwise make the
-// stacked chart unreadable. Totals across ALL routes are returned
+// top-N (by daily total) series plus a single "Other" rollup, attaching
+// colors from the route-color map. Totals across ALL routes are returned
 // separately so the chart can show true daily volume independent of the
 // top-N reduction.
-func buildVolumeHistogram(byRoute map[string][]int64, _ map[string]colorPair, topN int) volumeHistogram {
+func buildVolumeHistogram(byRoute map[string][]int64, colors map[string]colorPair, topN int) volumeHistogram {
 	type routeTotal struct {
 		id    string
 		total int64
@@ -1231,17 +1227,19 @@ func buildVolumeHistogram(byRoute map[string][]int64, _ map[string]colorPair, to
 	out := volumeHistogram{Routes: make([]volumeRouteSeries, 0, topN+1), Totals: system}
 	other := make([]int64, 96)
 	var otherSum int64
-	paletteSize := topN
-	if len(totals) < paletteSize {
-		paletteSize = len(totals)
-	}
 	for i, rt := range totals {
 		if i < topN {
-			hex := rainbowHex(i, paletteSize)
+			c := colors[rt.id]
+			if c.color == "" {
+				c.color = "FFFFFF"
+			}
+			if c.text == "" {
+				c.text = "000000"
+			}
 			out.Routes = append(out.Routes, volumeRouteSeries{
 				RouteID:   rt.id,
-				Color:     hex,
-				TextColor: contrastTextHex(hex),
+				Color:     c.color,
+				TextColor: c.text,
 				Counts:    byRoute[rt.id],
 			})
 			continue
@@ -1260,62 +1258,6 @@ func buildVolumeHistogram(byRoute map[string][]int64, _ map[string]colorPair, to
 		})
 	}
 	return out
-}
-
-// rainbowHex returns a hex color (no leading "#") for index i of n,
-// stepping evenly around the HSL hue wheel at fixed saturation/lightness.
-func rainbowHex(i, n int) string {
-	if n < 1 {
-		n = 1
-	}
-	h := float64(i) / float64(n) * 360.0
-	return hslToHex(h, 0.65, 0.50)
-}
-
-func hslToHex(h, s, l float64) string {
-	c := (1 - math.Abs(2*l-1)) * s
-	hp := h / 60.0
-	x := c * (1 - math.Abs(math.Mod(hp, 2)-1))
-	var r, g, b float64
-	switch {
-	case hp < 1:
-		r, g, b = c, x, 0
-	case hp < 2:
-		r, g, b = x, c, 0
-	case hp < 3:
-		r, g, b = 0, c, x
-	case hp < 4:
-		r, g, b = 0, x, c
-	case hp < 5:
-		r, g, b = x, 0, c
-	default:
-		r, g, b = c, 0, x
-	}
-	m := l - c/2
-	return fmt.Sprintf("%02X%02X%02X",
-		uint8(math.Round((r+m)*255)),
-		uint8(math.Round((g+m)*255)),
-		uint8(math.Round((b+m)*255)))
-}
-
-// contrastTextHex returns "000000" or "FFFFFF" depending on which gives
-// better contrast against the supplied background hex (perceived
-// luminance, Rec. 601 weights).
-func contrastTextHex(bg string) string {
-	if len(bg) != 6 {
-		return "FFFFFF"
-	}
-	r, err1 := strconv.ParseUint(bg[0:2], 16, 8)
-	g, err2 := strconv.ParseUint(bg[2:4], 16, 8)
-	b, err3 := strconv.ParseUint(bg[4:6], 16, 8)
-	if err1 != nil || err2 != nil || err3 != nil {
-		return "FFFFFF"
-	}
-	lum := 0.299*float64(r) + 0.587*float64(g) + 0.114*float64(b)
-	if lum > 150 {
-		return "000000"
-	}
-	return "FFFFFF"
 }
 
 func nullableMinutes(v bigquery.NullInt64) *float64 {

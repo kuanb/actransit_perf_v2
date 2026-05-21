@@ -296,10 +296,18 @@ function render(data) {
       const m = (i % 4) * 15;
       return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
     });
-    const datasets = vh.routes.map((r) => ({
+    // The GTFS route_color values for AC Transit reuse a tiny palette
+    // (most routes are one of two reds or two greens), which makes the
+    // stacked volume chart effectively two-tone. Override with rainbow
+    // hues evenly spaced around the wheel for the top-N route series
+    // only; "Other" keeps its grey from the stats payload.
+    const topCount = vh.routes.filter((r) => r.route_id !== "Other").length;
+    const datasets = vh.routes.map((r, idx) => ({
       label: r.route_id,
       data: r.counts,
-      backgroundColor: `#${r.color}`,
+      backgroundColor: r.route_id === "Other"
+        ? `#${r.color}`
+        : `hsl(${(idx / Math.max(topCount, 1)) * 360} 65% 50%)`,
       borderWidth: 0,
       stack: "vol",
     }));
