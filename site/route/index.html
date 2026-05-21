@@ -320,6 +320,25 @@
       box-shadow: 0 1px 6px rgba(0,0,0,0.12);
     }
 
+    /* ── speed-no-data card (only shown in speed mode without segments) ─ */
+    #speed-no-data-banner {
+      position: absolute;
+      z-index: 6;
+      top: 110px;
+      left: 12px;
+      max-width: 280px;
+      background: #cfe2ff;
+      color: #084298;
+      border: 1px solid #9ec5fe;
+      border-radius: 6px;
+      padding: 10px 12px;
+      font-size: 12px;
+      line-height: 1.5;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.12);
+    }
+    #speed-no-data-banner strong { color: #042c66; }
+    #speed-no-data-banner[hidden] { display: none; }
+
     /* ── loading / error overlay ─────────────────────────── */
     #loading {
       position: absolute;
@@ -514,6 +533,14 @@
         <div class="legend-dot" style="width:22px;height:22px;margin-left:6px;background:rgba(231,76,60,0.55)"></div>
         <span class="legend-size-label">large = severe</span>
       </div>
+    </div>
+
+    <!-- Per-segment speed unavailable card (shown only in speed mode w/o data) -->
+    <div id="speed-no-data-banner" hidden>
+      <strong>Per-segment speed not yet computed for this week.</strong>
+      The new aggregation runs on the next weekly stats refresh — until
+      then the line is uncolored. Switch to <em>Schedule adherence</em>
+      above to see this week's data.
     </div>
 
     <!-- Loading overlay -->

@@ -491,6 +491,7 @@ function initMap() {
 // inner subway dot stays for landmarks) and shows colored segments.
 // Adherence mode does the inverse.
 function applyCategoryVisibility() {
+  updateSpeedNoDataBanner();
   if (!map) return;
   const isSpeed = activeCategory === "speed";
   const set = (id, vis) => {
@@ -499,6 +500,21 @@ function applyCategoryVisibility() {
   set(ROUTE_LAYER,     !isSpeed);
   set(STOPS_OUTER,     !isSpeed);
   set(SPEED_SEG_LAYER, isSpeed);
+}
+
+// updateSpeedNoDataBanner toggles the "per-segment speed not yet
+// computed" card on the map. Shown only when the user is in the speed
+// category AND the active direction has no segments[] array in the
+// route_speed JSON (or it's empty). Switching to adherence or to a
+// direction that does have data hides it again.
+function updateSpeedNoDataBanner() {
+  const banner = document.getElementById("speed-no-data-banner");
+  if (!banner) return;
+  if (activeCategory !== "speed") { banner.hidden = true; return; }
+  const dirs = speedData && speedData.directions;
+  const block = dirs ? (dirs[String(activeDir)] || dirs[activeDir]) : null;
+  const segs = block && Array.isArray(block.segments) ? block.segments : [];
+  banner.hidden = segs.length > 0;
 }
 
 function renderDirection() {
@@ -855,6 +871,7 @@ async function boot() {
   updateDirButtons();
   updateModeButtons();
   updateInfoPanel();
+  updateSpeedNoDataBanner();
 
   document.getElementById("loading").classList.add("hidden");
 
