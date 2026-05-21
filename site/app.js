@@ -87,6 +87,24 @@ function navigateTo(date) {
   window.location.href = url.toString();
 }
 
+// Same day-of-week, 7 / 14 / ... days back, intersected with the set of
+// service dates that actually have a stats file. UTC math: service_date is
+// a calendar string, not a moment in time, and YYYY-MM-DD is DST-stable
+// when we subtract 7-day multiples in UTC.
+function priorSameDowDates(serviceDate, indexDates, weeksBack = 2) {
+  const set = new Set(indexDates);
+  const [y, m, d] = serviceDate.split("-").map(Number);
+  const base = new Date(Date.UTC(y, m - 1, d));
+  const out = [];
+  for (let w = 1; w <= weeksBack; w++) {
+    const dt = new Date(base);
+    dt.setUTCDate(dt.getUTCDate() - 7 * w);
+    const ds = dt.toISOString().slice(0, 10);
+    if (set.has(ds)) out.push({ date: ds, weeksAgo: w });
+  }
+  return out;
+}
+
 // Trips not completed (as % of running trips): 0% = green, 25%+ = dark red.
 // Higher means more buses didn't finish their route. Daily-only.
 function gradeNotCompleted(pct) {
@@ -143,6 +161,113 @@ function routeBoxPlot(r) {
   </svg>`;
 }
 
+// Stacked-bar volume chart with optional same-DOW prior-week lines layered
+// on top. The bars are stacked by route (`stack: "vol"`); each prior-date
+// line gets its own unique `stack` so Chart.js doesn't fold its values
+// into the bar stack on the shared `stacked: true` y-axis.
+async function renderVolumeChart(vh, serviceDate, indexDates) {
+  const volSection = document.getElementById("volume-section");
+  if (!vh || !Array.isArray(vh.routes) || vh.routes.length === 0) {
+    volSection.hidden = true;
+    return;
+  }
+  volSection.hidden = false;
+
+  const labels = Array.from({ length: 96 }, (_, i) => {
+    const h = Math.floor(i / 4);
+    const m = (i % 4) * 15;
+    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  });
+
+  // The GTFS route_color values for AC Transit reuse a tiny palette
+  // (most routes are one of two reds or two greens), which makes the
+  // stacked volume chart effectively two-tone. Override with rainbow
+  // hues evenly spaced around the wheel for the top-N route series
+  // only; "Other" keeps its grey from the stats payload.
+  const topCount = vh.routes.filter((r) => r.route_id !== "Other").length;
+  const datasets = vh.routes.map((r, idx) => ({
+    label: r.route_id,
+    data: r.counts,
+    backgroundColor: r.route_id === "Other"
+      ? `#${r.color}`
+      : `hsl(${(idx / Math.max(topCount, 1)) * 360} 65% 50%)`,
+    borderWidth: 0,
+    stack: "vol",
+  }));
+
+  const priors = serviceDate ? priorSameDowDates(serviceDate, indexDates) : [];
+  const priorPayloads = (await Promise.all(
+    priors.map((p) =>
+      fetchJSON(statsURL(p.date))
+        .then((j) => ({ ...p, totals: j?.volume_15min_histogram?.totals }))
+        .catch(() => null)
+    )
+  )).filter((p) => p && Array.isArray(p.totals) && p.totals.length === 96);
+
+  for (const p of priorPayloads) {
+    datasets.push({
+      type: "line",
+      label: `${p.date} (${p.weeksAgo} wk ago)`,
+      data: p.totals,
+      borderColor: p.weeksAgo === 1 ? "rgba(40,40,40,0.65)" : "rgba(40,40,40,0.40)",
+      borderWidth: 1.5,
+      borderDash: p.weeksAgo === 2 ? [4, 3] : [],
+      pointRadius: 0,
+      pointHoverRadius: 4,
+      tension: 0.25,
+      fill: false,
+      stack: `prior-${p.date}`,
+    });
+  }
+
+  const volCtx = document.getElementById("volume-15min-chart").getContext("2d");
+  new Chart(volCtx, {
+    type: "bar",
+    data: { labels, datasets },
+    options: {
+      plugins: {
+        legend: { position: "bottom", labels: { boxWidth: 12, padding: 8 } },
+        tooltip: {
+          callbacks: {
+            title: (ctx) => {
+              const i = ctx[0].dataIndex;
+              const nextH = Math.floor((i + 1) / 4);
+              const nextM = ((i + 1) % 4) * 15;
+              const end = i === 95 ? "24:00"
+                : `${String(nextH).padStart(2, "0")}:${String(nextM).padStart(2, "0")}`;
+              return `${labels[i]}–${end} PT`;
+            },
+            label: (ctx) => `${ctx.dataset.label} · ${ctx.raw.toLocaleString()}`,
+            footer: (ctx) => {
+              const i = ctx[0].dataIndex;
+              const tot = (vh.totals && vh.totals[i]) || 0;
+              return `Total: ${tot.toLocaleString()}`;
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          stacked: true,
+          title: { display: true, text: "time of day (PT)" },
+          grid: { display: false },
+          ticks: {
+            autoSkip: false,
+            maxRotation: 0,
+            callback: (v, i) => (i % 8 === 0 ? labels[i] : ""),
+          },
+        },
+        y: {
+          stacked: true,
+          beginAtZero: true,
+          title: { display: true, text: "stop arrivals" },
+          ticks: { precision: 0 },
+        },
+      },
+    },
+  });
+}
+
 async function load() {
   const yearEl = document.getElementById("footer-year");
   if (yearEl) yearEl.textContent = new Date().getFullYear();
@@ -155,6 +280,8 @@ async function load() {
   // for offline iteration).
   const sources = [statsURL(date)];
   if (isLocal && !date) sources.push("data/stats.json");
+
+  const indexPromise = loadIndex();
 
   let data = null;
   let lastErr = null;
@@ -177,12 +304,12 @@ async function load() {
     return;
   }
 
-  render(data);
-  const dates = await loadIndex();
+  const dates = await indexPromise;
+  render(data, dates);
   renderDateSelector(dates, date || data.service_date);
 }
 
-function render(data) {
+function render(data, indexDates = []) {
   document.getElementById("meta").textContent =
     `Service date: ${data.service_date} · generated ${data.generated_at}`;
 
@@ -284,82 +411,7 @@ function render(data) {
     ncSection.hidden = true;
   }
 
-  // ---- volume by 15-min PT window (stacked by route) ----
-  // Field is absent on stats files generated before this chart shipped;
-  // hide the section instead of rendering an empty canvas.
-  const vh = data.volume_15min_histogram;
-  const volSection = document.getElementById("volume-section");
-  if (vh && Array.isArray(vh.routes) && vh.routes.length > 0) {
-    volSection.hidden = false;
-    const labels = Array.from({ length: 96 }, (_, i) => {
-      const h = Math.floor(i / 4);
-      const m = (i % 4) * 15;
-      return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-    });
-    // The GTFS route_color values for AC Transit reuse a tiny palette
-    // (most routes are one of two reds or two greens), which makes the
-    // stacked volume chart effectively two-tone. Override with rainbow
-    // hues evenly spaced around the wheel for the top-N route series
-    // only; "Other" keeps its grey from the stats payload.
-    const topCount = vh.routes.filter((r) => r.route_id !== "Other").length;
-    const datasets = vh.routes.map((r, idx) => ({
-      label: r.route_id,
-      data: r.counts,
-      backgroundColor: r.route_id === "Other"
-        ? `#${r.color}`
-        : `hsl(${(idx / Math.max(topCount, 1)) * 360} 65% 50%)`,
-      borderWidth: 0,
-      stack: "vol",
-    }));
-    const volCtx = document.getElementById("volume-15min-chart").getContext("2d");
-    new Chart(volCtx, {
-      type: "bar",
-      data: { labels, datasets },
-      options: {
-        plugins: {
-          legend: { position: "bottom", labels: { boxWidth: 12, padding: 8 } },
-          tooltip: {
-            callbacks: {
-              title: (ctx) => {
-                const i = ctx[0].dataIndex;
-                const nextH = Math.floor((i + 1) / 4);
-                const nextM = ((i + 1) % 4) * 15;
-                const end = i === 95 ? "24:00"
-                  : `${String(nextH).padStart(2, "0")}:${String(nextM).padStart(2, "0")}`;
-                return `${labels[i]}–${end} PT`;
-              },
-              label: (ctx) => `${ctx.dataset.label} · ${ctx.raw.toLocaleString()}`,
-              footer: (ctx) => {
-                const i = ctx[0].dataIndex;
-                const tot = (vh.totals && vh.totals[i]) || 0;
-                return `Total: ${tot.toLocaleString()}`;
-              },
-            },
-          },
-        },
-        scales: {
-          x: {
-            stacked: true,
-            title: { display: true, text: "time of day (PT)" },
-            grid: { display: false },
-            ticks: {
-              autoSkip: false,
-              maxRotation: 0,
-              callback: (v, i) => (i % 8 === 0 ? labels[i] : ""),
-            },
-          },
-          y: {
-            stacked: true,
-            beginAtZero: true,
-            title: { display: true, text: "stop arrivals" },
-            ticks: { precision: 0 },
-          },
-        },
-      },
-    });
-  } else {
-    volSection.hidden = true;
-  }
+  renderVolumeChart(data.volume_15min_histogram, data.service_date, indexDates);
 
   // ---- distortion histogram (42 buckets: under, 40 × 5%, over) ----
   const dh = data.distortion_histogram || { buckets: [], counts: [] };
