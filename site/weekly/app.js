@@ -417,15 +417,16 @@ function renderRouteDayGrid(data) {
         : n > 0 ? `<span class="rdgrid-p50">n=${intFmt(n)}</span>` : "";
     const badgeR = { route_id: r.route_id, color: r.color, text_color: r.text_color };
     const mapHref = `../route/?week_end=${encodeURIComponent(weekEndParam)}&route_id=${encodeURIComponent(r.route_id)}`;
-    html += `<div class="rdgrid-rlabel">${routeBadge(badgeR)}${p50Suffix}<a class="rdgrid-map-btn" href="${mapHref}" title="Evaluate route ${r.route_id} stop adherence on map">Map analysis</a></div>`;
+    const ridAttr = String(r.route_id).toLowerCase();
+    html += `<div class="rdgrid-rlabel" data-rid="${ridAttr}">${routeBadge(badgeR)}${p50Suffix}<a class="rdgrid-map-btn" href="${mapHref}" title="Evaluate route ${r.route_id} stop adherence on map">Map analysis</a></div>`;
     for (const cell of r.by_day) {
       const pct = cell.stop_sd_pct;
       if (pct === null || pct === undefined) {
-        html += `<div class="rdgrid-cell rdgrid-empty" title="${r.route_id} ${cell.day} — no data">—</div>`;
+        html += `<div class="rdgrid-cell rdgrid-empty" data-rid="${ridAttr}" title="${r.route_id} ${cell.day} — no data">—</div>`;
       } else {
         const grade = gradeStopSD(pct);
         const tip = `${r.route_id} ${cell.day} ${cell.service_date}: ${fmt(pct)}% stops delivered on time (n=${intFmt(cell.stop_n)})`;
-        html += `<div class="rdgrid-cell" style="background:${grade.bg};color:${grade.fg}" title="${tip}" data-date="${cell.service_date}">${fmt(pct, 0)}</div>`;
+        html += `<div class="rdgrid-cell" data-rid="${ridAttr}" style="background:${grade.bg};color:${grade.fg}" title="${tip}" data-date="${cell.service_date}">${fmt(pct, 0)}</div>`;
       }
     }
   }
@@ -443,6 +444,45 @@ function renderRouteDayGrid(data) {
       window.location.href = `../?date=${c.dataset.date}`;
     });
   });
+
+  wireRouteDayGridFilter(container, routes.length);
+}
+
+function wireRouteDayGridFilter(container, totalRows) {
+  const input = document.getElementById("rdgrid-search");
+  const clearBtn = document.getElementById("rdgrid-search-clear");
+  const countEl = document.getElementById("rdgrid-count");
+  if (!input || !clearBtn || !countEl) return;
+
+  const apply = () => {
+    const raw = input.value.toLowerCase().trim();
+    // Split on commas or whitespace; substring match against route_id.
+    const tokens = raw ? raw.split(/[\s,]+/).filter(Boolean) : [];
+    const matches = (rid) => tokens.length === 0 || tokens.some((t) => rid.includes(t));
+
+    let visible = 0;
+    const seen = new Set();
+    container.querySelectorAll("[data-rid]").forEach((el) => {
+      const rid = el.dataset.rid || "";
+      const ok = matches(rid);
+      el.classList.toggle("rdgrid-hidden", !ok);
+      if (ok && !seen.has(rid)) {
+        seen.add(rid);
+        visible++;
+      }
+    });
+    countEl.textContent = tokens.length === 0
+      ? `${totalRows} routes`
+      : `${visible} of ${totalRows} routes`;
+  };
+
+  input.addEventListener("input", apply);
+  clearBtn.addEventListener("click", () => {
+    input.value = "";
+    apply();
+    input.focus();
+  });
+  apply();
 }
 
 load();

@@ -499,6 +499,7 @@ canvas { max-width: 100%; height: auto !important; }
   color: #999;
   cursor: default;
 }
+.rdgrid-hidden { display: none; }
 .rdgrid-map-btn {
   margin-left: auto;
   font-size: 11px;
