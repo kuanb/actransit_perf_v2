@@ -97,6 +97,73 @@
       font-size: 12px;
     }
 
+    /* ── speed section (same shell as wait-time) ────────────── */
+    #speed-section {
+      padding: 14px 20px 18px;
+      border-bottom: 1px solid #e5e5e5;
+      margin: 0;
+    }
+    #speed-details > summary {
+      cursor: pointer;
+      list-style: none;
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      padding: 4px 0;
+      user-select: none;
+    }
+    #speed-details > summary::-webkit-details-marker { display: none; }
+    #speed-details > summary::before {
+      content: "▸";
+      display: inline-block;
+      width: 0.9em;
+      color: #888;
+      transition: transform 0.15s ease;
+    }
+    #speed-details[open] > summary::before { transform: rotate(90deg); }
+    .sp-title { font-weight: 600; font-size: 16px; }
+    .sp-sub { font-size: 12px; }
+    .sp-body { margin-top: 10px; }
+    .sp-body .defn { font-size: 12px; line-height: 1.55; }
+    .sp-charts {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 18px;
+      margin-top: 16px;
+    }
+    @media (min-width: 980px) {
+      .sp-charts {
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: auto auto;
+        grid-template-areas:
+          "central-in   tail-in"
+          "central-out  tail-out";
+      }
+      .sp-central-in  { grid-area: central-in; }
+      .sp-tail-in     { grid-area: tail-in; }
+      .sp-central-out { grid-area: central-out; }
+      .sp-tail-out    { grid-area: tail-out; }
+    }
+    .sp-charts canvas { max-height: 260px; }
+    .sp-charts .sp-pane h3 { margin: 0 0 4px; }
+    .sp-charts .sp-pane .sp-pane-sub {
+      font-size: 11px;
+      color: #888;
+      margin: 0 0 6px;
+    }
+    #speed-cards { margin-top: 10px; }
+    #speed-cards .card .val { font-size: 18px; }
+    #speed-cards.cards { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+    #speed-empty {
+      margin: 10px 0 0;
+      padding: 10px 12px;
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      color: #856404;
+      border-radius: 6px;
+      font-size: 12px;
+    }
+
     /* ── map overlay controls ───────────────────────────── */
     .map-ctrl {
       position: absolute;
@@ -310,6 +377,59 @@
           </div>
         </div>
         <div id="wait-empty" hidden></div>
+      </div>
+    </details>
+  </section>
+
+  <section id="speed-section">
+    <details id="speed-details" open>
+      <summary>
+        <span class="sp-title">Speed by hour of day</span>
+        <span class="muted sp-sub" id="speed-sub">Per direction · weekday vs weekend (mph)</span>
+      </summary>
+      <div class="sp-body">
+        <p class="muted defn">
+          Per-leg average speed is computed in
+          <a href="../../cmd/scraper/bq.go">tripToRows</a> as
+          <code>(distance between consecutive stops) / (time between
+          consecutive actual arrivals)</code>. The histograms below
+          aggregate those per-leg speeds across every observed leg of
+          this route in the selected week, grouped by direction (inbound
+          / outbound), day-of-week type, and hour of day in Pacific
+          time. Hours with fewer than 10 legs are dropped to avoid
+          percentile noise; outliers above 78 mph are filtered in the
+          BigQuery aggregation as projection glitches.
+        </p>
+        <p class="muted defn">
+          <strong>Left column:</strong> central tendency — solid line is
+          the mean, dashed is p50 (median). <strong>Right column:</strong>
+          upper tail and dispersion — solid is p95, dashed is p99,
+          dotted is standard deviation. Blue = weekday, pink = weekend.
+        </p>
+        <div id="speed-cards" class="cards"></div>
+        <div class="sp-charts">
+          <div class="sp-pane sp-central-in">
+            <h3 class="sub-h">Inbound — central speed (mean, p50) by hour</h3>
+            <p class="sp-pane-sub">direction_id = 1</p>
+            <canvas id="speed-central-in-chart" width="900" height="260"></canvas>
+          </div>
+          <div class="sp-pane sp-tail-in">
+            <h3 class="sub-h">Inbound — p95, p99, stddev by hour</h3>
+            <p class="sp-pane-sub">direction_id = 1</p>
+            <canvas id="speed-tail-in-chart" width="900" height="260"></canvas>
+          </div>
+          <div class="sp-pane sp-central-out">
+            <h3 class="sub-h">Outbound — central speed (mean, p50) by hour</h3>
+            <p class="sp-pane-sub">direction_id = 0</p>
+            <canvas id="speed-central-out-chart" width="900" height="260"></canvas>
+          </div>
+          <div class="sp-pane sp-tail-out">
+            <h3 class="sub-h">Outbound — p95, p99, stddev by hour</h3>
+            <p class="sp-pane-sub">direction_id = 0</p>
+            <canvas id="speed-tail-out-chart" width="900" height="260"></canvas>
+          </div>
+        </div>
+        <div id="speed-empty" hidden></div>
       </div>
     </details>
   </section>

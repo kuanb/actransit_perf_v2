@@ -1,5 +1,5 @@
 // Route-level map investigation page.
-// URL params: ?week_end=YYYY-MM-DD&route_id=<id>&pct=p95|p50&mode=adherence|volatility&dir=0|1&stats=open|closed
+// URL params: ?week_end=YYYY-MM-DD&route_id=<id>&pct=p95|p50&mode=adherence|volatility&dir=0|1&stats=open|closed&speed=open|closed
 
 const params = new URLSearchParams(window.location.search);
 const weekEnd = params.get("week_end") || "";
@@ -8,6 +8,7 @@ let activeDir = parseInt(params.get("dir") || "0", 10);
 let activePct = params.get("pct") || "p95"; // "p50" | "p95"
 let activeMode = params.get("mode") || "adherence"; // "adherence" | "volatility"
 let statsOpen = (params.get("stats") || "open") !== "closed";
+let speedOpen = (params.get("speed") || "open") !== "closed";
 
 // ── colour + size helpers ──────────────────────────────────────────────────
 
@@ -106,6 +107,8 @@ function syncURL() {
   url.searchParams.set("mode", activeMode);
   if (statsOpen) url.searchParams.delete("stats");
   else url.searchParams.set("stats", "closed");
+  if (speedOpen) url.searchParams.delete("speed");
+  else url.searchParams.set("speed", "closed");
   window.history.replaceState(null, "", url.toString());
 }
 
@@ -129,14 +132,18 @@ async function loadData() {
   const waitURL = weekEnd
     ? `${GCS_BASE}/stats/weekly/route_wait/${weekEnd}/${safe}.json`
     : null;
+  const speedURL = weekEnd
+    ? `${GCS_BASE}/stats/weekly/route_speed/${weekEnd}/${safe}.json`
+    : null;
 
   try {
-    const [gtfs, stopStats, waitStats] = await Promise.all([
+    const [gtfs, stopStats, waitStats, speedStats] = await Promise.all([
       fetchJSON(gtfsURL),
-      statsURL ? fetchJSON(statsURL).catch(() => null) : Promise.resolve(null),
-      waitURL  ? fetchJSON(waitURL).catch(() => null)  : Promise.resolve(null),
+      statsURL  ? fetchJSON(statsURL).catch(() => null)  : Promise.resolve(null),
+      waitURL   ? fetchJSON(waitURL).catch(() => null)   : Promise.resolve(null),
+      speedURL  ? fetchJSON(speedURL).catch(() => null)  : Promise.resolve(null),
     ]);
-    return { gtfs, stopStats, waitStats };
+    return { gtfs, stopStats, waitStats, speedStats };
   } catch (e) {
     document.getElementById("loading").textContent = `Failed to load data: ${e.message}`;
     return null;
@@ -534,7 +541,17 @@ async function boot() {
     });
   }
 
+  const speedDetails = document.getElementById("speed-details");
+  if (speedDetails) {
+    speedDetails.open = speedOpen;
+    speedDetails.addEventListener("toggle", () => {
+      speedOpen = speedDetails.open;
+      syncURL();
+    });
+  }
+
   renderWaitTime(data.waitStats);
+  renderSpeed(data.speedStats);
 
   updateDirButtons();
   updateModeButtons();
@@ -798,6 +815,185 @@ function renderWaitHourTail(weekdayHours, weekendHours) {
       },
     },
   });
+}
+
+// ── speed-by-hour section rendering ────────────────────────────────────────
+
+const SPEED_DAY_TYPE_COLORS = {
+  weekday: "#1971c2",
+  weekend: "#d6336c",
+};
+
+// Direction → canvas id pair (central, tail). Inbound = direction_id "1",
+// Outbound = direction_id "0", matching the dir-toggle button labels.
+const SPEED_DIRECTIONS = [
+  { id: "1", label: "inbound",  centralCanvas: "speed-central-in-chart",  tailCanvas: "speed-tail-in-chart"  },
+  { id: "0", label: "outbound", centralCanvas: "speed-central-out-chart", tailCanvas: "speed-tail-out-chart" },
+];
+
+function fmtMaybeMph(v) {
+  return v === null || v === undefined ? "—" : `${Number(v).toFixed(1)} mph`;
+}
+
+function renderSpeed(speed) {
+  const empty = document.getElementById("speed-empty");
+  if (!speed || !speed.directions || Object.keys(speed.directions).length === 0) {
+    document.getElementById("speed-cards").innerHTML = "";
+    empty.textContent = weekEnd
+      ? "Speed stats not yet computed for this week — check back after the next Sunday roll-up."
+      : "Open this page via a route's map link on the weekly dashboard to load speed stats.";
+    empty.hidden = false;
+    return;
+  }
+  empty.hidden = true;
+
+  renderSpeedCards(speed);
+  for (const dir of SPEED_DIRECTIONS) {
+    const block = speed.directions[dir.id] || { days: {} };
+    const wd = block.days?.weekday;
+    const we = block.days?.weekend;
+    renderSpeedCentralChart(dir.centralCanvas, wd?.by_hour, we?.by_hour);
+    renderSpeedTailChart(dir.tailCanvas, wd?.by_hour, we?.by_hour);
+  }
+}
+
+function renderSpeedCards(speed) {
+  const items = [];
+  for (const dir of SPEED_DIRECTIONS) {
+    const block = speed.directions[dir.id] || { days: {} };
+    const wdS = block.days?.weekday?.summary || {};
+    const weS = block.days?.weekend?.summary || {};
+    items.push(
+      { label: `Mean — ${dir.label} weekday`, val: fmtMaybeMph(wdS.mean_mph) },
+      { label: `p95 — ${dir.label} weekday`,  val: fmtMaybeMph(wdS.p95_mph) },
+      { label: `Stddev — ${dir.label} weekday`, val: fmtMaybeMph(wdS.stddev_mph) },
+      { label: `Mean — ${dir.label} weekend`, val: fmtMaybeMph(weS.mean_mph) },
+      { label: `p95 — ${dir.label} weekend`,  val: fmtMaybeMph(weS.p95_mph) },
+      { label: `Stddev — ${dir.label} weekend`, val: fmtMaybeMph(weS.stddev_mph) },
+    );
+  }
+  renderCards("#speed-cards", items);
+}
+
+function speedSeriesFor(hours, key) {
+  const out = new Array(24).fill(null);
+  if (!Array.isArray(hours)) return out;
+  for (const c of hours) {
+    if (c.hour >= 0 && c.hour < 24) out[c.hour] = c[key] ?? null;
+  }
+  return out;
+}
+
+function renderSpeedCentralChart(canvasId, weekdayHours, weekendHours) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const blue = SPEED_DAY_TYPE_COLORS.weekday;
+  const pink = SPEED_DAY_TYPE_COLORS.weekend;
+  const labels = Array.from({ length: 24 }, (_, h) => h);
+  const datasets = [
+    {
+      label: "weekday mean",
+      data: speedSeriesFor(weekdayHours, "mean_mph"),
+      borderColor: blue, backgroundColor: blue,
+      borderWidth: 2, pointRadius: 2, spanGaps: false, tension: 0.2,
+    },
+    {
+      label: "weekday p50",
+      data: speedSeriesFor(weekdayHours, "p50_mph"),
+      borderColor: blue, backgroundColor: blue,
+      borderWidth: 2, borderDash: [4, 4], pointRadius: 2, spanGaps: false, tension: 0.2,
+    },
+    {
+      label: "weekend mean",
+      data: speedSeriesFor(weekendHours, "mean_mph"),
+      borderColor: pink, backgroundColor: pink,
+      borderWidth: 2, pointRadius: 2, spanGaps: false, tension: 0.2,
+    },
+    {
+      label: "weekend p50",
+      data: speedSeriesFor(weekendHours, "p50_mph"),
+      borderColor: pink, backgroundColor: pink,
+      borderWidth: 2, borderDash: [4, 4], pointRadius: 2, spanGaps: false, tension: 0.2,
+    },
+  ];
+  new Chart(ctx, {
+    type: "line",
+    data: { labels, datasets },
+    options: speedChartOptions("speed (mph)"),
+  });
+}
+
+function renderSpeedTailChart(canvasId, weekdayHours, weekendHours) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const blue = SPEED_DAY_TYPE_COLORS.weekday;
+  const pink = SPEED_DAY_TYPE_COLORS.weekend;
+  const labels = Array.from({ length: 24 }, (_, h) => h);
+  const datasets = [
+    {
+      label: "weekday p95",
+      data: speedSeriesFor(weekdayHours, "p95_mph"),
+      borderColor: blue, backgroundColor: blue,
+      borderWidth: 2, pointRadius: 2, spanGaps: false, tension: 0.2,
+    },
+    {
+      label: "weekday p99",
+      data: speedSeriesFor(weekdayHours, "p99_mph"),
+      borderColor: blue, backgroundColor: blue,
+      borderWidth: 2, borderDash: [4, 4], pointRadius: 2, spanGaps: false, tension: 0.2,
+    },
+    {
+      label: "weekday stddev",
+      data: speedSeriesFor(weekdayHours, "stddev_mph"),
+      borderColor: blue, backgroundColor: blue,
+      borderWidth: 2, borderDash: [2, 3], pointRadius: 1.5, spanGaps: false, tension: 0.2,
+    },
+    {
+      label: "weekend p95",
+      data: speedSeriesFor(weekendHours, "p95_mph"),
+      borderColor: pink, backgroundColor: pink,
+      borderWidth: 2, pointRadius: 2, spanGaps: false, tension: 0.2,
+    },
+    {
+      label: "weekend p99",
+      data: speedSeriesFor(weekendHours, "p99_mph"),
+      borderColor: pink, backgroundColor: pink,
+      borderWidth: 2, borderDash: [4, 4], pointRadius: 2, spanGaps: false, tension: 0.2,
+    },
+    {
+      label: "weekend stddev",
+      data: speedSeriesFor(weekendHours, "stddev_mph"),
+      borderColor: pink, backgroundColor: pink,
+      borderWidth: 2, borderDash: [2, 3], pointRadius: 1.5, spanGaps: false, tension: 0.2,
+    },
+  ];
+  new Chart(ctx, {
+    type: "line",
+    data: { labels, datasets },
+    options: speedChartOptions("mph"),
+  });
+}
+
+function speedChartOptions(yLabel) {
+  return {
+    plugins: {
+      legend: { display: true, position: "top", labels: { boxWidth: 14, font: { size: 10 } } },
+      tooltip: {
+        callbacks: {
+          title: (ctx) => `${ctx[0].label}:00 PT`,
+          label: (ctx) => ctx.parsed.y === null
+            ? `${ctx.dataset.label}: no data`
+            : `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)} mph`,
+        },
+      },
+    },
+    scales: {
+      x: { title: { display: true, text: "hour of day (PT)" }, grid: { display: false } },
+      y: { title: { display: true, text: yLabel }, beginAtZero: true },
+    },
+  };
 }
 
 boot();

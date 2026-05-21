@@ -192,6 +192,9 @@ func processWeeklyStats(ctx context.Context, weekEndSat civil.Date) (*weeklyStat
 	if err := generateAllRouteWaitTimeStats(ctx, weekStart, weekEndSat); err != nil {
 		slog.Warn("route wait time stats failed (non-fatal)", "err", err)
 	}
+	if err := generateAllRouteSpeedStats(ctx, weekStart, weekEndSat); err != nil {
+		slog.Warn("route speed weekly stats failed (non-fatal)", "err", err)
+	}
 	return out, nil
 }
 
