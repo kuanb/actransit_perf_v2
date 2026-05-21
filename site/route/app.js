@@ -1,5 +1,8 @@
 // Route-level map investigation page.
-// URL params: ?week_end=YYYY-MM-DD&route_id=<id>&pct=p95|p50&mode=adherence|volatility&dir=0|1&stats=open|closed&speed=open|closed
+// URL params: ?week_end=YYYY-MM-DD&route_id=<id>&dir=0|1
+//             &pct=p95|p50&mode=adherence|volatility           (schedule-adherence category)
+//             &category=adherence|speed&speed_metric=mean|p50|stddev  (new: route-speed category)
+//             &stats=open|closed&speed=open|closed
 
 const params = new URLSearchParams(window.location.search);
 const weekEnd = params.get("week_end") || "";
@@ -7,6 +10,8 @@ const routeID = params.get("route_id") || "";
 let activeDir = parseInt(params.get("dir") || "0", 10);
 let activePct = params.get("pct") || "p95"; // "p50" | "p95"
 let activeMode = params.get("mode") || "adherence"; // "adherence" | "volatility"
+let activeCategory = params.get("category") || "adherence"; // "adherence" | "speed"
+let activeSpeedMetric = params.get("speed_metric") || "mean"; // "mean" | "p50" | "stddev"
 let statsOpen = (params.get("stats") || "open") !== "closed";
 let speedOpen = (params.get("speed") || "open") !== "closed";
 
@@ -48,6 +53,46 @@ function volatilityColor(stddevSec) {
   return blend(YELLOW, RED, 0.5 + Math.min(1, (stddevSec - 180) / 180) * 0.5);
 }
 
+// Multi-stop linear interpolation between RGB anchors keyed on a numeric
+// value. Values outside the range clamp to the nearest anchor. Shared
+// by the speed and speed-stddev gradients below.
+function interpRGB(v, stops) {
+  if (v === null || v === undefined || isNaN(v)) return [180, 180, 180];
+  if (v <= stops[0].v) return stops[0].rgb;
+  if (v >= stops[stops.length - 1].v) return stops[stops.length - 1].rgb;
+  for (let i = 0; i < stops.length - 1; i++) {
+    const lo = stops[i], hi = stops[i + 1];
+    if (v <= hi.v) {
+      const t = (v - lo.v) / (hi.v - lo.v);
+      return lo.rgb.map((c, j) => Math.round(c + (hi.rgb[j] - c) * t));
+    }
+  }
+  return stops[stops.length - 1].rgb;
+}
+
+// speedColor: per-leg average speed in mph mapped onto a slow→fast
+// gradient. 5 mph = dark red, 8 mph = red, 12 mph = yellow,
+// 15 mph = light green, 19+ mph = solid green. Used for both the mean
+// and p50 speed views — same scale, different value source.
+const SPEED_GRADIENT = [
+  { v: 5,  rgb: [120,  10,  10] }, // dark red
+  { v: 8,  rgb: [231,  76,  60] }, // red
+  { v: 12, rgb: [243, 200,  30] }, // yellow
+  { v: 15, rgb: [150, 210, 120] }, // light green
+  { v: 19, rgb: [ 39, 174,  96] }, // solid green
+];
+function speedColor(mph) { return interpRGB(mph, SPEED_GRADIENT); }
+
+// speedStddevColor: per-leg speed dispersion in mph. Low stddev =
+// predictable trips = good (green); high stddev = bus speeds swing
+// wildly leg-to-leg = bad (red). 1 mph or less green, 7 mph or more red.
+const SPEED_STDDEV_GRADIENT = [
+  { v: 1, rgb: [ 39, 174,  96] }, // green
+  { v: 4, rgb: [243, 200,  30] }, // yellow midpoint
+  { v: 7, rgb: [120,  10,  10] }, // dark red
+];
+function speedStddevColor(mph) { return interpRGB(mph, SPEED_STDDEV_GRADIENT); }
+
 function toHex(arr) {
   return "#" + arr.map(v => v.toString(16).padStart(2, "0")).join("");
 }
@@ -74,28 +119,69 @@ function getStopColor(val) {
 // ── explanation text ───────────────────────────────────────────────────────
 
 const INFO_TEXT = {
-  "adherence-p95": "Circle color shows how late the 95th-percentile bus is at each stop — the worst ~1-in-20 arrivals. Green = within −1 to +3 min of schedule; yellow = up to 7 min late; red = beyond that. Larger circles mean bigger delay at that percentile.",
-  "adherence-p50": "Circle color shows the median (p50) delay at each stop — the typical bus experience. Green = within −1 to +3 min of schedule; yellow = up to 7 min late; red = beyond. Larger circles mean higher typical delay.",
-  "volatility":    "Circle color and size show the standard deviation of arrival delay across all observed trips at each stop for the week. Low stddev (green, small) = consistent timing even if somewhat late. High stddev (red, large) = unpredictable — some trips arrive on time, others very late.",
+  "adherence-p95":   "Circle color shows how late the 95th-percentile bus is at each stop — the worst ~1-in-20 arrivals. Green = within −1 to +3 min of schedule; yellow = up to 7 min late; red = beyond that. Larger circles mean bigger delay at that percentile.",
+  "adherence-p50":   "Circle color shows the median (p50) delay at each stop — the typical bus experience. Green = within −1 to +3 min of schedule; yellow = up to 7 min late; red = beyond. Larger circles mean higher typical delay.",
+  "volatility":      "Circle color and size show the standard deviation of arrival delay across all observed trips at each stop for the week. Low stddev (green, small) = consistent timing even if somewhat late. High stddev (red, large) = unpredictable — some trips arrive on time, others very late.",
+  "speed-mean":      "Line color shows the mean per-leg bus speed (mph) between consecutive stops, averaged across the week. Each leg's speed is computed as (distance / time) per observed trip; the line color is the mean of those. Red ≤ 5 mph (very slow), yellow ≈ 12 mph, green ≥ 19 mph (free-flowing).",
+  "speed-p50":       "Line color shows the median (p50) per-leg bus speed between consecutive stops over the week. Same colorscale as the mean view: red ≤ 5 mph, yellow ≈ 12 mph, green ≥ 19 mph.",
+  "speed-stddev":    "Line color shows the variability in per-leg bus speed (stddev across observed trips). Low stddev (green, ≤ 1 mph) = consistent leg times; high stddev (red, ≥ 7 mph) = unpredictable — some buses sail through, others crawl.",
 };
 
 const LEGEND_LABELS = {
-  "adherence": ["−1 min (early)", "+3 min", "+7 min+"],
-  "volatility": ["low variation", "moderate", "high variation"],
+  "adherence":     ["−1 min (early)", "+3 min", "+7 min+"],
+  "volatility":    ["low variation", "moderate", "high variation"],
+  "speed":         ["≤5 mph (slow)", "12 mph", "≥19 mph (fast)"],
+  "speed-stddev":  ["≤1 mph (steady)", "4 mph", "≥7 mph (volatile)"],
 };
 
+const LEGEND_BARS = {
+  "adherence":    "linear-gradient(to right, #2ecc71, #f39c12, #e74c3c)",
+  "volatility":   "linear-gradient(to right, #2ecc71, #f39c12, #e74c3c)",
+  "speed":        "linear-gradient(to right, rgb(120,10,10), rgb(231,76,60), rgb(243,200,30), rgb(150,210,120), rgb(39,174,96))",
+  "speed-stddev": "linear-gradient(to right, rgb(39,174,96), rgb(243,200,30), rgb(120,10,10))",
+};
+
+// legendKeyFor returns the key into LEGEND_LABELS / LEGEND_BARS that
+// matches the currently active view. Routes p50 + mean to the same
+// "speed" scale (slow→fast); stddev gets its own (steady→volatile)
+// because the polarity is flipped.
+function legendKeyFor() {
+  if (activeCategory === "speed") {
+    return activeSpeedMetric === "stddev" ? "speed-stddev" : "speed";
+  }
+  return activeMode === "volatility" ? "volatility" : "adherence";
+}
+
+function infoKeyFor() {
+  if (activeCategory === "speed") return `speed-${activeSpeedMetric}`;
+  return activeMode === "volatility" ? "volatility" : `adherence-${activePct}`;
+}
+
 function updateInfoPanel() {
-  const key = activeMode === "volatility" ? "volatility" : `adherence-${activePct}`;
-  document.getElementById("info-text").textContent = INFO_TEXT[key];
-  const labels = LEGEND_LABELS[activeMode];
+  document.getElementById("info-text").textContent = INFO_TEXT[infoKeyFor()] || "";
+
+  const lkey = legendKeyFor();
+  const labels = LEGEND_LABELS[lkey] || [];
   const spans = document.querySelectorAll("#legend-labels span");
-  if (spans.length === 3 && labels) {
+  if (spans.length === 3 && labels.length === 3) {
     spans[0].textContent = labels[0];
     spans[1].textContent = labels[1];
     spans[2].textContent = labels[2];
   }
-  document.getElementById("legend-title").textContent =
-    activeMode === "volatility" ? "Volatility (stddev)" : "Schedule adherence";
+  const bar = document.getElementById("legend-bar");
+  if (bar && LEGEND_BARS[lkey]) bar.style.background = LEGEND_BARS[lkey];
+
+  let title;
+  if (activeCategory === "speed") {
+    title = activeSpeedMetric === "stddev" ? "Speed variability (mph)" : "Average bus speed (mph)";
+  } else {
+    title = activeMode === "volatility" ? "Volatility (stddev)" : "Schedule adherence";
+  }
+  document.getElementById("legend-title").textContent = title;
+
+  // Size legend (small/large circles) only meaningful for adherence stops.
+  const sizeRow = document.getElementById("legend-size-row");
+  if (sizeRow) sizeRow.style.display = activeCategory === "speed" ? "none" : "";
 }
 
 // ── URL sync ───────────────────────────────────────────────────────────────
@@ -103,8 +189,20 @@ function updateInfoPanel() {
 function syncURL() {
   const url = new URL(window.location.href);
   url.searchParams.set("dir", String(activeDir));
-  url.searchParams.set("pct", activePct);
-  url.searchParams.set("mode", activeMode);
+  if (activeCategory === "speed") {
+    url.searchParams.set("category", "speed");
+    url.searchParams.set("speed_metric", activeSpeedMetric);
+    // Keep adherence params reachable in the URL so toggling back is
+    // a one-click op, but don't bother including them if they're at
+    // the default.
+    url.searchParams.delete("pct");
+    url.searchParams.delete("mode");
+  } else {
+    url.searchParams.delete("category");
+    url.searchParams.delete("speed_metric");
+    url.searchParams.set("pct", activePct);
+    url.searchParams.set("mode", activeMode);
+  }
   if (statsOpen) url.searchParams.delete("stats");
   else url.searchParams.set("stats", "closed");
   if (speedOpen) url.searchParams.delete("speed");
@@ -152,22 +250,27 @@ async function loadData() {
 
 // ── GTFS direction helpers ─────────────────────────────────────────────────
 
-// Returns { 0: { shapeID, stopIDs }, 1: { shapeID, stopIDs } }
+// Returns { 0: { shapeID, stopIDs, representativeTrip }, 1: {...} }
 function buildDirections(gtfs) {
   const dirs = {};
   const shapeCounts = {}; // dir → { shapeID → count }
+  const tripsByDir = {};
 
   for (const trip of Object.values(gtfs.trips)) {
     const d = trip.direction_id;
     if (!dirs[d]) { dirs[d] = { stopIDs: new Set(), shapeIDs: {} }; }
     if (!shapeCounts[d]) shapeCounts[d] = {};
+    if (!tripsByDir[d]) tripsByDir[d] = [];
     shapeCounts[d][trip.shape_id] = (shapeCounts[d][trip.shape_id] || 0) + 1;
     for (const st of trip.stop_times) {
       dirs[d].stopIDs.add(st.stop_id);
     }
+    tripsByDir[d].push(trip);
   }
 
-  // Pick the most-common shape_id per direction
+  // For each direction: dominant shape_id by trip count, plus the trip
+  // riding that shape that has the most stops (used as the representative
+  // stop-time sequence for slicing the route shape into per-pair segments).
   for (const d of Object.keys(dirs)) {
     const counts = shapeCounts[d] || {};
     let best = null, bestN = 0;
@@ -176,8 +279,48 @@ function buildDirections(gtfs) {
     }
     dirs[d].shapeID = best;
     dirs[d].stopIDs = [...dirs[d].stopIDs];
+
+    let rep = null, repN = 0;
+    for (const t of (tripsByDir[d] || [])) {
+      if (t.shape_id !== best) continue;
+      if (t.stop_times.length > repN) { rep = t; repN = t.stop_times.length; }
+    }
+    dirs[d].representativeTrip = rep;
   }
   return dirs;
+}
+
+// sliceShape extracts the polyline coordinates between two cumulative
+// distances along a route shape. shape entries are [lat, lon, dist_m].
+// Returns [[lon, lat], ...] (GeoJSON order) including interpolated
+// endpoints. Returns null if the slice would have fewer than 2 points
+// (zero-length or out-of-range request).
+function sliceShape(shape, distStart, distEnd) {
+  if (!Array.isArray(shape) || shape.length < 2) return null;
+  if (distEnd <= distStart) return null;
+  const out = [];
+  for (let i = 0; i < shape.length - 1; i++) {
+    const [lat1, lon1, d1] = shape[i];
+    const [lat2, lon2, d2] = shape[i + 1];
+    if (d2 < distStart) continue;
+    if (d1 > distEnd) break;
+    if (out.length === 0) {
+      if (d1 >= distStart) {
+        out.push([lon1, lat1]);
+      } else {
+        const t = (distStart - d1) / (d2 - d1);
+        out.push([lon1 + (lon2 - lon1) * t, lat1 + (lat2 - lat1) * t]);
+      }
+    }
+    if (d2 <= distEnd) {
+      out.push([lon2, lat2]);
+    } else {
+      const t = (distEnd - d1) / (d2 - d1);
+      out.push([lon1 + (lon2 - lon1) * t, lat1 + (lat2 - lat1) * t]);
+      break;
+    }
+  }
+  return out.length >= 2 ? out : null;
 }
 
 // GeoJSON LineString from shape array [[lat, lon, dist_m], …]
@@ -198,6 +341,7 @@ let map = null;
 let popup = null;
 let gtfsData = null;
 let stopStatsData = null;
+let speedData = null;
 let directions = null;
 
 const ROUTE_SOURCE     = "route-shape";
@@ -208,6 +352,73 @@ const STOPS_INNER      = "stops-inner";
 const ENDPOINTS_SOURCE = "route-endpoints";
 const ENDPOINTS_DOT    = "endpoints-dot";
 const ENDPOINTS_LABEL  = "endpoints-label";
+const SPEED_SEG_SOURCE = "speed-segments";
+const SPEED_SEG_LAYER  = "speed-segments-line";
+
+// segmentLookupFor returns a map keyed on "from_stop_id__to_stop_id"
+// → segment summary for the given direction. Returns {} when speed
+// data hasn't loaded or the direction is missing.
+function segmentLookupFor(dirID) {
+  const dirs = speedData && speedData.directions;
+  if (!dirs) return {};
+  const block = dirs[String(dirID)] || dirs[dirID];
+  if (!block || !Array.isArray(block.segments)) return {};
+  const out = {};
+  for (const s of block.segments) {
+    out[`${s.from_stop_id}__${s.to_stop_id}`] = s;
+  }
+  return out;
+}
+
+function segmentMetricValue(seg) {
+  if (!seg) return null;
+  if (activeSpeedMetric === "p50")    return seg.p50_mph ?? null;
+  if (activeSpeedMetric === "stddev") return seg.stddev_mph ?? null;
+  return seg.mean_mph ?? null; // default: avg/mean
+}
+
+function segmentColor(seg) {
+  const v = segmentMetricValue(seg);
+  return activeSpeedMetric === "stddev" ? speedStddevColor(v) : speedColor(v);
+}
+
+function buildSpeedSegmentFeatures() {
+  if (!gtfsData || !directions) return { type: "FeatureCollection", features: [] };
+  const dirData = directions[activeDir] || directions[Object.keys(directions)[0]];
+  if (!dirData || !dirData.representativeTrip) return { type: "FeatureCollection", features: [] };
+
+  const shape = gtfsData.shapes[dirData.shapeID];
+  const stops = gtfsData.stops;
+  const trip = dirData.representativeTrip;
+  const lookup = segmentLookupFor(activeDir);
+
+  const features = [];
+  const st = trip.stop_times;
+  for (let i = 1; i < st.length; i++) {
+    const prev = st[i - 1], curr = st[i];
+    const coords = sliceShape(shape, prev.dist_along_route_m, curr.dist_along_route_m);
+    if (!coords) continue;
+    const seg = lookup[`${prev.stop_id}__${curr.stop_id}`] || null;
+    const rgb = segmentColor(seg);
+    features.push({
+      type: "Feature",
+      geometry: { type: "LineString", coordinates: coords },
+      properties: {
+        from_stop_id:   prev.stop_id,
+        to_stop_id:     curr.stop_id,
+        from_stop_name: (stops[prev.stop_id] || {}).stop_name || prev.stop_id,
+        to_stop_name:   (stops[curr.stop_id] || {}).stop_name || curr.stop_id,
+        mean_mph:       seg ? (seg.mean_mph ?? null)   : null,
+        p50_mph:        seg ? (seg.p50_mph ?? null)    : null,
+        stddev_mph:     seg ? (seg.stddev_mph ?? null) : null,
+        n:              seg ? (seg.n ?? null)          : null,
+        has_data:       !!seg,
+        color:          toHex(rgb),
+      },
+    });
+  }
+  return { type: "FeatureCollection", features };
+}
 
 function initMap() {
   mapboxgl.accessToken = MAPBOX_TOKEN;
@@ -224,12 +435,14 @@ function initMap() {
 
   map.on("load", () => renderDirection());
 
+  // Mapbox GL serializes null JSON properties as the string "null".
+  const numProp = (v) => (v === null || v === "null" || v === undefined) ? null : Number(v);
+  const delayMin = (v) => { const n = numProp(v); return n !== null && !isNaN(n) ? (n / 60).toFixed(1) + " min" : "—"; };
+  const mphFmt   = (v) => { const n = numProp(v); return n !== null && !isNaN(n) ? n.toFixed(1) + " mph" : "—"; };
+
   map.on("mouseenter", STOPS_OUTER, (e) => {
     map.getCanvas().style.cursor = "pointer";
     const props = e.features[0].properties;
-    // Mapbox GL serializes null JSON properties as the string "null"
-    const numProp = (v) => (v === null || v === "null" || v === undefined) ? null : Number(v);
-    const delayMin = (v) => { const n = numProp(v); return n !== null && !isNaN(n) ? (n / 60).toFixed(1) + " min" : "—"; };
     popup.setLngLat(e.lngLat)
       .setHTML(`
         <strong>${props.stop_name}</strong><br>
@@ -248,6 +461,44 @@ function initMap() {
     map.getCanvas().style.cursor = "";
     popup.remove();
   });
+
+  map.on("mouseenter", SPEED_SEG_LAYER, (e) => {
+    map.getCanvas().style.cursor = "pointer";
+    const props = e.features[0].properties;
+    popup.setLngLat(e.lngLat)
+      .setHTML(`
+        <strong>${props.from_stop_name} → ${props.to_stop_name}</strong><br>
+        <span style="color:#888;font-size:11px">${props.from_stop_id} → ${props.to_stop_id}</span><br>
+        <table style="margin-top:4px;font-size:12px;border-collapse:collapse">
+          <tr><td style="padding:1px 6px 1px 0;color:#666">mean</td><td>${mphFmt(props.mean_mph)}</td></tr>
+          <tr><td style="padding:1px 6px 1px 0;color:#666">p50</td><td>${mphFmt(props.p50_mph)}</td></tr>
+          <tr><td style="padding:1px 6px 1px 0;color:#666">std dev</td><td>${mphFmt(props.stddev_mph)}</td></tr>
+          <tr><td style="padding:1px 6px 1px 0;color:#666">legs observed</td><td>${numProp(props.n) !== null ? Number(props.n).toLocaleString() : "—"}</td></tr>
+        </table>
+      `)
+      .addTo(map);
+  });
+
+  map.on("mouseleave", SPEED_SEG_LAYER, () => {
+    map.getCanvas().style.cursor = "";
+    popup.remove();
+  });
+}
+
+// applyCategoryVisibility flips layer visibility so the right
+// rendering is shown for the active category. Speed mode hides the
+// solid black route line and the colored adherence circles (the
+// inner subway dot stays for landmarks) and shows colored segments.
+// Adherence mode does the inverse.
+function applyCategoryVisibility() {
+  if (!map) return;
+  const isSpeed = activeCategory === "speed";
+  const set = (id, vis) => {
+    if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", vis ? "visible" : "none");
+  };
+  set(ROUTE_LAYER,     !isSpeed);
+  set(STOPS_OUTER,     !isSpeed);
+  set(SPEED_SEG_LAYER, isSpeed);
 }
 
 function renderDirection() {
@@ -402,6 +653,30 @@ function renderDirection() {
     });
   }
 
+  // ── speed-segment layer (built between consecutive stops on the rep trip) ─
+  const segGeoJSON = buildSpeedSegmentFeatures();
+  if (map.getSource(SPEED_SEG_SOURCE)) {
+    map.getSource(SPEED_SEG_SOURCE).setData(segGeoJSON);
+  } else {
+    map.addSource(SPEED_SEG_SOURCE, { type: "geojson", data: segGeoJSON });
+    // Insert below endpoint dots so the start/end markers stay visible
+    // on top of the colored segment line, matching how the solid black
+    // route line stacks in adherence mode.
+    const beforeId = map.getLayer(ENDPOINTS_DOT) ? ENDPOINTS_DOT : undefined;
+    map.addLayer({
+      id: SPEED_SEG_LAYER,
+      type: "line",
+      source: SPEED_SEG_SOURCE,
+      layout: { "line-join": "round", "line-cap": "round" },
+      paint: {
+        "line-color": ["get", "color"],
+        "line-width": 5.5,
+        "line-opacity": 0.95,
+      },
+    }, beforeId);
+  }
+  applyCategoryVisibility();
+
   // ── fit bounds to shape ──────────────────────────────────────────────────
   if (shapeArr && shapeArr.length > 0) {
     const lngs = shapeArr.map(([, lon]) => lon);
@@ -413,7 +688,9 @@ function renderDirection() {
   }
 }
 
-// Recolor stops without rebuilding sources (direction hasn't changed)
+// Recolor stops and refresh speed segments without rebuilding sources
+// (direction hasn't changed). Called when the user switches view mode
+// within the current direction.
 function recolorStops() {
   if (!map || !map.getSource(STOPS_SOURCE)) {
     renderDirection();
@@ -455,6 +732,11 @@ function recolorStops() {
     });
 
   map.getSource(STOPS_SOURCE).setData({ type: "FeatureCollection", features });
+
+  if (map.getSource(SPEED_SEG_SOURCE)) {
+    map.getSource(SPEED_SEG_SOURCE).setData(buildSpeedSegmentFeatures());
+  }
+  applyCategoryVisibility();
 }
 
 // ── direction button state ─────────────────────────────────────────────────
@@ -470,11 +752,14 @@ function updateDirButtons() {
 }
 
 function updateModeButtons() {
-  document.getElementById("btn-p95").classList.toggle("active", activeMode === "adherence" && activePct === "p95");
-  document.getElementById("btn-p50").classList.toggle("active", activeMode === "adherence" && activePct === "p50");
-  document.getElementById("btn-vol").classList.toggle("active", activeMode === "volatility");
-  document.getElementById("btn-p95").disabled = activeMode === "volatility";
-  document.getElementById("btn-p50").disabled = activeMode === "volatility";
+  const adh = activeCategory === "adherence";
+  const speed = activeCategory === "speed";
+  document.getElementById("btn-p95").classList.toggle("active", adh && activeMode === "adherence" && activePct === "p95");
+  document.getElementById("btn-p50").classList.toggle("active", adh && activeMode === "adherence" && activePct === "p50");
+  document.getElementById("btn-vol").classList.toggle("active", adh && activeMode === "volatility");
+  document.getElementById("btn-sp-mean").classList.toggle("active", speed && activeSpeedMetric === "mean");
+  document.getElementById("btn-sp-p50").classList.toggle("active",  speed && activeSpeedMetric === "p50");
+  document.getElementById("btn-sp-std").classList.toggle("active",  speed && activeSpeedMetric === "stddev");
 }
 
 // ── control wiring ─────────────────────────────────────────────────────────
@@ -489,15 +774,28 @@ document.getElementById("btn-dir1").addEventListener("click", () => {
 });
 
 document.getElementById("btn-p95").addEventListener("click", () => {
-  activePct = "p95"; activeMode = "adherence";
+  activeCategory = "adherence"; activePct = "p95"; activeMode = "adherence";
   syncURL(); updateModeButtons(); updateInfoPanel(); recolorStops();
 });
 document.getElementById("btn-p50").addEventListener("click", () => {
-  activePct = "p50"; activeMode = "adherence";
+  activeCategory = "adherence"; activePct = "p50"; activeMode = "adherence";
   syncURL(); updateModeButtons(); updateInfoPanel(); recolorStops();
 });
 document.getElementById("btn-vol").addEventListener("click", () => {
-  activeMode = activeMode === "volatility" ? "adherence" : "volatility";
+  activeCategory = "adherence"; activeMode = "volatility";
+  syncURL(); updateModeButtons(); updateInfoPanel(); recolorStops();
+});
+
+document.getElementById("btn-sp-mean").addEventListener("click", () => {
+  activeCategory = "speed"; activeSpeedMetric = "mean";
+  syncURL(); updateModeButtons(); updateInfoPanel(); recolorStops();
+});
+document.getElementById("btn-sp-p50").addEventListener("click", () => {
+  activeCategory = "speed"; activeSpeedMetric = "p50";
+  syncURL(); updateModeButtons(); updateInfoPanel(); recolorStops();
+});
+document.getElementById("btn-sp-std").addEventListener("click", () => {
+  activeCategory = "speed"; activeSpeedMetric = "stddev";
   syncURL(); updateModeButtons(); updateInfoPanel(); recolorStops();
 });
 
@@ -516,6 +814,7 @@ async function boot() {
 
   gtfsData = data.gtfs;
   stopStatsData = data.stopStats;
+  speedData = data.speedStats;
   directions = buildDirections(gtfsData);
 
   // Validate activeDir

@@ -175,7 +175,30 @@
       font-size: 13px;
     }
     #ctrl-dir { top: 12px; left: 12px; display: flex; gap: 6px; align-items: center; }
-    #ctrl-mode { top: 12px; right: 12px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+    #ctrl-mode {
+      top: 12px;
+      right: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      align-items: stretch;
+      max-width: 340px;
+    }
+    #ctrl-mode .mode-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+    #ctrl-mode .mode-row label {
+      font-size: 11px;
+      color: #555;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-right: auto;
+    }
 
     .ctrl-btn {
       background: #fff;
@@ -210,7 +233,7 @@
     #info-panel {
       position: absolute;
       z-index: 5;
-      top: 58px;
+      top: 110px;
       right: 12px;
       width: 300px;
       background: rgba(255,255,255,0.93);
@@ -259,6 +282,7 @@
       background: linear-gradient(to right, #2ecc71, #f39c12, #e74c3c);
       margin-bottom: 4px;
     }
+    #legend-size-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
     .legend-labels {
       display: flex;
       justify-content: space-between;
@@ -446,11 +470,18 @@
 
     <!-- Mode + percentile toggle (top-right) -->
     <div class="map-ctrl" id="ctrl-mode">
-      <label>View</label>
-      <button class="ctrl-btn active" id="btn-p95" data-pct="p95">p95</button>
-      <button class="ctrl-btn" id="btn-p50" data-pct="p50">p50</button>
-      <div class="ctrl-sep"></div>
-      <button class="ctrl-btn" id="btn-vol">Volatility</button>
+      <div class="mode-row">
+        <label>Schedule adherence</label>
+        <button class="ctrl-btn active" id="btn-p95" data-pct="p95">p95</button>
+        <button class="ctrl-btn" id="btn-p50" data-pct="p50">p50</button>
+        <button class="ctrl-btn" id="btn-vol">Volatility</button>
+      </div>
+      <div class="mode-row">
+        <label>Route speed</label>
+        <button class="ctrl-btn" id="btn-sp-mean">Avg</button>
+        <button class="ctrl-btn" id="btn-sp-p50">p50</button>
+        <button class="ctrl-btn" id="btn-sp-std">Stddev</button>
+      </div>
     </div>
 
     <!-- Metric explanation panel (top-right, below mode controls) -->
@@ -477,7 +508,7 @@
         <span>7 min late</span>
         <span>very late</span>
       </div>
-      <div class="legend-size-row">
+      <div class="legend-size-row" id="legend-size-row">
         <div class="legend-dot" style="width:12px;height:12px;background:rgba(46,204,113,0.55)"></div>
         <span class="legend-size-label">small = mild</span>
         <div class="legend-dot" style="width:22px;height:22px;margin-left:6px;background:rgba(231,76,60,0.55)"></div>

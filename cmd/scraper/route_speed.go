@@ -56,8 +56,22 @@ type routeSpeedDayBlock struct {
 	ByHour  []routeSpeedHourCell `json:"by_hour"`
 }
 
+// routeSegmentSpeedSummary describes the speed distribution for one
+// (from_stop, to_stop) leg over the whole week, regardless of hour or
+// day-of-week. The frontend route map uses these to color each segment
+// of the route shape between two consecutive stops.
+type routeSegmentSpeedSummary struct {
+	FromStopID string   `json:"from_stop_id"`
+	ToStopID   string   `json:"to_stop_id"`
+	N          int64    `json:"n"`
+	MeanMph    *float64 `json:"mean_mph"`
+	P50Mph     *float64 `json:"p50_mph"`
+	StddevMph  *float64 `json:"stddev_mph"`
+}
+
 type routeSpeedDirectionBlock struct {
-	Days map[string]routeSpeedDayBlock `json:"days"` // "weekday" / "weekend"
+	Days     map[string]routeSpeedDayBlock `json:"days"` // "weekday" / "weekend"
+	Segments []routeSegmentSpeedSummary    `json:"segments,omitempty"`
 }
 
 type routeSpeedWeeklyStats struct {
@@ -88,6 +102,12 @@ func generateAllRouteSpeedStats(ctx context.Context, weekStart, weekEnd civil.Da
 
 	byRoute, skippedTripMisses := aggregateRouteSpeedRows(rows, cache)
 
+	segRows, err := queryRouteSegmentSpeedHistograms(ctx, weekStart, weekEnd)
+	if err != nil {
+		return fmt.Errorf("segment speed histograms: %w", err)
+	}
+	segByRoute, skippedSegmentMisses := aggregateRouteSegmentSpeedRows(segRows, cache)
+
 	weekEndStr := weekEnd.String()
 	written := 0
 	for routeID, byDir := range byRoute {
@@ -100,6 +120,11 @@ func generateAllRouteSpeedStats(ctx context.Context, weekStart, weekEnd civil.Da
 			block := routeSpeedDirectionBlock{Days: make(map[string]routeSpeedDayBlock)}
 			for dayType, byHour := range byDayType {
 				block.Days[dayType] = buildSpeedDayBlock(byHour)
+			}
+			if segDirs, ok := segByRoute[routeID]; ok {
+				if pairs, ok := segDirs[dirID]; ok {
+					block.Segments = buildSegmentSummaries(pairs)
+				}
 			}
 			out.Directions[strconv.Itoa(dirID)] = block
 		}
@@ -119,6 +144,7 @@ func generateAllRouteSpeedStats(ctx context.Context, weekStart, weekEnd civil.Da
 		"week_end", weekEndStr,
 		"routes", written,
 		"skipped_trip_cache_misses", skippedTripMisses,
+		"skipped_segment_cache_misses", skippedSegmentMisses,
 	)
 	return nil
 }
@@ -319,6 +345,170 @@ func summarizeSpeedHistogramSummary(bins []int64) routeSpeedSummary {
 	if v, ok := speedPercentileFromBins(bins, n, 0.99); ok {
 		v = round1(v)
 		out.P99Mph = &v
+	}
+	return out
+}
+
+type routeSegmentSpeedHistRow struct {
+	RouteID      string `bigquery:"route_id"`
+	TripID       string `bigquery:"trip_id"`
+	StopSequence int64  `bigquery:"stop_sequence"`
+	Bin          int64  `bigquery:"bin"`
+	N            int64  `bigquery:"n"`
+}
+
+// segmentPairKey identifies one (from_stop, to_stop) leg within a
+// route+direction. Two trips can produce the same pair when their
+// stop_times share consecutive stop_ids, so segment counts merge
+// across trips at this granularity.
+type segmentPairKey struct {
+	FromStopID string
+	ToStopID   string
+}
+
+// queryRouteSegmentSpeedHistograms emits per-(route_id, trip_id,
+// stop_sequence, speed_bin) leg counts for the week with no day_type
+// or hour breakdown. The stop_sequence identifies which leg of the
+// trip the count belongs to; Go-side resolution maps that to a
+// (from_stop, to_stop) pair via the cached GTFS-static stop_times.
+// leg_avg_speed_mps cap mirrors the per-hour query.
+func queryRouteSegmentSpeedHistograms(ctx context.Context, weekStart, weekEnd civil.Date) ([]routeSegmentSpeedHistRow, error) {
+	q := bqClient.Query(fmt.Sprintf(`
+		WITH %s,
+		legs AS (
+		  SELECT
+		    route_id,
+		    trip_id,
+		    stop_sequence,
+		    CAST(FLOOR(leg_avg_speed_mps * %f / %f) AS INT64) AS bin
+		  FROM obs
+		  WHERE actual_arrival IS NOT NULL
+		    AND is_stale = FALSE
+		    AND leg_avg_speed_mps IS NOT NULL
+		    AND leg_avg_speed_mps BETWEEN 0 AND 35
+		)
+		SELECT route_id, trip_id, stop_sequence, bin, COUNT(*) AS n
+		FROM legs
+		GROUP BY route_id, trip_id, stop_sequence, bin
+	`, dedupedRangeObservationsCTE(weekStart, weekEnd), mpsToMph, speedBinMph))
+	it, err := q.Read(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var out []routeSegmentSpeedHistRow
+	for {
+		var row routeSegmentSpeedHistRow
+		err := it.Next(&row)
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, row)
+	}
+	return out, nil
+}
+
+// aggregateRouteSegmentSpeedRows resolves each (route, trip, stop_seq)
+// row into a (route, direction, from_stop_id, to_stop_id) bucket using
+// the GTFS cache, then merges bin counts within each bucket. Rows
+// whose trip isn't in the cache or whose stop_sequence has no
+// predecessor (first stop in the trip — no leg) are silently dropped;
+// the returned int counts trip-lookup misses for logging.
+func aggregateRouteSegmentSpeedRows(rows []routeSegmentSpeedHistRow, cache *gtfsCache) (map[string]map[int]map[segmentPairKey][]int64, int) {
+	byRoute := make(map[string]map[int]map[segmentPairKey][]int64)
+	getCell := func(routeID string, dirID int, key segmentPairKey) []int64 {
+		r, ok := byRoute[routeID]
+		if !ok {
+			r = make(map[int]map[segmentPairKey][]int64)
+			byRoute[routeID] = r
+		}
+		d, ok := r[dirID]
+		if !ok {
+			d = make(map[segmentPairKey][]int64)
+			r[dirID] = d
+		}
+		bins, ok := d[key]
+		if !ok {
+			bins = make([]int64, speedBinCount)
+			d[key] = bins
+		}
+		return bins
+	}
+
+	skipped := 0
+	for _, row := range rows {
+		route, ok := cache.Routes[row.RouteID]
+		if !ok {
+			skipped++
+			continue
+		}
+		trip, ok := route.Trips[row.TripID]
+		if !ok {
+			skipped++
+			continue
+		}
+		pair, ok := lookupStopPair(trip, int(row.StopSequence))
+		if !ok {
+			continue
+		}
+		if row.Bin < 0 || int(row.Bin) >= speedBinCount {
+			continue
+		}
+		bins := getCell(row.RouteID, trip.DirectionID, pair)
+		bins[row.Bin] += row.N
+	}
+	return byRoute, skipped
+}
+
+// lookupStopPair finds the leg in trip.StopTimes that arrives at the
+// given stop_sequence, returning (prev_stop_id, this_stop_id). Returns
+// !ok when the sequence is the first stop in the trip (no predecessor)
+// or isn't present at all. stop_times is already sorted by
+// stop_sequence in streamStopTimes; we walk linearly because trips
+// are short (typically <80 stops).
+func lookupStopPair(trip gtfsTrip, stopSeq int) (segmentPairKey, bool) {
+	for i, st := range trip.StopTimes {
+		if st.StopSequence != stopSeq {
+			continue
+		}
+		if i == 0 {
+			return segmentPairKey{}, false
+		}
+		return segmentPairKey{FromStopID: trip.StopTimes[i-1].StopID, ToStopID: st.StopID}, true
+	}
+	return segmentPairKey{}, false
+}
+
+// buildSegmentSummaries computes the per-pair summary (mean / p50 /
+// stddev) for one (route, direction) and sorts deterministically so
+// the JSON output is stable across regenerations.
+func buildSegmentSummaries(pairs map[segmentPairKey][]int64) []routeSegmentSpeedSummary {
+	keys := make([]segmentPairKey, 0, len(pairs))
+	for k := range pairs {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].FromStopID != keys[j].FromStopID {
+			return keys[i].FromStopID < keys[j].FromStopID
+		}
+		return keys[i].ToStopID < keys[j].ToStopID
+	})
+	out := make([]routeSegmentSpeedSummary, 0, len(keys))
+	for _, k := range keys {
+		s := summarizeSpeedHistogramSummary(pairs[k])
+		if s.N == 0 {
+			continue
+		}
+		out = append(out, routeSegmentSpeedSummary{
+			FromStopID: k.FromStopID,
+			ToStopID:   k.ToStopID,
+			N:          s.N,
+			MeanMph:    s.MeanMph,
+			P50Mph:     s.P50Mph,
+			StddevMph:  s.StddevMph,
+		})
 	}
 	return out
 }
