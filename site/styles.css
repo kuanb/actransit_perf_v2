@@ -680,6 +680,16 @@ footer a:hover {
   border: 1px solid rgba(0, 0, 0, 0.08);
 }
 
+.metric-pill {
+  display: inline-block;
+  padding: 2px 12px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 1.5;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
 .route-page-btn {
   font-size: 12px;
   font-weight: 600;

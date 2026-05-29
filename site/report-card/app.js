@@ -279,10 +279,14 @@ function render(routes, weekEnd) {
       ? `../route/?week_end=${encodeURIComponent(weekEnd)}&route_id=${encodeURIComponent(rid)}`
       : `../route/?route_id=${encodeURIComponent(rid)}`;
 
-  const cellStyle = (pct, fn) => {
-    if (pct === null || pct === undefined) return "";
+  // Render a metric value as a rounded, padded colour pill (or plain text
+  // / em-dash when there's no data or no colour scale).
+  const pill = (pct, fn) => {
+    if (pct == null) return "—";
+    const text = fmt(pct) + "%";
+    if (!fn) return text;
     const g = fn(pct);
-    return `style="background:${g.bg};color:${g.fg};"`;
+    return `<span class="metric-pill" style="background:${g.bg};color:${g.fg}">${text}</span>`;
   };
 
   function renderRows() {
@@ -317,8 +321,8 @@ function render(routes, weekEnd) {
         <td colspan="7">
           <dl class="route-detail-list">
             <div><dt>Composite score</dt><dd>${fmt(r.score)} / 100</dd></div>
-            <div><dt>Service delivered (stops, −1 to +7 min)</dt><dd ${cellStyle(r.stop_sd_pct, gradeStopSD)}>${r.stop_sd_pct == null ? "—" : fmt(r.stop_sd_pct) + "%"}</dd></div>
-            <div><dt>On time (≤3 min)</dt><dd ${cellStyle(r.on_time_pct, gradeOnTime)}>${r.on_time_pct == null ? "—" : fmt(r.on_time_pct) + "%"}</dd></div>
+            <div><dt>Service delivered (stops, −1 to +7 min)</dt><dd>${pill(r.stop_sd_pct, gradeStopSD)}</dd></div>
+            <div><dt>On time (≤3 min)</dt><dd>${pill(r.on_time_pct, gradeOnTime)}</dd></div>
             <div><dt>p50 delay</dt><dd>${fmt(r.p50_delay_minutes)} min</dd></div>
             <div><dt>Avg speed</dt><dd>${fmt(r.avg_speed_mph)} mph (speed sub-score ${fmt(Math.min(100, (r.avg_speed_mph || 0) / IDEAL_SPEED_MPH * 100), 0)} / 100, capped at the ${IDEAL_SPEED_MPH} mph ideal)</dd></div>
             <div><dt>p50 headway distortion</dt><dd>${r.p50_distortion_pct == null ? "—" : fmt(r.p50_distortion_pct) + "%"}</dd></div>
