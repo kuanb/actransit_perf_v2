@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AC Transit Performance</title>
+  <link rel="stylesheet" href="../styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <header>
+    <div class="header-body">
+      <h1>AC Transit performance</h1>
+      <div id="meta" class="muted"></div>
+      <div id="date-selector"></div>
+    </div>
+    <nav class="header-nav">
+      <a href="https://kuanbutts.com/actransit/" target="_blank" rel="noopener">Live map →</a>
+      <a href="" aria-current="page">Daily</a>
+      <a href="../weekly/">Weekly →</a>
+      <a href="../report-card/">Report card →</a>
+    </nav>
+  </header>
+
+  <section>
+    <h2>System summary</h2>
+    <p class="muted defn"><strong>On time</strong> = arrived at the scheduled time, up to 3 min late (<code>0&nbsp;≤&nbsp;delay&nbsp;≤&nbsp;3&nbsp;min</code>).</p>
+    <p class="muted defn"><strong>Early</strong> = before scheduled time (<code>delay&nbsp;&lt;&nbsp;0</code>).</p>
+    <p class="muted defn"><strong>Late</strong> = more than 3 min after schedule (<code>delay&nbsp;&gt;&nbsp;3&nbsp;min</code>).</p>
+    <div id="system-cards" class="cards"></div>
+    <h3 class="sub-h">Cumulative on-time at looser thresholds</h3>
+    <p class="muted defn">Same numerator (arrived at-or-after schedule), but counting anyone who arrived within the larger window.</p>
+    <p class="muted defn"><strong>Within 5 min</strong> = <code>0&nbsp;≤&nbsp;delay&nbsp;≤&nbsp;5&nbsp;min</code>.</p>
+    <p class="muted defn"><strong>Within 7 min</strong> = <code>0&nbsp;≤&nbsp;delay&nbsp;≤&nbsp;7&nbsp;min</code>.</p>
+    <div id="system-secondary" class="cards small-cards"></div>
+    <h3 class="sub-h">Delay distribution (1-min buckets)</h3>
+    <p class="muted defn">Each bar = one whole-minute bucket of the schedule-vs-actual delay, counted across all observed stop arrivals.</p>
+    <p class="muted defn">Outliers beyond <code>−15&nbsp;min</code> or <code>+45&nbsp;min</code> are clamped to the boundary buckets.</p>
+    <canvas id="delay-minute-chart" width="900" height="280"></canvas>
+  </section>
+
+  <section>
+    <h2>Schedule compliance</h2>
+    <p class="muted defn"><strong>Service delivered</strong> = percent of scheduled stop-arrivals that occurred within the rider-experience window: no more than <strong>1 minute early</strong> and no more than <strong>7 minutes late</strong> (<code>−60 s ≤ delay ≤ 420 s</code>). Stops outside that window — whether the bus never came, ran too early, or ran too late — count against the score. This is intentionally stricter than an operator's internal on-time definition: a bus that runs 10 minutes late delivered its trip but did not deliver the service a rider waiting at the stop needed. Colour scale: green ≥ 95%, orange at 90%, red at 80–75%, darkest red ≤ 65%.</p>
+    <p class="muted defn"><strong>Observed running</strong> = trips with at least one recorded stop arrival (regardless of delay). <strong>Dropped trips</strong> = scheduled trips with no observed arrivals at all.</p>
+    <p class="muted defn"><strong>Trips not completed</strong> = trips that ran but never reached their final scheduled stop (bus broke down, was reassigned mid-trip, or GPS dropped out before the end of the route).</p>
+    <div id="schedule-cards" class="cards"></div>
+
+    <div id="not-completed-section" hidden>
+      <h3 class="sub-h">How far did "not completed" trips get?</h3>
+      <p class="muted defn">For each trip counted as "not completed," what fraction of its scheduled stops were observed (<code>last_observed_stop_seq / final_stop_seq</code>). A heavy tail near 90–100% means buses are bailing on the very last stop or two; a flatter shape means GPS is dropping mid-route.</p>
+      <p class="muted defn" id="not-completed-summary"></p>
+      <canvas id="not-completed-chart" width="900" height="200"></canvas>
+    </div>
+  </section>
+
+  <section id="volume-section" hidden>
+    <h2>Observed arrivals by time of day</h2>
+    <p class="muted defn">Each bar = total stop arrivals we recorded in a 15-minute window, from PT midnight to midnight, stacked by route. Top-10 routes (by total arrivals for the day) are colored individually; everything else is grouped into <strong>Other</strong>.</p>
+    <p class="muted defn">A "data point" here is one finalized (trip, stop) observation — the same denominator used by every other chart on this page.</p>
+    <canvas id="volume-15min-chart" width="900" height="320"></canvas>
+  </section>
+
+  <section>
+    <h2>Headway distortion</h2>
+    <p class="muted defn">For each observed stop arrival, we compare the bus's lateness/earliness to the scheduled gap to its <strong>neighboring scheduled trip</strong> at the same stop on the same route.</p>
+    <p class="muted defn">Late buses use the prior scheduled trip's gap; early buses use the next.</p>
+    <p class="muted defn"><strong>Example (late):</strong> a 10-min headway with a bus 6 min late = <strong>+60%</strong> distortion (the gap from the previous bus stretched from 10 to 16 min).</p>
+    <p class="muted defn"><strong>Example (early):</strong> a 5-min-early arrival on a 5-min headway = <strong>−100%</strong> distortion — the bus collapsed onto the previous scheduled slot.</p>
+    <p class="muted defn">Higher absolute values = more disruptive to riders waiting at the stop.</p>
+    <canvas id="histogram-chart" width="800" height="320"></canvas>
+  </section>
+
+  <section>
+    <h2>Per-route</h2>
+    <p class="muted">Click a column header to sort. Click any row to expand it for the full per-route metric list.</p>
+    <div class="route-controls">
+      <input type="text" id="route-filter" placeholder="Filter routes…" autocomplete="off">
+      <button id="routes-expand-all" type="button">Expand all</button>
+      <button id="routes-collapse-all" type="button">Collapse all</button>
+    </div>
+    <div class="table-wrap">
+      <table id="routes-table">
+        <thead>
+          <tr>
+            <th data-key="route_id">Route</th>
+            <th>Δ distribution</th>
+            <th data-key="stop_sd_pct">Service delivered %</th>
+            <th data-key="on_time_pct">On time % (≤3 min)</th>
+            <th data-key="p50_delay_minutes">p50 delay (min)</th>
+            <th class="expand-th"></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    <a href="https://kuanbutts.com" target="_blank" rel="noopener">
+      A project by Kuan Butts &copy; <span id="footer-year"></span>
+    </a>
+  </footer>
+
+  <script src="../lib.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

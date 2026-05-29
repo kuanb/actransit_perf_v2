@@ -305,7 +305,7 @@ async function load() {
   // is requested AND we're on localhost — supports `python3 scripts/generate_stats.py`
   // for offline iteration).
   const sources = [statsURL(date)];
-  if (isLocal && !date) sources.push("data/stats.json");
+  if (isLocal && !date) sources.push("../data/stats.json");
 
   const indexPromise = loadIndex();
   const weeklyIndexPromise = loadWeeklyIndex();
@@ -552,7 +552,7 @@ function render(data, indexDates = [], weeklyWeeks = []) {
           : `ran ${intFmt(r.ran_trips)} of ${intFmt(r.scheduled_trips)} scheduled`;
         const isOpen = expanded.has(r.route_id);
         const detailHidden = isOpen ? "" : "hidden";
-        const weekHref = `route/?week_end=${encodeURIComponent(weekEnd)}&route_id=${encodeURIComponent(r.route_id)}`;
+        const weekHref = `../route/?week_end=${encodeURIComponent(weekEnd)}&route_id=${encodeURIComponent(r.route_id)}`;
         return `
       <tr class="route-row ${isOpen ? "is-open" : ""}" data-rid="${r.route_id}">
         <td>${routeBadge(r)}</td>

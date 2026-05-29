@@ -560,3 +560,73 @@ footer a:hover {
   color: #1971c2;
   text-decoration: underline;
 }
+
+/* ---- report card ---- */
+.report-intro {
+  margin-bottom: 24px;
+}
+.report-intro p { margin-top: 0; }
+.report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+.report-action {
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: #1971c2;
+  text-decoration: none;
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid #1971c2;
+  white-space: nowrap;
+}
+.report-action:hover { background: #145a9e; }
+
+.grade-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.grade-chip {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 56px;
+  padding: 4px 8px;
+  border-radius: 5px;
+  font-weight: 700;
+  font-size: 14px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+.grade-chip small {
+  font-weight: 500;
+  font-size: 10px;
+  opacity: 0.85;
+}
+
+.grade-badge {
+  display: inline-block;
+  min-width: 32px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 700;
+  font-size: 14px;
+  text-align: center;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.route-page-btn {
+  font-size: 12px;
+  font-weight: 600;
+  color: #1971c2;
+  text-decoration: none;
+  white-space: nowrap;
+  padding: 3px 8px;
+  border: 1px solid #1971c2;
+  border-radius: 4px;
+}
+.route-page-btn:hover { background: #1971c2; color: #fff; }

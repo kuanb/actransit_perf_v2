@@ -144,7 +144,7 @@ function renderDailySD(data) {
     options: {
       onClick: (_e, els) => {
         if (!els.length) return;
-        window.location.href = `../?date=${days[els[0].index].service_date}`;
+        window.location.href = `../daily/?date=${days[els[0].index].service_date}`;
       },
       onHover: (e, els) => {
         e.native.target.style.cursor = els.length ? "pointer" : "default";
@@ -232,7 +232,7 @@ function renderDelayHeatmap(data) {
 
     container.querySelectorAll(".hm-row").forEach((row) => {
       row.addEventListener("click", () => {
-        window.location.href = `../?date=${row.dataset.date}`;
+        window.location.href = `../daily/?date=${row.dataset.date}`;
       });
     });
   };
@@ -435,13 +435,13 @@ function renderRouteDayGrid(data) {
 
   container.querySelectorAll(".rdgrid-hcol").forEach((h) => {
     h.addEventListener("click", () => {
-      window.location.href = `../?date=${h.dataset.date}`;
+      window.location.href = `../daily/?date=${h.dataset.date}`;
     });
   });
   container.querySelectorAll(".rdgrid-cell").forEach((c) => {
     if (c.classList.contains("rdgrid-empty")) return;
     c.addEventListener("click", () => {
-      window.location.href = `../?date=${c.dataset.date}`;
+      window.location.href = `../daily/?date=${c.dataset.date}`;
     });
   });
 

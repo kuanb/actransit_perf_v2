@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AC Transit route report card</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <header>
+    <div class="header-body">
+      <h1>AC Transit performance — report card</h1>
+      <div id="meta" class="muted"></div>
+    </div>
+    <nav class="header-nav">
+      <a href="https://kuanbutts.com/actransit/" target="_blank" rel="noopener">Live map →</a>
+      <a href="../daily/">Daily →</a>
+      <a href="../weekly/">Weekly →</a>
+      <a href="" aria-current="page">Report card</a>
+    </nav>
+  </header>
+
+  <section class="report-intro">
+    <p>
+      Every AC Transit route gets a single letter grade for the
+      <strong>last four weeks</strong> of service. The grade is a 0–100
+      composite score that weights how reliably each route delivers the
+      experience a waiting rider actually needs, not just whether a bus
+      eventually showed up.
+    </p>
+    <div class="report-actions">
+      <a class="report-action" href="../daily/">View latest daily overview →</a>
+      <a class="report-action" href="../weekly/">View latest weekly overview →</a>
+    </div>
+  </section>
+
+  <section>
+    <h2>How the score is computed</h2>
+    <p class="muted defn">The composite score blends four metrics, observation-weighted across every finalized stop arrival in the window:</p>
+    <p class="muted defn"><strong>Service delivered — 60%.</strong> Percent of scheduled stop-arrivals that landed in the rider window: no more than <strong>1 min early</strong> and <strong>7 min late</strong> (<code>−60&nbsp;s&nbsp;≤&nbsp;delay&nbsp;≤&nbsp;420&nbsp;s</code>). Stops the bus never reached count against the route. This is the same metric shown on the daily page.</p>
+    <p class="muted defn"><strong>On time — 15%.</strong> Percent of arrivals within <code>0&nbsp;≤&nbsp;delay&nbsp;≤&nbsp;3&nbsp;min</code> of schedule.</p>
+    <p class="muted defn"><strong>Speed vs. ideal — 15%.</strong> Average per-leg bus speed as a fraction of a <strong>13&nbsp;mph</strong> ideal, capped at 100%. Slower routes score lower; <code>avg_speed&nbsp;/&nbsp;13&nbsp;×&nbsp;100</code>.</p>
+    <p class="muted defn"><strong>Headway regularity — 10%.</strong> How little the typical bus distorts the scheduled gap to its neighbor (<code>100&nbsp;−&nbsp;|p50&nbsp;headway&nbsp;distortion|</code>). Bunching and gapping pull this down.</p>
+    <p class="muted defn">Components with no data for a route are dropped and the remaining weights are renormalized. Service delivered and p50 delay are observation-weighted aggregates across the days in the window (an approximation of the exact 4-week median).</p>
+
+    <h3 class="sub-h">Grade scale</h3>
+    <div id="grade-legend" class="grade-legend"></div>
+  </section>
+
+  <section>
+    <h2>Route report card</h2>
+    <p class="muted">Sorted best-to-worst by composite score. Click a column header to re-sort. Click any row to expand the full metric breakdown, or <em>Route page</em> for the per-route analysis.</p>
+    <div class="route-controls">
+      <input type="text" id="route-filter" placeholder="Filter routes…" autocomplete="off">
+    </div>
+    <div class="table-wrap">
+      <table id="report-table">
+        <thead>
+          <tr>
+            <th data-key="score">Grade</th>
+            <th data-key="route_id">Route</th>
+            <th data-key="score">Score</th>
+            <th data-key="trips_observed">Unique trips</th>
+            <th data-key="observations">Stops measured</th>
+            <th>Route page</th>
+            <th class="expand-th"></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    <a href="https://kuanbutts.com" target="_blank" rel="noopener">
+      A project by Kuan Butts &copy; <span id="footer-year"></span>
+    </a>
+  </footer>
+
+  <script src="../lib.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
