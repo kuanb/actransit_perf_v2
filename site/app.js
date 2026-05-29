@@ -14,6 +14,32 @@ async function loadIndex() {
   }
 }
 
+async function loadWeeklyIndex() {
+  try {
+    const idx = await fetchJSON(`${GCS_BASE}/stats/weekly/_index.json`);
+    return Array.isArray(idx.weeks) ? idx.weeks : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+// Saturday (week_end) of the last *completed* week before serviceDate.
+// Weeks run Sun→Sat (matching the weekly dashboard), so the most recent
+// fully-elapsed week ends on the Saturday strictly before serviceDate.
+// UTC math keeps the calendar-string arithmetic DST-stable. If a weekly
+// index is supplied, snap to the latest available week_end on-or-before
+// that Saturday so the link always lands on a week that has stats.
+function lastCompletedWeekEnd(serviceDate, weeklyWeeks = []) {
+  const [y, m, d] = serviceDate.split("-").map(Number);
+  const base = new Date(Date.UTC(y, m - 1, d));
+  const daysBack = base.getUTCDay() + 1; // Sun(0)→1 … Sat(6)→7
+  base.setUTCDate(base.getUTCDate() - daysBack);
+  const candidate = base.toISOString().slice(0, 10);
+  if (!weeklyWeeks.length) return candidate;
+  const available = weeklyWeeks.filter((w) => w <= candidate);
+  return available.length ? available.reduce((a, b) => (a > b ? a : b)) : candidate;
+}
+
 function renderDateSelector(dates, current) {
   const el = document.getElementById("date-selector");
   if (!dates.length && !current) { el.innerHTML = ""; return; }
@@ -282,6 +308,7 @@ async function load() {
   if (isLocal && !date) sources.push("data/stats.json");
 
   const indexPromise = loadIndex();
+  const weeklyIndexPromise = loadWeeklyIndex();
 
   let data = null;
   let lastErr = null;
@@ -305,11 +332,12 @@ async function load() {
   }
 
   const dates = await indexPromise;
-  render(data, dates);
+  const weeklyWeeks = await weeklyIndexPromise;
+  render(data, dates, weeklyWeeks);
   renderDateSelector(dates, date || data.service_date);
 }
 
-function render(data, indexDates = []) {
+function render(data, indexDates = [], weeklyWeeks = []) {
   document.getElementById("meta").textContent =
     `Service date: ${data.service_date} · generated ${data.generated_at}`;
 
@@ -490,6 +518,11 @@ function render(data, indexDates = []) {
   // across sort/re-render so a column-header click doesn't collapse rows.
   const expanded = new Set();
 
+  // The completed week feeding the per-route map analysis link in each
+  // expanded detail row — the week ending the Saturday before the day in
+  // view, snapped to a week that actually has stats.
+  const weekEnd = lastCompletedWeekEnd(data.service_date, weeklyWeeks);
+
   function renderRoutes() {
     const rows = [...data.routes].filter(r =>
       !filterQ || r.route_id.toLowerCase().includes(filterQ)
@@ -519,6 +552,7 @@ function render(data, indexDates = []) {
           : `ran ${intFmt(r.ran_trips)} of ${intFmt(r.scheduled_trips)} scheduled`;
         const isOpen = expanded.has(r.route_id);
         const detailHidden = isOpen ? "" : "hidden";
+        const weekHref = `route/?week_end=${encodeURIComponent(weekEnd)}&route_id=${encodeURIComponent(r.route_id)}`;
         return `
       <tr class="route-row ${isOpen ? "is-open" : ""}" data-rid="${r.route_id}">
         <td>${routeBadge(r)}</td>
@@ -530,6 +564,7 @@ function render(data, indexDates = []) {
       </tr>
       <tr class="route-detail" data-rid="${r.route_id}" ${detailHidden}>
         <td colspan="6">
+          <a class="route-week-btn" href="${weekHref}" title="Week-of analysis for route ${r.route_id} (week ending ${weekEnd})">Week ending ${weekEnd} →</a>
           <dl class="route-detail-list">
             <div><dt>Trips observed</dt><dd>${intFmt(r.trips_observed)}${r.scheduled_trips ? ` (of ${intFmt(r.scheduled_trips)} scheduled)` : ""}</dd></div>
             <div><dt>Stop arrivals</dt><dd>${intFmt(r.observations)}</dd></div>
