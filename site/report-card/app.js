@@ -110,21 +110,13 @@ function aggregateRoutes(dailies) {
 
   const out = [];
   for (const a of acc.values()) {
-    const stop_sd_pct = a.sd_w ? a.sd_sum / a.sd_w : null;
-    const on_time_pct = a.ot_w ? a.ot_sum / a.ot_w : null;
-    const avg_speed_mph = a.sp_w ? a.sp_sum / a.sp_w : null;
-    const p50_delay_minutes = a.p50_w ? a.p50_sum / a.p50_w : null;
-    const p50_distortion_pct = a.dist_w ? a.dist_sum / a.dist_w : null;
-
-    // Per-component sub-scores on a 0-100 scale.
-    const parts = [];
-    if (stop_sd_pct != null) parts.push([WEIGHTS.stop_sd, clamp(stop_sd_pct)]);
-    if (on_time_pct != null) parts.push([WEIGHTS.on_time, clamp(on_time_pct)]);
-    if (avg_speed_mph != null) parts.push([WEIGHTS.speed, clamp((avg_speed_mph / IDEAL_SPEED_MPH) * 100)]);
-    if (p50_distortion_pct != null) parts.push([WEIGHTS.headway, clamp(100 - Math.min(100, Math.abs(p50_distortion_pct)))]);
-
-    const wsum = parts.reduce((s, [w]) => s + w, 0);
-    const score = wsum ? parts.reduce((s, [w, v]) => s + w * v, 0) / wsum : null;
+    const metrics = {
+      stop_sd_pct: a.sd_w ? a.sd_sum / a.sd_w : null,
+      on_time_pct: a.ot_w ? a.ot_sum / a.ot_w : null,
+      avg_speed_mph: a.sp_w ? a.sp_sum / a.sp_w : null,
+      p50_delay_minutes: a.p50_w ? a.p50_sum / a.p50_w : null,
+      p50_distortion_pct: a.dist_w ? a.dist_sum / a.dist_w : null,
+    };
 
     out.push({
       route_id: a.route_id,
@@ -133,12 +125,8 @@ function aggregateRoutes(dailies) {
       trips_observed: a.trips,
       observations: a.obs,
       days: a.days,
-      stop_sd_pct,
-      on_time_pct,
-      avg_speed_mph,
-      p50_delay_minutes,
-      p50_distortion_pct,
-      score,
+      ...metrics,
+      score: compositeScore(metrics),
     });
   }
   return out;
@@ -146,6 +134,82 @@ function aggregateRoutes(dailies) {
 
 function clamp(v) {
   return Math.max(0, Math.min(100, v));
+}
+
+// Composite of the four sub-scores from already-0-100 metric values.
+function compositeScore({ stop_sd_pct, on_time_pct, avg_speed_mph, p50_distortion_pct }) {
+  const parts = [];
+  if (stop_sd_pct != null) parts.push([WEIGHTS.stop_sd, clamp(stop_sd_pct)]);
+  if (on_time_pct != null) parts.push([WEIGHTS.on_time, clamp(on_time_pct)]);
+  if (avg_speed_mph != null) parts.push([WEIGHTS.speed, clamp((avg_speed_mph / IDEAL_SPEED_MPH) * 100)]);
+  if (p50_distortion_pct != null) parts.push([WEIGHTS.headway, clamp(100 - Math.min(100, Math.abs(p50_distortion_pct)))]);
+  const wsum = parts.reduce((s, [w]) => s + w, 0);
+  return wsum ? parts.reduce((s, [w, v]) => s + w * v, 0) / wsum : null;
+}
+
+// Agency-wide rollup: each per-route metric averaged across routes, weighted
+// by that route's measured trip-stops (a route's share of all finalized
+// (trip, stop) observations — bigger routes, with more trips and more stops,
+// carry proportionally more weight). The agency score is the same composite
+// formula applied to those agency-wide metric values.
+function aggregateAgency(routes) {
+  const acc = { obs: 0, trips: 0 };
+  const m = { stop_sd_pct: [0, 0], on_time_pct: [0, 0], avg_speed_mph: [0, 0], p50_delay_minutes: [0, 0], p50_distortion_pct: [0, 0] };
+  for (const r of routes) {
+    const w = r.observations || 0;
+    if (w <= 0) continue;
+    acc.obs += w;
+    acc.trips += r.trips_observed || 0;
+    for (const k of Object.keys(m)) {
+      if (r[k] != null) { m[k][0] += r[k] * w; m[k][1] += w; }
+    }
+  }
+  const mean = (k) => (m[k][1] ? m[k][0] / m[k][1] : null);
+  const agency = {
+    stop_sd_pct: mean("stop_sd_pct"),
+    on_time_pct: mean("on_time_pct"),
+    avg_speed_mph: mean("avg_speed_mph"),
+    p50_delay_minutes: mean("p50_delay_minutes"),
+    p50_distortion_pct: mean("p50_distortion_pct"),
+    trips: acc.trips,
+    observations: acc.obs,
+    routes: routes.length,
+  };
+  agency.score = compositeScore(agency);
+  return agency;
+}
+
+function renderAgencyHero(a) {
+  const el = document.getElementById("agency-hero");
+  if (!el) return;
+  if (a.score == null) { el.hidden = true; return; }
+  const g = scoreColor(a.score);
+  const grade = letterGrade(a.score);
+  const speedPct = a.avg_speed_mph == null ? null : Math.min(100, (a.avg_speed_mph / IDEAL_SPEED_MPH) * 100);
+  const stat = (label, val, sub = "") =>
+    `<div class="agency-stat"><span class="as-val">${val}</span><span class="as-label">${label}</span>${sub ? `<span class="as-sub">${sub}</span>` : ""}</div>`;
+  el.innerHTML = `
+    <div class="agency-card">
+      <div class="agency-grade" style="background:${g.bg};color:${g.fg}">
+        <div class="agency-grade-letter">${grade}</div>
+        <div class="agency-grade-score">${fmt(a.score)}<span> / 100</span></div>
+      </div>
+      <div class="agency-body">
+        <div class="agency-title">Agency-wide grade</div>
+        <div class="agency-sub">All routes over the last four weeks, weighted by each route's share of measured trip-stops.</div>
+        <div class="agency-stats">
+          ${stat("Service delivered", a.stop_sd_pct == null ? "—" : fmt(a.stop_sd_pct) + "%")}
+          ${stat("On time (≤3 min)", a.on_time_pct == null ? "—" : fmt(a.on_time_pct) + "%")}
+          ${stat("p50 delay", fmt(a.p50_delay_minutes) + " min")}
+          ${stat("Avg speed", fmt(a.avg_speed_mph) + " mph", speedPct == null ? "" : `${fmt(speedPct, 0)}% of ideal`)}
+          ${stat("Headway p50 Δ", a.p50_distortion_pct == null ? "—" : fmt(a.p50_distortion_pct) + "%")}
+          ${stat("Routes graded", intFmt(a.routes))}
+          ${stat("Unique trips", intFmt(a.trips))}
+          ${stat("Stops measured", intFmt(a.observations))}
+        </div>
+      </div>
+    </div>`;
+  el.hidden = false;
 }
 
 function renderGradeLegend() {
@@ -185,6 +249,8 @@ async function load() {
   )).filter(Boolean);
 
   const routes = aggregateRoutes(dailies).filter((r) => r.score != null);
+
+  renderAgencyHero(aggregateAgency(routes));
 
   const observed = dailies
     .map((d) => d.service_date)

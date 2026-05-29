@@ -562,6 +562,67 @@ footer a:hover {
 }
 
 /* ---- report card ---- */
+.agency-hero { margin-bottom: 28px; }
+.agency-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 26px;
+  padding: 24px 28px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #ffffff 0%, #f3f7fb 100%);
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 10px 34px rgba(20, 50, 90, 0.10);
+}
+.agency-grade {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 158px;
+  padding: 20px 26px;
+  border-radius: 16px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+}
+.agency-grade-letter {
+  font-size: 68px;
+  font-weight: 800;
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+}
+.agency-grade-score {
+  font-size: 20px;
+  font-weight: 700;
+  margin-top: 8px;
+  font-variant-numeric: tabular-nums;
+}
+.agency-grade-score span { font-size: 13px; font-weight: 600; opacity: 0.85; }
+.agency-body { flex: 1; min-width: 280px; }
+.agency-title { font-size: 24px; font-weight: 800; letter-spacing: -0.01em; }
+.agency-sub { color: #5a6b7b; font-size: 13px; margin: 4px 0 16px; max-width: 60ch; }
+.agency-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  gap: 10px;
+}
+.agency-stat {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid #e7eef5;
+  border-radius: 9px;
+}
+.as-val { font-size: 21px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.as-label {
+  font-size: 10.5px;
+  color: #6b7b8b;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 3px;
+}
+.as-sub { font-size: 11px; color: #9aa7b3; margin-top: 1px; }
+
 .report-intro {
   margin-bottom: 24px;
 }
