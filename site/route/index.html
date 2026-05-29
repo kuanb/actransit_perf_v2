@@ -445,10 +445,10 @@
         </p>
         <p class="muted defn">
           <strong>Left column:</strong> central tendency — solid line is
-          the mean, dashed is p50 (median), with a shaded 5–95th
-          percentile band per day-type. <strong>Right column:</strong>
-          upper tail and dispersion — solid is p95, dashed is p99,
-          dotted is standard deviation. Blue = weekday, pink = weekend.
+          the mean, dashed is p50 (median). <strong>Right column:</strong>
+          speed spread and dispersion — a shaded 5–95th percentile band
+          with the standard deviation line drawn on top. Blue = weekday,
+          pink = weekend.
           Hover any chart to see all values for that hour.
         </p>
         <div id="speed-cards" class="cards"></div>
@@ -459,7 +459,7 @@
             <canvas id="speed-central-in-chart" width="900" height="260"></canvas>
           </div>
           <div class="sp-pane sp-tail-in">
-            <h3 class="sub-h">Inbound — p95, p99, stddev by hour</h3>
+            <h3 class="sub-h">Inbound — speed spread (5–95) + stddev by hour</h3>
             <p class="sp-pane-sub">direction_id = 1</p>
             <canvas id="speed-tail-in-chart" width="900" height="260"></canvas>
           </div>
@@ -469,7 +469,7 @@
             <canvas id="speed-central-out-chart" width="900" height="260"></canvas>
           </div>
           <div class="sp-pane sp-tail-out">
-            <h3 class="sub-h">Outbound — p95, p99, stddev by hour</h3>
+            <h3 class="sub-h">Outbound — speed spread (5–95) + stddev by hour</h3>
             <p class="sp-pane-sub">direction_id = 0</p>
             <canvas id="speed-tail-out-chart" width="900" height="260"></canvas>
           </div>
