@@ -164,6 +164,59 @@
       font-size: 12px;
     }
 
+    /* ── service-delivered section (same shell as wait/speed) ─ */
+    #sd-section {
+      padding: 14px 20px 18px;
+      border-bottom: 1px solid #e5e5e5;
+      margin: 0;
+    }
+    #sd-details > summary {
+      cursor: pointer;
+      list-style: none;
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      padding: 4px 0;
+      user-select: none;
+    }
+    #sd-details > summary::-webkit-details-marker { display: none; }
+    #sd-details > summary::before {
+      content: "▸";
+      display: inline-block;
+      width: 0.9em;
+      color: #888;
+      transition: transform 0.15s ease;
+    }
+    #sd-details[open] > summary::before { transform: rotate(90deg); }
+    .sd-title { font-weight: 600; font-size: 16px; }
+    .sd-sub { font-size: 12px; }
+    .sd-body { margin-top: 10px; }
+    .sd-body .defn { font-size: 12px; line-height: 1.55; }
+    .sd-body .defn a { color: #1971c2; }
+    .sd-charts {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 18px;
+      margin-top: 16px;
+    }
+    @media (min-width: 980px) {
+      .sd-charts { grid-template-columns: 1fr 1fr; }
+    }
+    .sd-charts canvas { max-height: 280px; }
+    .sd-charts .sd-pane h3 { margin: 0 0 6px; }
+    #sd-cards { margin-top: 10px; }
+    #sd-cards .card .val { font-size: 22px; }
+    #sd-cards.cards { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+    #sd-empty {
+      margin: 10px 0 0;
+      padding: 10px 12px;
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      color: #856404;
+      border-radius: 6px;
+      font-size: 12px;
+    }
+
     /* ── map overlay controls ───────────────────────────── */
     .map-ctrl {
       position: absolute;
@@ -367,6 +420,48 @@
       <a href="../report-card/">Report card →</a>
     </nav>
   </header>
+
+  <section id="sd-section">
+    <details id="sd-details" open>
+      <summary>
+        <span class="sd-title">Service delivered</span>
+        <span class="muted sd-sub" id="sd-sub">Stops arriving on time (−1 to +7 min) · past week</span>
+      </summary>
+      <div class="sd-body">
+        <p class="muted defn">
+          <strong>What this is.</strong> The same <em>service delivered</em>
+          metric shown on the <a href="../weekly/">weekly</a> dashboard, scoped
+          to this route. A scheduled stop arrival counts as <strong>delivered</strong>
+          only if the bus arrived between <strong>1 minute early and 7 minutes
+          late</strong> (<code>−60 s ≤ delay ≤ 420 s</code>); stops where the
+          bus never arrived count as <em>not delivered</em>.
+          SD% = delivered stops ÷ scheduled stops × 100. These are real
+          BigQuery counts (not an estimate), reused from the weekly roll-up.
+        </p>
+        <p class="muted defn">
+          <strong>Time resolution.</strong> The left chart is the true SD% per
+          day (the finest count-based resolution we precompute). The right chart
+          adds hourly context: median (p50) and p95 delay by hour of day, with
+          the shaded band marking the accepted −1…+7 min window — hours whose
+          line sits inside the band are mostly being delivered on time, hours
+          above it are running late. Finer (e.g. 15-min) true SD% would require
+          a new aggregation in the stats pipeline.
+        </p>
+        <div id="sd-cards" class="cards"></div>
+        <div class="sd-charts">
+          <div class="sd-pane sd-daily">
+            <h3 class="sub-h">Service delivered by day (stop-level)</h3>
+            <canvas id="sd-daily-chart" width="900" height="260"></canvas>
+          </div>
+          <div class="sd-pane sd-hour">
+            <h3 class="sub-h">Delay by hour vs accepted window (PT)</h3>
+            <canvas id="sd-hour-chart" width="900" height="260"></canvas>
+          </div>
+        </div>
+        <div id="sd-empty" hidden></div>
+      </div>
+    </details>
+  </section>
 
   <section id="wait-time-section">
     <details id="wait-details" open>

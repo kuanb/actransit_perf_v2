@@ -14,6 +14,7 @@ let activeCategory = params.get("category") || "adherence"; // "adherence" | "sp
 let activeSpeedMetric = params.get("speed_metric") || "mean"; // "mean" | "p50" | "stddev"
 let statsOpen = (params.get("stats") || "open") !== "closed";
 let speedOpen = (params.get("speed") || "open") !== "closed";
+let sdOpen = (params.get("sd") || "open") !== "closed";
 
 // ── colour + size helpers ──────────────────────────────────────────────────
 
@@ -207,6 +208,8 @@ function syncURL() {
   else url.searchParams.set("stats", "closed");
   if (speedOpen) url.searchParams.delete("speed");
   else url.searchParams.set("speed", "closed");
+  if (sdOpen) url.searchParams.delete("sd");
+  else url.searchParams.set("sd", "closed");
   window.history.replaceState(null, "", url.toString());
 }
 
@@ -233,15 +236,32 @@ async function loadData() {
   const speedURL = weekEnd
     ? `${GCS_BASE}/stats/weekly/route_speed/${weekEnd}/${safe}.json`
     : null;
+  // The weekly roll-up isn't split per route, but it carries this route's
+  // real (count-based) service-delivered series and hourly delay. We fetch
+  // the whole file and slice out this route below.
+  const weeklyURL = weekEnd ? `${GCS_BASE}/stats/weekly/${weekEnd}.json` : null;
 
   try {
-    const [gtfs, stopStats, waitStats, speedStats] = await Promise.all([
+    const [gtfs, stopStats, waitStats, speedStats, weekly] = await Promise.all([
       fetchJSON(gtfsURL),
       statsURL  ? fetchJSON(statsURL).catch(() => null)  : Promise.resolve(null),
       waitURL   ? fetchJSON(waitURL).catch(() => null)   : Promise.resolve(null),
       speedURL  ? fetchJSON(speedURL).catch(() => null)  : Promise.resolve(null),
+      weeklyURL ? fetchJSON(weeklyURL).catch(() => null) : Promise.resolve(null),
     ]);
-    return { gtfs, stopStats, waitStats, speedStats };
+
+    let routeDailySD = null;
+    let routeDelayByHour = null;
+    if (weekly) {
+      if (Array.isArray(weekly.route_daily_service_delivered)) {
+        routeDailySD = weekly.route_daily_service_delivered
+          .find(r => r.route_id === routeID) || null;
+      }
+      if (weekly.route_delay_by_hour) {
+        routeDelayByHour = weekly.route_delay_by_hour[routeID] || null;
+      }
+    }
+    return { gtfs, stopStats, waitStats, speedStats, routeDailySD, routeDelayByHour };
   } catch (e) {
     document.getElementById("loading").textContent = `Failed to load data: ${e.message}`;
     return null;
@@ -865,6 +885,16 @@ async function boot() {
     });
   }
 
+  const sdDetails = document.getElementById("sd-details");
+  if (sdDetails) {
+    sdDetails.open = sdOpen;
+    sdDetails.addEventListener("toggle", () => {
+      sdOpen = sdDetails.open;
+      syncURL();
+    });
+  }
+
+  renderServiceDelivered(data.routeDailySD, data.routeDelayByHour);
   renderWaitTime(data.waitStats);
   renderSpeed(data.speedStats);
 
@@ -887,6 +917,230 @@ async function boot() {
   }
 
   initMap();
+}
+
+// ── service-delivered section rendering ────────────────────────────────────
+
+// Accepted on-time window, in delay-minutes, matching the weekly/daily
+// stop-level SD definition (−60 s … +420 s).
+const SD_WINDOW_LO_MIN = -1;
+const SD_WINDOW_HI_MIN = 7;
+
+// weekStopSD collapses a route's by_day[] into a single week SD% the same
+// way the backend aggregates it: delivered stops ÷ scheduled stops, i.e.
+// an n-weighted mean of the per-day percentages (not a mean of ratios).
+function weekStopSD(byDay) {
+  let deliveredN = 0;
+  let totalN = 0;
+  for (const d of byDay || []) {
+    if (d.stop_sd_pct === null || d.stop_sd_pct === undefined || !d.stop_n) continue;
+    deliveredN += (d.stop_sd_pct / 100) * d.stop_n;
+    totalN += d.stop_n;
+  }
+  return totalN > 0 ? { pct: (100 * deliveredN) / totalN, n: totalN } : null;
+}
+
+function renderServiceDelivered(sd, delayByHour) {
+  const empty = document.getElementById("sd-empty");
+  const byDay = sd && Array.isArray(sd.by_day) ? sd.by_day : [];
+  const haveDaily = byDay.some(d => d.stop_sd_pct !== null && d.stop_sd_pct !== undefined);
+  const haveHourly = Array.isArray(delayByHour) &&
+    delayByHour.some(c => c.p50 !== null || c.p95 !== null);
+
+  if (!haveDaily && !haveHourly) {
+    document.getElementById("sd-cards").innerHTML = "";
+    empty.textContent = weekEnd
+      ? "Service-delivered stats not yet computed for this week — check back after the next Sunday roll-up."
+      : "Open this page via a route's map link on the weekly dashboard to load service-delivered stats.";
+    empty.hidden = false;
+    return;
+  }
+  empty.hidden = true;
+
+  const week = weekStopSD(byDay);
+  const cards = [];
+  if (week) {
+    cards.push({
+      label: "Service delivered — week",
+      val: `${fmt(week.pct)}%`,
+      grade: gradeStopSD(week.pct),
+    });
+    cards.push({ label: "Not delivered — week", val: `${fmt(100 - week.pct)}%` });
+    cards.push({ label: "Scheduled stops — week", val: intFmt(week.n) });
+  }
+  if (sd && sd.overall_p50_delay_min !== null && sd.overall_p50_delay_min !== undefined) {
+    cards.push({ label: "Median delay — week", val: `${fmt(sd.overall_p50_delay_min)} min` });
+  }
+  renderCards("#sd-cards", cards);
+
+  renderSDDailyChart(byDay);
+  renderSDHourChart(delayByHour);
+}
+
+// 100%-stacked per-day bar: delivered (within window) vs not delivered.
+function renderSDDailyChart(byDay) {
+  const canvas = document.getElementById("sd-daily-chart");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+
+  const labels = byDay.map(d => d.day || d.service_date);
+  const delivered = byDay.map(d =>
+    d.stop_sd_pct === null || d.stop_sd_pct === undefined ? null : d.stop_sd_pct);
+  const notDelivered = byDay.map(d =>
+    d.stop_sd_pct === null || d.stop_sd_pct === undefined ? null : 100 - d.stop_sd_pct);
+  const counts = byDay.map(d => d.stop_n || 0);
+  const dates = byDay.map(d => d.service_date || "");
+  const barColors = delivered.map(p => (p === null ? "#ccc" : gradeStopSD(p).bg));
+
+  new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Delivered",
+          data: delivered,
+          backgroundColor: barColors,
+          borderWidth: 0,
+          stack: "sd",
+        },
+        {
+          label: "Not delivered",
+          data: notDelivered,
+          backgroundColor: "rgba(120,120,120,0.18)",
+          borderWidth: 0,
+          stack: "sd",
+        },
+      ],
+    },
+    options: {
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            title: (c) => `${c[0].label}${dates[c[0].dataIndex] ? ` (${dates[c[0].dataIndex]})` : ""}`,
+            label: (c) => {
+              const pct = delivered[c.dataIndex];
+              if (pct === null) return "no data";
+              if (c.datasetIndex === 0) {
+                return `${pct.toFixed(1)}% delivered — n=${counts[c.dataIndex].toLocaleString()}`;
+              }
+              return `${(100 - pct).toFixed(1)}% not delivered`;
+            },
+          },
+        },
+      },
+      scales: {
+        x: { stacked: true, grid: { display: false } },
+        y: {
+          stacked: true,
+          min: 0,
+          max: 100,
+          title: { display: true, text: "% of scheduled stops" },
+        },
+      },
+    },
+  });
+}
+
+// p50 / p95 delay by hour with the accepted window shaded as a band.
+function renderSDHourChart(delayByHour) {
+  const canvas = document.getElementById("sd-hour-chart");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+
+  const byHour = {};
+  for (const c of delayByHour || []) byHour[c.hour] = c;
+  const labels = [];
+  const p50 = [];
+  const p95 = [];
+  const ns = [];
+  for (let h = 0; h < 24; h++) {
+    labels.push(`${h}`);
+    const c = byHour[h];
+    p50.push(c && c.p50 !== null && c.p50 !== undefined ? c.p50 : null);
+    p95.push(c && c.p95 !== null && c.p95 !== undefined ? c.p95 : null);
+    ns.push(c ? c.n : 0);
+  }
+
+  const datasets = [
+    {
+      label: "accepted window (top)",
+      data: labels.map(() => SD_WINDOW_HI_MIN),
+      borderColor: "rgba(46,160,90,0.5)",
+      borderWidth: 1,
+      borderDash: [4, 4],
+      pointRadius: 0,
+      fill: "+1",
+      backgroundColor: "rgba(46,160,90,0.10)",
+    },
+    {
+      label: "accepted window (bottom)",
+      data: labels.map(() => SD_WINDOW_LO_MIN),
+      borderColor: "rgba(46,160,90,0.5)",
+      borderWidth: 1,
+      borderDash: [4, 4],
+      pointRadius: 0,
+      fill: false,
+    },
+    {
+      label: "p50 delay",
+      data: p50,
+      borderColor: "#1971c2",
+      backgroundColor: "#1971c2",
+      borderWidth: 2,
+      pointRadius: 2,
+      spanGaps: true,
+      tension: 0.25,
+    },
+    {
+      label: "p95 delay",
+      data: p95,
+      borderColor: "#d6336c",
+      backgroundColor: "#d6336c",
+      borderWidth: 2,
+      borderDash: [6, 3],
+      pointRadius: 2,
+      spanGaps: true,
+      tension: 0.25,
+    },
+  ];
+
+  new Chart(ctx, {
+    type: "line",
+    data: { labels, datasets },
+    options: {
+      plugins: {
+        legend: {
+          display: true,
+          position: "top",
+          labels: {
+            boxWidth: 14,
+            filter: (item) => !item.text.startsWith("accepted window"),
+          },
+        },
+        tooltip: {
+          filter: (c) => !c.dataset.label.startsWith("accepted window"),
+          callbacks: {
+            title: (c) => `${c[0].label}:00 PT`,
+            label: (c) => {
+              const v = c.raw;
+              if (v === null) return `${c.dataset.label}: no data`;
+              return `${c.dataset.label}: ${v.toFixed(1)} min`;
+            },
+            afterbody: (c) => {
+              const n = ns[c[0].dataIndex];
+              return n ? `n=${n.toLocaleString()} arrivals` : "";
+            },
+          },
+        },
+      },
+      scales: {
+        x: { title: { display: true, text: "hour of day (PT)" }, grid: { display: false } },
+        y: { max: 120, title: { display: true, text: "delay (min, + = late)" } },
+      },
+    },
+  });
 }
 
 // ── wait-time section rendering ────────────────────────────────────────────
