@@ -1063,6 +1063,15 @@ function renderSDHourChart(delayByHour) {
     ns.push(c ? c.n : 0);
   }
 
+  // Let Chart.js auto-scale to the data, but never blow past 2 hours so a
+  // single extreme hour can't squash the readable range. When the data
+  // stays small the axis stays tight (cap left undefined → auto).
+  let dataMax = 0;
+  for (const v of [...p50, ...p95]) {
+    if (v !== null && v > dataMax) dataMax = v;
+  }
+  const yMax = dataMax > 120 ? 120 : undefined;
+
   const datasets = [
     {
       label: "accepted window (top)",
@@ -1137,7 +1146,7 @@ function renderSDHourChart(delayByHour) {
       },
       scales: {
         x: { title: { display: true, text: "hour of day (PT)" }, grid: { display: false } },
-        y: { max: 120, title: { display: true, text: "delay (min, + = late)" } },
+        y: { max: yMax, title: { display: true, text: "delay (min, + = late)" } },
       },
     },
   });
