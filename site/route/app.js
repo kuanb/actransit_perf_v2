@@ -1249,7 +1249,7 @@ function renderWaitCallout(wait) {
       calloutValue(calloutPct(regularRiderChance)),
       " chance of encountering at least one ",
       calloutValue(`${CALLOUT_LONG_WAIT_MIN}-minute-or-longer wait`),
-      ", while 1 in 20 waited at least ",
+      ", while 5% of riders waited at least ",
       calloutValue(`${block.p95.toFixed(1)} minutes`),
       "."
     );
