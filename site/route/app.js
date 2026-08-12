@@ -1161,33 +1161,8 @@ const WAIT_DAY_TYPE_COLORS = {
   weekend: "#d6336c",
 };
 
-const CALLOUT_LONG_WAIT_MIN = 20;
-const CALLOUT_WEEKLY_TRIPS = {
-  weekday: 10,
-  weekend: 4,
-};
-
 function fmtMaybeMin(v) {
   return v === null || v === undefined ? "—" : `${Number(v).toFixed(1)} min`;
-}
-
-function waitProbabilityAtLeast(histogram, thresholdMin) {
-  const density = histogram && Array.isArray(histogram.density)
-    ? histogram.density
-    : [];
-  const total = density.reduce((sum, value) => sum + (Number(value) || 0), 0);
-  if (total <= 0) return null;
-  const firstBin = Math.max(0, Math.ceil(thresholdMin));
-  const tail = density
-    .slice(firstBin)
-    .reduce((sum, value) => sum + (Number(value) || 0), 0);
-  return Math.max(0, Math.min(1, tail / total));
-}
-
-function calloutPct(probability) {
-  const pct = probability * 100;
-  if (pct > 0 && pct < 0.5) return "<1%";
-  return `${Math.round(pct)}%`;
 }
 
 function calloutValue(value) {
@@ -1230,10 +1205,9 @@ function renderWaitCallout(wait) {
         dayType,
         median,
         p95,
-        longWaitProbability: waitProbabilityAtLeast(block.histogram, CALLOUT_LONG_WAIT_MIN),
       };
     })
-    .filter((block) => block && block.longWaitProbability !== null);
+    .filter(Boolean);
 
   if (!blocks.length) {
     section.hidden = true;
@@ -1242,10 +1216,6 @@ function renderWaitCallout(wait) {
 
   copy.replaceChildren();
   for (const block of blocks) {
-    const regularRiderChance = 1 - Math.pow(
-      1 - block.longWaitProbability,
-      CALLOUT_WEEKLY_TRIPS[block.dayType]
-    );
     const paragraph = document.createElement("p");
     const periodLabel = `${block.dayType[0].toUpperCase()}${block.dayType.slice(1)}s:`;
     appendCalloutParts(paragraph, [
@@ -1254,11 +1224,7 @@ function renderWaitCallout(wait) {
       calloutValue(`Route ${routeID}`),
       " riders typically waited ",
       calloutValue(`${block.median.toFixed(1)} minutes`),
-      `; the regular ${block.dayType} rider had a `,
-      calloutValue(calloutPct(regularRiderChance)),
-      " chance of encountering at least one ",
-      calloutValue(`${CALLOUT_LONG_WAIT_MIN}-minute-or-longer wait`),
-      ", while 5% of riders waited at least ",
+      "; 5% of riders waited at least ",
       calloutValue(`${block.p95.toFixed(1)} minutes`),
       "."
     ]);
