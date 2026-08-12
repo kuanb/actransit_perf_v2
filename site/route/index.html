@@ -35,6 +35,52 @@
       inset: 0;
     }
 
+    /* ── weekly rider-experience callout ──────────────────── */
+    #route-callout {
+      position: relative;
+      margin: 0;
+      padding: 28px clamp(28px, 6vw, 84px) 24px;
+      overflow: hidden;
+      background: #f6f0e6;
+      border-bottom: 1px solid #e4d8c6;
+    }
+    #route-callout::before {
+      content: "“";
+      position: absolute;
+      top: -28px;
+      left: clamp(10px, 2vw, 28px);
+      color: rgba(126, 87, 54, 0.12);
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 150px;
+      line-height: 1;
+      pointer-events: none;
+    }
+    #route-callout[hidden] { display: none; }
+    .route-callout-copy {
+      position: relative;
+      max-width: 1100px;
+      margin: 0 auto;
+      color: #3f3026;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(23px, 3vw, 38px);
+      font-style: italic;
+      line-height: 1.35;
+      letter-spacing: -0.015em;
+    }
+    .route-callout-value {
+      color: #9c2f55;
+      font-style: normal;
+      font-weight: 700;
+    }
+    .route-callout-note {
+      position: relative;
+      max-width: 1100px;
+      margin: 12px auto 0;
+      color: #786a5f;
+      font-size: 11px;
+      line-height: 1.5;
+    }
+
     /* ── wait-time section (above the map) ───────────────── */
     #wait-time-section {
       padding: 14px 20px 18px;
@@ -420,6 +466,13 @@
       <a href="../report-card/">Report card →</a>
     </nav>
   </header>
+
+  <section id="route-callout" hidden aria-label="Weekly rider experience summary">
+    <p class="route-callout-copy" id="route-callout-copy"></p>
+    <p class="route-callout-note">
+      Modeled from observed gaps between buses, with riders assumed to arrive at random times and stops weighted equally. The two-trip estimate assumes each wait is independent.
+    </p>
+  </section>
 
   <section id="sd-section">
     <details id="sd-details" open>
