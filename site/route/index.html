@@ -259,6 +259,36 @@
     #sd-cards { margin-top: 10px; }
     #sd-cards .card .val { font-size: 22px; }
     #sd-cards.cards { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+    #service-gap-callout {
+      margin: 18px 0 0;
+      padding: 15px 18px 13px;
+      background: #f2edf7;
+      border: 1px solid #ded2e8;
+      border-left: 5px solid #9c2f55;
+      border-radius: 7px;
+      box-shadow: 0 2px 8px rgba(83, 52, 91, 0.07);
+    }
+    #service-gap-callout[hidden] { display: none; }
+    .service-gap-copy {
+      margin: 0;
+      color: #46364c;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(18px, 2vw, 24px);
+      font-style: italic;
+      line-height: 1.4;
+    }
+    .service-gap-value {
+      color: #9c2f55;
+      font-size: 1.08em;
+      font-style: normal;
+      font-weight: 700;
+    }
+    .service-gap-note {
+      margin: 7px 0 0;
+      color: #75667b;
+      font-size: 11px;
+      line-height: 1.45;
+    }
     #sd-empty {
       margin: 10px 0 0;
       padding: 10px 12px;
@@ -517,6 +547,14 @@
             <canvas id="sd-hour-chart" width="900" height="260"></canvas>
           </div>
         </div>
+        <aside id="service-gap-callout" hidden aria-label="Consecutive service-gap summary">
+          <p id="service-gap-copy" class="service-gap-copy"></p>
+          <p class="service-gap-note">
+            Each overlapping pair of scheduled trips with no observed arrivals counts once;
+            three in a row counts as two windows. This describes the rider-equivalent
+            experience in the observed data, not confirmed agency cancellation records.
+          </p>
+        </aside>
         <div id="sd-empty" hidden></div>
       </div>
     </details>

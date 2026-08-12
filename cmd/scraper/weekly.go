@@ -79,6 +79,7 @@ type routeDailySD struct {
 	WeekStopN           int64               `json:"week_stop_n"`
 	ScheduledRunsPerDay float64             `json:"scheduled_runs_per_day"`
 	Limited             bool                `json:"limited"`
+	TwoBusGapWindows    *int                `json:"two_bus_gap_windows,omitempty"`
 }
 
 type routeDailySDByDay struct {
@@ -324,11 +325,13 @@ func queryWeeklyRouteStopSD(ctx context.Context, weekStart, weekEnd civil.Date) 
 
 func aggregateRouteDailySD(dailies []*dailyStats, weekStart civil.Date, routeOverallSec map[string]float64, stopSD map[string]map[string]routeStopSDPoint) []routeDailySD {
 	type accum struct {
-		rid       string
-		color     string
-		textColor string
-		byDay     [7]*float64
-		scheduled [7]int
+		rid        string
+		color      string
+		textColor  string
+		byDay      [7]*float64
+		scheduled  [7]int
+		gapWindows int
+		gapDays    int
 	}
 	byRoute := make(map[string]*accum)
 
@@ -354,6 +357,10 @@ func aggregateRouteDailySD(dailies []*dailyStats, weekStart civil.Date, routeOve
 				a.byDay[i] = &v
 			}
 			a.scheduled[i] = r.ScheduledTrips
+			if r.TwoBusGapWindows != nil {
+				a.gapWindows += *r.TwoBusGapWindows
+				a.gapDays++
+			}
 		}
 	}
 
@@ -422,6 +429,11 @@ func aggregateRouteDailySD(dailies []*dailyStats, weekStart civil.Date, routeOve
 		if scheduledDays > 0 {
 			scheduledRunsPerDay = round1(float64(scheduledRuns) / float64(scheduledDays))
 		}
+		var twoBusGapWindows *int
+		if scheduledDays > 0 && it.a.gapDays == scheduledDays {
+			v := it.a.gapWindows
+			twoBusGapWindows = &v
+		}
 		out = append(out, routeDailySD{
 			RouteID:             it.a.rid,
 			OverallP50DelayMin:  p50Min,
@@ -431,6 +443,7 @@ func aggregateRouteDailySD(dailies []*dailyStats, weekStart civil.Date, routeOve
 			WeekStopN:           weekStopN,
 			ScheduledRunsPerDay: scheduledRunsPerDay,
 			Limited:             isLimitedRoute(it.a.rid, scheduledRunsPerDay),
+			TwoBusGapWindows:    twoBusGapWindows,
 		})
 	}
 	return out

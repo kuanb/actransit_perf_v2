@@ -100,8 +100,9 @@ func TestAggregateRouteDailySDClassifiesLimitedRoutes(t *testing.T) {
 	weekStart, _ := civil.ParseDate("2026-04-19")
 	dailies := make([]*dailyStats, 7)
 	for i := 0; i < 5; i++ {
+		gapWindows := i
 		dailies[i] = &dailyStats{Routes: []routeStats{
-			{RouteID: "99", ScheduledTrips: 8},
+			{RouteID: "99", ScheduledTrips: 8, TwoBusGapWindows: &gapWindows},
 			{RouteID: "1T", ScheduledTrips: 9},
 			{RouteID: "O", ScheduledTrips: 4},
 			{RouteID: "6", ScheduledTrips: 20},
@@ -130,5 +131,11 @@ func TestAggregateRouteDailySDClassifiesLimitedRoutes(t *testing.T) {
 	}
 	if got := byID["99"].ByDay[0].Scheduled; got != 8 {
 		t.Errorf("route 99 Sunday scheduled runs = %d, want 8", got)
+	}
+	if got := byID["99"].TwoBusGapWindows; got == nil || *got != 10 {
+		t.Errorf("route 99 two-bus gap windows = %v, want 10", got)
+	}
+	if got := byID["1T"].TwoBusGapWindows; got != nil {
+		t.Errorf("route 1T should omit incomplete two-bus gap data, got %d", *got)
 	}
 }

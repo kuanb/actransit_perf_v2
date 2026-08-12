@@ -941,12 +941,36 @@ function weekStopSD(byDay) {
   return totalN > 0 ? { pct: (100 * deliveredN) / totalN, n: totalN } : null;
 }
 
+function renderServiceGapCallout(sd) {
+  const callout = document.getElementById("service-gap-callout");
+  const copy = document.getElementById("service-gap-copy");
+  if (!callout || !copy) return;
+
+  const windows = sd ? Number(sd.two_bus_gap_windows) : NaN;
+  if (!Number.isInteger(windows) || windows < 0) {
+    callout.hidden = true;
+    return;
+  }
+
+  const value = document.createElement("strong");
+  value.className = "service-gap-value";
+  value.textContent = windows.toLocaleString();
+  copy.replaceChildren(
+    "Riders experienced ",
+    value,
+    ` ${windows === 1 ? "window" : "windows"} equivalent to two consecutive buses not arriving this week.`
+  );
+  callout.hidden = false;
+}
+
 function renderServiceDelivered(sd, delayByHour) {
   const empty = document.getElementById("sd-empty");
   const byDay = sd && Array.isArray(sd.by_day) ? sd.by_day : [];
   const haveDaily = byDay.some(d => d.stop_sd_pct !== null && d.stop_sd_pct !== undefined);
   const haveHourly = Array.isArray(delayByHour) &&
     delayByHour.some(c => c.p50 !== null || c.p95 !== null);
+
+  renderServiceGapCallout(sd);
 
   if (!haveDaily && !haveHourly) {
     document.getElementById("sd-cards").innerHTML = "";

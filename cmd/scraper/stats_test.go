@@ -54,8 +54,9 @@ func TestDefaultStatsServiceDate(t *testing.T) {
 }
 
 // buildSyntheticGTFSCalendarZip produces a zip with calendar.txt,
-// calendar_dates.txt, trips.txt, routes.txt — the files loadActiveServices /
-// loadScheduledTripRoutes / loadRouteColors read.
+// calendar_dates.txt, trips.txt, stop_times.txt, routes.txt — the files
+// loadActiveServices / loadScheduledTripRoutes / loadScheduledRuns /
+// loadRouteColors read.
 func buildSyntheticGTFSCalendarZip(t *testing.T) []byte {
 	t.Helper()
 	files := map[string]string{
@@ -67,12 +68,19 @@ SAT,0,0,0,0,0,1,0,20260101,20271231
 WKDY,20260427,2
 HOLIDAY,20260427,1
 `,
-		"trips.txt": `trip_id,route_id,service_id
-T1,R1,WKDY
-T2,R1,WKDY
-T3,R2,WKDY
-T4,R3,SAT
-T5,R4,HOLIDAY
+		"trips.txt": `trip_id,route_id,service_id,direction_id
+T1,R1,WKDY,0
+T2,R1,WKDY,0
+T3,R2,WKDY,1
+T4,R3,SAT,0
+T5,R4,HOLIDAY,1
+`,
+		"stop_times.txt": `trip_id,arrival_time,departure_time,stop_id,stop_sequence
+T1,08:00:00,08:00:00,S1,1
+T2,09:00:00,09:00:00,S1,1
+T3,10:00:00,10:00:00,S2,1
+T4,11:00:00,11:00:00,S3,1
+T5,12:00:00,12:00:00,S4,1
 `,
 		"routes.txt": `route_id,route_color,route_text_color
 R1,A30D11,FFFFFF
@@ -166,6 +174,49 @@ func TestLoadScheduledTripRoutes(t *testing.T) {
 	}
 	if _, ok := got["T4"]; ok {
 		t.Fatalf("T4 (SAT service) should not be in WKDY scheduled set")
+	}
+}
+
+func TestLoadScheduledRuns(t *testing.T) {
+	zr := openZipReader(t, buildSyntheticGTFSCalendarZip(t))
+	services := map[string]struct{}{"WKDY": {}}
+	serviceDate := civil.Date{Year: 2026, Month: 4, Day: 28}
+	got, err := loadScheduledRuns(zr, serviceDate, services)
+	if err != nil {
+		t.Fatalf("loadScheduledRuns: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("got %d runs, want 3: %+v", len(got), got)
+	}
+	byTrip := make(map[string]scheduledRun, len(got))
+	for _, run := range got {
+		byTrip[run.TripID] = run
+	}
+	if got := byTrip["T1"]; got.RouteID != "R1" || got.DirectionID != "0" || got.Start.Hour() != 15 {
+		t.Fatalf("T1 = %+v, want route R1 direction 0 at 08:00 PT", got)
+	}
+}
+
+func TestCountTwoBusGapWindows(t *testing.T) {
+	base := time.Date(2026, 4, 28, 8, 0, 0, 0, time.UTC)
+	runs := []scheduledRun{
+		{TripID: "A1", RouteID: "A", DirectionID: "0", Start: base},
+		{TripID: "A2", RouteID: "A", DirectionID: "0", Start: base.Add(time.Hour)},
+		{TripID: "A3", RouteID: "A", DirectionID: "0", Start: base.Add(2 * time.Hour)},
+		{TripID: "A4", RouteID: "A", DirectionID: "0", Start: base.Add(3 * time.Hour)},
+		{TripID: "A5", RouteID: "A", DirectionID: "1", Start: base.Add(30 * time.Minute)},
+		{TripID: "A6", RouteID: "A", DirectionID: "1", Start: base.Add(90 * time.Minute)},
+		{TripID: "B1", RouteID: "B", DirectionID: "0", Start: base},
+		{TripID: "B2", RouteID: "B", DirectionID: "0", Start: base.Add(time.Hour)},
+	}
+	observed := map[string]struct{}{"A4": {}, "A5": {}, "B1": {}}
+
+	got := countTwoBusGapWindows(runs, observed)
+	if got["A"] != 2 {
+		t.Fatalf("route A windows = %d, want 2 from the A1/A2/A3 streak", got["A"])
+	}
+	if got["B"] != 0 {
+		t.Fatalf("route B windows = %d, want 0 because B1 was observed", got["B"])
 	}
 }
 

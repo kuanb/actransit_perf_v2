@@ -130,6 +130,7 @@ type routeStats struct {
 	Limited             bool     `json:"limited"`
 	ServiceDeliveredPct *float64 `json:"service_delivered_pct"`
 	StopSDPct           *float64 `json:"stop_sd_pct,omitempty"`
+	TwoBusGapWindows    *int     `json:"two_bus_gap_windows,omitempty"`
 }
 
 type bqStatsStats struct {
@@ -171,6 +172,11 @@ func generateDailyStats(ctx context.Context, serviceDate civil.Date) (*dailyStat
 	if err != nil {
 		return nil, fmt.Errorf("query ran trips: %w", err)
 	}
+	scheduledRuns, err := loadScheduledRuns(zr, serviceDate, activeServices)
+	if err != nil {
+		return nil, fmt.Errorf("load scheduled runs: %w", err)
+	}
+	twoBusGapWindowsByRoute := countTwoBusGapWindows(scheduledRuns, ranTrips)
 	notCompleted, notCompletedDist, err := queryTripsNotCompleted(ctx, serviceDate)
 	if err != nil {
 		return nil, fmt.Errorf("query trips not completed: %w", err)
@@ -255,6 +261,8 @@ func generateDailyStats(ctx context.Context, serviceDate civil.Date) (*dailyStat
 		routes[i].RanTrips = ran
 		routes[i].Limited = isLimitedRoute(rid, float64(sched))
 		if sched > 0 {
+			twoBusGapWindows := twoBusGapWindowsByRoute[rid]
+			routes[i].TwoBusGapWindows = &twoBusGapWindows
 			pct := round1(100 * float64(ran) / float64(sched))
 			routes[i].ServiceDeliveredPct = &pct
 		}
@@ -558,6 +566,110 @@ func loadScheduledTripRoutes(zr *zip.Reader, services map[string]struct{}) (map[
 		out[col(row, idx, "trip_id")] = col(row, idx, "route_id")
 	}
 	return out, nil
+}
+
+type scheduledRun struct {
+	TripID      string
+	RouteID     string
+	DirectionID string
+	Start       time.Time
+}
+
+func loadScheduledRuns(zr *zip.Reader, serviceDate civil.Date, services map[string]struct{}) ([]scheduledRun, error) {
+	cr, rc, headers, err := openZipCSV(zr, "trips.txt")
+	if err != nil {
+		return nil, err
+	}
+	idx := headerIndex(headers)
+	tripMeta := make(map[string]scheduledRun)
+	for {
+		row, err := cr.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			rc.Close()
+			return nil, err
+		}
+		if _, ok := services[col(row, idx, "service_id")]; !ok {
+			continue
+		}
+		tripID := col(row, idx, "trip_id")
+		tripMeta[tripID] = scheduledRun{
+			TripID:      tripID,
+			RouteID:     col(row, idx, "route_id"),
+			DirectionID: col(row, idx, "direction_id"),
+		}
+	}
+	rc.Close()
+
+	cr, rc, headers, err = openZipCSV(zr, "stop_times.txt")
+	if err != nil {
+		return nil, err
+	}
+	defer rc.Close()
+	idx = headerIndex(headers)
+	for {
+		row, err := cr.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		tripID := col(row, idx, "trip_id")
+		run, ok := tripMeta[tripID]
+		if !ok {
+			continue
+		}
+		start := parseScheduledArrival(serviceDate, col(row, idx, "arrival_time"))
+		if start.IsZero() {
+			start = parseScheduledArrival(serviceDate, col(row, idx, "departure_time"))
+		}
+		if start.IsZero() || (!run.Start.IsZero() && !start.Before(run.Start)) {
+			continue
+		}
+		run.Start = start
+		tripMeta[tripID] = run
+	}
+
+	runs := make([]scheduledRun, 0, len(tripMeta))
+	for _, run := range tripMeta {
+		if !run.Start.IsZero() {
+			runs = append(runs, run)
+		}
+	}
+	return runs, nil
+}
+
+func countTwoBusGapWindows(runs []scheduledRun, observedTrips map[string]struct{}) map[string]int {
+	type routeDirection struct {
+		RouteID     string
+		DirectionID string
+	}
+	byRouteDirection := make(map[routeDirection][]scheduledRun)
+	for _, run := range runs {
+		key := routeDirection{RouteID: run.RouteID, DirectionID: run.DirectionID}
+		byRouteDirection[key] = append(byRouteDirection[key], run)
+	}
+
+	out := make(map[string]int)
+	for key, group := range byRouteDirection {
+		sort.Slice(group, func(i, j int) bool {
+			if group[i].Start.Equal(group[j].Start) {
+				return group[i].TripID < group[j].TripID
+			}
+			return group[i].Start.Before(group[j].Start)
+		})
+		for i := 1; i < len(group); i++ {
+			_, previousObserved := observedTrips[group[i-1].TripID]
+			_, currentObserved := observedTrips[group[i].TripID]
+			if !previousObserved && !currentObserved {
+				out[key.RouteID]++
+			}
+		}
+	}
+	return out
 }
 
 type colorPair struct {
