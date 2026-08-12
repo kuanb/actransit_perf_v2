@@ -1162,6 +1162,10 @@ const WAIT_DAY_TYPE_COLORS = {
 };
 
 const CALLOUT_LONG_WAIT_MIN = 20;
+const CALLOUT_WEEKLY_TRIPS = {
+  weekday: 10,
+  weekend: 4,
+};
 
 function fmtMaybeMin(v) {
   return v === null || v === undefined ? "—" : `${Number(v).toFixed(1)} min`;
@@ -1231,22 +1235,21 @@ function renderWaitCallout(wait) {
 
   const parts = [];
   for (const [index, block] of blocks.entries()) {
-    const twoTripChance = 1 - Math.pow(1 - block.longWaitProbability, 2);
+    const regularRiderChance = 1 - Math.pow(
+      1 - block.longWaitProbability,
+      CALLOUT_WEEKLY_TRIPS[block.dayType]
+    );
     if (index > 0) parts.push(" ");
     parts.push(
       `On ${block.dayType}s, `,
       calloutValue(`Route ${routeID}`),
       " riders typically waited ",
       calloutValue(`${block.median.toFixed(1)} minutes`),
-      "; a rider making two ",
-      block.dayType,
-      " trips in a week had a ",
-      calloutValue(calloutPct(twoTripChance)),
+      `; the regular ${block.dayType} rider had a `,
+      calloutValue(calloutPct(regularRiderChance)),
       " chance of encountering at least one ",
       calloutValue(`${CALLOUT_LONG_WAIT_MIN}-minute-or-longer wait`),
-      ", and 1 in 20 ",
-      block.dayType,
-      " riders experienced a wait of at least ",
+      ", while 1 in 20 waited at least ",
       calloutValue(`${block.p95.toFixed(1)} minutes`),
       "."
     );
