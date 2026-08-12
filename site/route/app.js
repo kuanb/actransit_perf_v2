@@ -1197,6 +1197,13 @@ function calloutValue(value) {
   return span;
 }
 
+function calloutPeriod(value) {
+  const strong = document.createElement("strong");
+  strong.className = "route-callout-period";
+  strong.textContent = value;
+  return strong;
+}
+
 function appendCalloutParts(element, parts) {
   element.replaceChildren();
   for (const part of parts) {
@@ -1233,15 +1240,17 @@ function renderWaitCallout(wait) {
     return;
   }
 
-  const parts = [];
-  for (const [index, block] of blocks.entries()) {
+  copy.replaceChildren();
+  for (const block of blocks) {
     const regularRiderChance = 1 - Math.pow(
       1 - block.longWaitProbability,
       CALLOUT_WEEKLY_TRIPS[block.dayType]
     );
-    if (index > 0) parts.push(" ");
-    parts.push(
-      `On ${block.dayType}s, `,
+    const paragraph = document.createElement("p");
+    const periodLabel = `${block.dayType[0].toUpperCase()}${block.dayType.slice(1)}s:`;
+    appendCalloutParts(paragraph, [
+      calloutPeriod(periodLabel),
+      " ",
       calloutValue(`Route ${routeID}`),
       " riders typically waited ",
       calloutValue(`${block.median.toFixed(1)} minutes`),
@@ -1252,10 +1261,10 @@ function renderWaitCallout(wait) {
       ", while 5% of riders waited at least ",
       calloutValue(`${block.p95.toFixed(1)} minutes`),
       "."
-    );
+    ]);
+    copy.append(paragraph);
   }
 
-  appendCalloutParts(copy, parts);
   section.hidden = false;
 }
 

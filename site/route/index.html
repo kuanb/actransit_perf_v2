@@ -67,6 +67,12 @@
       line-height: 1.35;
       letter-spacing: -0.015em;
     }
+    .route-callout-copy p { margin: 0; }
+    .route-callout-copy p + p { margin-top: 0.75em; }
+    .route-callout-period {
+      font-style: normal;
+      font-weight: 700;
+    }
     .route-callout-value {
       color: #9c2f55;
       font-style: normal;
@@ -468,7 +474,7 @@
   </header>
 
   <section id="route-callout" hidden aria-label="Weekly rider experience summary">
-    <p class="route-callout-copy" id="route-callout-copy"></p>
+    <div class="route-callout-copy" id="route-callout-copy"></div>
     <p class="route-callout-note">
       Modeled from observed gaps between buses, with riders assumed to arrive at random times and stops weighted equally. A regular weekday rider makes 10 trips a week (two per weekday); a regular weekend rider makes four (two per weekend day). Encounter estimates assume each wait is independent.
     </p>
