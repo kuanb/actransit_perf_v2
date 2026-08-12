@@ -74,7 +74,6 @@ function aggregateRoutes(dailies) {
     if (!d || !Array.isArray(d.routes)) continue;
     for (const r of d.routes) {
       const w = Number(r.observations) || 0;
-      if (w <= 0) continue;
       let a = acc.get(r.route_id);
       if (!a) {
         a = {
@@ -84,6 +83,8 @@ function aggregateRoutes(dailies) {
           obs: 0,
           trips: 0,
           days: 0,
+          scheduled_runs: 0,
+          scheduled_days: 0,
           // weighted sums + the weight actually present for each metric
           sd_sum: 0, sd_w: 0,
           ot_sum: 0, ot_w: 0,
@@ -93,6 +94,12 @@ function aggregateRoutes(dailies) {
         };
         acc.set(r.route_id, a);
       }
+      const scheduled = Number(r.scheduled_trips) || 0;
+      if (scheduled > 0) {
+        a.scheduled_runs += scheduled;
+        a.scheduled_days += 1;
+      }
+      if (w <= 0) continue;
       a.color = r.color || a.color;
       a.text_color = r.text_color || a.text_color;
       a.obs += w;
@@ -110,6 +117,9 @@ function aggregateRoutes(dailies) {
 
   const out = [];
   for (const a of acc.values()) {
+    const scheduledRunsPerDay = a.scheduled_days
+      ? a.scheduled_runs / a.scheduled_days
+      : 0;
     const metrics = {
       stop_sd_pct: a.sd_w ? a.sd_sum / a.sd_w : null,
       on_time_pct: a.ot_w ? a.ot_sum / a.ot_w : null,
@@ -125,6 +135,11 @@ function aggregateRoutes(dailies) {
       trips_observed: a.trips,
       observations: a.obs,
       days: a.days,
+      scheduled_runs_per_day: scheduledRunsPerDay,
+      limited: isLimitedRoute({
+        route_id: a.route_id,
+        scheduled_runs_per_day: scheduledRunsPerDay,
+      }),
       ...metrics,
       score: compositeScore(metrics),
     });
@@ -196,7 +211,7 @@ function renderAgencyHero(a) {
       </div>
       <div class="agency-body">
         <div class="agency-title">Agency-wide grade</div>
-        <div class="agency-sub">All routes over the last four weeks, weighted by each route's share of measured trip-stops.</div>
+        <div class="agency-sub">Non-limited routes over the last four weeks, weighted by each route's share of measured trip-stops. Lettered Transbay routes remain included.</div>
         <div class="agency-stats">
           ${stat("Service delivered", a.stop_sd_pct == null ? "—" : fmt(a.stop_sd_pct) + "%")}
           ${stat("On time (≤3 min)", a.on_time_pct == null ? "—" : fmt(a.on_time_pct) + "%")}
@@ -249,8 +264,9 @@ async function load() {
   )).filter(Boolean);
 
   const routes = aggregateRoutes(dailies).filter((r) => r.score != null);
+  const includedRoutes = routes.filter((r) => !isLimitedRoute(r));
 
-  renderAgencyHero(aggregateAgency(routes));
+  renderAgencyHero(aggregateAgency(includedRoutes));
 
   const observed = dailies
     .map((d) => d.service_date)
@@ -261,7 +277,10 @@ async function load() {
   document.getElementById("meta").textContent =
     `Last ${dailies.length} service days` +
     (first && last ? ` · ${first} → ${last}` : "") +
-    ` · ${routes.length} routes graded`;
+    ` · ${includedRoutes.length} routes included` +
+    (routes.length > includedRoutes.length
+      ? ` · ${routes.length - includedRoutes.length} limited routes hidden`
+      : "");
 
   render(routes, weekEnd);
 }
@@ -271,6 +290,10 @@ function render(routes, weekEnd) {
   let sortKey = "score";
   let sortDir = -1;
   let filterQ = "";
+  let showLimitedRoutes = false;
+  const limitedRoutes = routes.filter(isLimitedRoute);
+  const limitedToggle = document.getElementById("routes-limited-toggle");
+  const limitedStatus = document.getElementById("routes-limited-status");
   // route_ids whose detail row is expanded; persists across re-sort/filter.
   const expanded = new Set();
 
@@ -291,7 +314,9 @@ function render(routes, weekEnd) {
 
   function renderRows() {
     const rows = routes
-      .filter((r) => !filterQ || r.route_id.toLowerCase().includes(filterQ))
+      .filter((r) =>
+        (showLimitedRoutes || !isLimitedRoute(r)) &&
+        (!filterQ || r.route_id.toLowerCase().includes(filterQ)))
       .sort((a, b) => {
         const av = a[sortKey];
         const bv = b[sortKey];
@@ -310,7 +335,7 @@ function render(routes, weekEnd) {
         return `
       <tr class="route-row ${isOpen ? "is-open" : ""}" data-rid="${r.route_id}">
         <td><span class="grade-badge" style="background:${g.bg};color:${g.fg}" title="composite score ${fmt(r.score)} / 100">${grade}</span></td>
-        <td>${routeBadge(r)}</td>
+        <td>${routeBadge(r)}${limitedRouteTag(r)}</td>
         <td title="composite score / 100">${fmt(r.score)}</td>
         <td>${intFmt(r.trips_observed)}</td>
         <td>${intFmt(r.observations)}</td>
@@ -341,6 +366,11 @@ function render(routes, weekEnd) {
         th.classList.add(sortDir > 0 ? "sorted-asc" : "sorted-desc");
       }
     });
+    limitedToggle.textContent = showLimitedRoutes ? "Hide Limited Routes" : "Show Limited Routes";
+    limitedToggle.setAttribute("aria-pressed", String(showLimitedRoutes));
+    limitedStatus.textContent = limitedRoutes.length
+      ? `${limitedRoutes.length} limited route${limitedRoutes.length === 1 ? "" : "s"} ${showLimitedRoutes ? "shown" : "hidden"}`
+      : "No limited routes in this window";
   }
 
   document.querySelectorAll("#report-table th").forEach((th) => {
@@ -355,6 +385,11 @@ function render(routes, weekEnd) {
 
   document.getElementById("route-filter").addEventListener("input", (e) => {
     filterQ = e.target.value.toLowerCase().trim();
+    renderRows();
+  });
+
+  limitedToggle.addEventListener("click", () => {
+    showLimitedRoutes = !showLimitedRoutes;
     renderRows();
   });
 

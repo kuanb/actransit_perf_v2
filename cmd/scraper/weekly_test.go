@@ -20,14 +20,14 @@ func TestDefaultWeekEndSaturday(t *testing.T) {
 	}{
 		// Sun → prior Sat (this is the cron's nominal fire time).
 		{"sunday_morning_3am", "2026-04-26 03:00:00", "2026-04-25"},
-		{"sunday_late",        "2026-04-26 23:59:59", "2026-04-25"},
+		{"sunday_late", "2026-04-26 23:59:59", "2026-04-25"},
 		// Mid-week → still last Sat.
-		{"monday",   "2026-04-27 12:00:00", "2026-04-25"},
+		{"monday", "2026-04-27 12:00:00", "2026-04-25"},
 		{"thursday", "2026-04-30 09:00:00", "2026-04-25"},
-		{"friday",   "2026-05-01 18:00:00", "2026-04-25"},
+		{"friday", "2026-05-01 18:00:00", "2026-04-25"},
 		// Saturday today is not yet complete — go to last Saturday, not today.
 		{"saturday_morning", "2026-05-02 06:00:00", "2026-04-25"},
-		{"saturday_late",    "2026-05-02 23:59:59", "2026-04-25"},
+		{"saturday_late", "2026-05-02 23:59:59", "2026-04-25"},
 		// Next Sunday rolls forward to the just-completed Sat.
 		{"next_sunday", "2026-05-03 03:00:00", "2026-05-02"},
 	}
@@ -93,5 +93,42 @@ func TestDayNamesAlignWithWeekStart(t *testing.T) {
 		if dayNames[i] != short {
 			t.Fatalf("dayNames[%d] = %q, want %q", i, dayNames[i], short)
 		}
+	}
+}
+
+func TestAggregateRouteDailySDClassifiesLimitedRoutes(t *testing.T) {
+	weekStart, _ := civil.ParseDate("2026-04-19")
+	dailies := make([]*dailyStats, 7)
+	for i := 0; i < 5; i++ {
+		dailies[i] = &dailyStats{Routes: []routeStats{
+			{RouteID: "99", ScheduledTrips: 8},
+			{RouteID: "1T", ScheduledTrips: 9},
+			{RouteID: "O", ScheduledTrips: 4},
+			{RouteID: "6", ScheduledTrips: 20},
+		}}
+	}
+
+	routes := aggregateRouteDailySD(dailies, weekStart, nil, nil)
+	byID := make(map[string]routeDailySD, len(routes))
+	for _, route := range routes {
+		byID[route.RouteID] = route
+	}
+
+	for _, routeID := range []string{"99", "1T"} {
+		if !byID[routeID].Limited {
+			t.Errorf("route %s should be limited", routeID)
+		}
+	}
+	if byID["O"].Limited {
+		t.Error("lettered Transbay route O should be exempt")
+	}
+	if byID["6"].Limited {
+		t.Error("route 6 has at least 10 scheduled runs per day")
+	}
+	if got := byID["99"].ScheduledRunsPerDay; got != 8 {
+		t.Errorf("route 99 scheduled runs/day = %v, want 8", got)
+	}
+	if got := byID["99"].ByDay[0].Scheduled; got != 8 {
+		t.Errorf("route 99 Sunday scheduled runs = %d, want 8", got)
 	}
 }

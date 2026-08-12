@@ -12,6 +12,48 @@ const fmt = (v, d = 1) =>
 const intFmt = (v) =>
   v === null || v === undefined ? "—" : Number(v).toLocaleString();
 
+const LIMITED_ROUTE_SCHEDULED_RUNS_PER_DAY = 10;
+
+function isTransbayRoute(routeID) {
+  return /^[A-Za-z]+$/.test(String(routeID || ""));
+}
+
+function scheduledRunsPerServiceDay(route) {
+  if (route && route.scheduled_runs_per_day !== null && route.scheduled_runs_per_day !== undefined) {
+    const precomputed = Number(route.scheduled_runs_per_day);
+    if (Number.isFinite(precomputed)) return precomputed;
+  }
+
+  if (route && Array.isArray(route.by_day)) {
+    const activeDays = route.by_day
+      .map((day) => Number(day.scheduled))
+      .filter((scheduled) => Number.isFinite(scheduled) && scheduled > 0);
+    if (activeDays.length) {
+      return activeDays.reduce((sum, scheduled) => sum + scheduled, 0) / activeDays.length;
+    }
+  }
+
+  if (route && route.scheduled_trips !== null && route.scheduled_trips !== undefined) {
+    const daily = Number(route.scheduled_trips);
+    if (Number.isFinite(daily)) return daily;
+  }
+  return null;
+}
+
+function isLimitedRoute(route) {
+  if (route && typeof route.limited === "boolean") return route.limited;
+  const scheduled = scheduledRunsPerServiceDay(route);
+  return scheduled !== null &&
+    scheduled < LIMITED_ROUTE_SCHEDULED_RUNS_PER_DAY &&
+    !isTransbayRoute(route && route.route_id);
+}
+
+function limitedRouteTag(route) {
+  return isLimitedRoute(route)
+    ? `<span class="limited-route-tag" title="Fewer than 10 scheduled runs per active service day">Limited</span>`
+    : "";
+}
+
 async function fetchJSON(url) {
   const res = await fetch(url, { cache: "no-cache" });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);

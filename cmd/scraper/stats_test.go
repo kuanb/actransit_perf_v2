@@ -274,16 +274,16 @@ func TestComputeDistortion(t *testing.T) {
 			d    float64
 			want int
 		}{
-			{-200, 0},      // underflow
-			{-100, 0},      // exactly -100% goes to underflow
-			{-99.9, 1},     // first 5% bucket
-			{-95, 2},       // -95..-90
-			{0, 21},        // 0% → bucket starting at 0
-			{4.99, 21},     // upper edge of 0..5
-			{5, 22},        // start of +5..+10
-			{99.99, 40},    // last 5% bucket
-			{100, 41},      // exactly +100% goes to overflow
-			{500, 41},      // overflow
+			{-200, 0},   // underflow
+			{-100, 0},   // exactly -100% goes to underflow
+			{-99.9, 1},  // first 5% bucket
+			{-95, 2},    // -95..-90
+			{0, 21},     // 0% → bucket starting at 0
+			{4.99, 21},  // upper edge of 0..5
+			{5, 22},     // start of +5..+10
+			{99.99, 40}, // last 5% bucket
+			{100, 41},   // exactly +100% goes to overflow
+			{500, 41},   // overflow
 		}
 		for _, c := range cases {
 			if got := distortionBucketIndex(c.d); got != c.want {
@@ -337,6 +337,7 @@ func TestBuildVolumeHistogram(t *testing.T) {
 		return c
 	}
 	byRoute := map[string][]int64{
+		"99": mk(10, 1000),
 		"1":  mk(10, 100),
 		"6":  mk(10, 80),
 		"18": mk(10, 60),
@@ -349,6 +350,11 @@ func TestBuildVolumeHistogram(t *testing.T) {
 		"G":  mk(10, 12),
 		"H":  mk(10, 8),
 		"J":  mk(10, 7),
+	}
+	scheduledByRoute := map[string]int{
+		"99": 2,
+		"1":  20, "6": 20, "18": 20, "51": 20, "57": 20, "72": 20,
+		"NL": 5, "O": 5, "F": 5, "G": 5, "H": 5, "J": 5,
 	}
 	colors := map[string]colorPair{
 		"1":  {color: "AA0000", text: "FFFFFF"},
@@ -363,7 +369,7 @@ func TestBuildVolumeHistogram(t *testing.T) {
 		"G":  {color: "00DD00", text: "FFFFFF"},
 		// "H" and "J" intentionally absent — should still roll into "Other".
 	}
-	got := buildVolumeHistogram(byRoute, colors, 10)
+	got := buildVolumeHistogram(byRoute, colors, scheduledByRoute, 10)
 
 	if len(got.Routes) != 11 {
 		t.Fatalf("len(Routes) = %d, want 11 (top 10 + Other)", len(got.Routes))
@@ -380,11 +386,14 @@ func TestBuildVolumeHistogram(t *testing.T) {
 	}
 
 	var systemAt10 int64
-	for _, r := range byRoute {
+	for rid, r := range byRoute {
+		if rid == "99" {
+			continue
+		}
 		systemAt10 += r[10]
 	}
 	if got.Totals[10] != systemAt10 {
-		t.Fatalf("Totals[10] = %d, want %d (sum across all routes)", got.Totals[10], systemAt10)
+		t.Fatalf("Totals[10] = %d, want %d (sum across included routes)", got.Totals[10], systemAt10)
 	}
 	if len(got.Totals) != 96 {
 		t.Fatalf("len(Totals) = %d, want 96", len(got.Totals))
@@ -398,13 +407,32 @@ func TestBuildVolumeHistogramNoOtherWhenWithinTopN(t *testing.T) {
 	}
 	byRoute["1"] = append(byRoute["1"], make([]int64, 94)...)
 	byRoute["2"] = append(byRoute["2"], make([]int64, 94)...)
-	got := buildVolumeHistogram(byRoute, map[string]colorPair{}, 10)
+	got := buildVolumeHistogram(byRoute, map[string]colorPair{}, map[string]int{"1": 20, "2": 20}, 10)
 	if len(got.Routes) != 2 {
 		t.Fatalf("len(Routes) = %d, want 2 (no Other when all fit in topN)", len(got.Routes))
 	}
 	for _, r := range got.Routes {
 		if r.RouteID == "Other" {
 			t.Fatalf("unexpected Other series when nothing collapses")
+		}
+	}
+}
+
+func TestIsLimitedRoute(t *testing.T) {
+	cases := []struct {
+		routeID     string
+		scheduled   float64
+		wantLimited bool
+	}{
+		{routeID: "99", scheduled: 9, wantLimited: true},
+		{routeID: "99", scheduled: 10, wantLimited: false},
+		{routeID: "1T", scheduled: 9, wantLimited: true},
+		{routeID: "O", scheduled: 2, wantLimited: false},
+		{routeID: "NL", scheduled: 2, wantLimited: false},
+	}
+	for _, tc := range cases {
+		if got := isLimitedRoute(tc.routeID, tc.scheduled); got != tc.wantLimited {
+			t.Errorf("isLimitedRoute(%q, %v) = %v, want %v", tc.routeID, tc.scheduled, got, tc.wantLimited)
 		}
 	}
 }

@@ -20,8 +20,9 @@ import (
 )
 
 const (
-	statsLatestKey      = "stats/latest.json"
-	statsArchivePrefix  = "stats/"
+	statsLatestKey                  = "stats/latest.json"
+	statsArchivePrefix              = "stats/"
+	limitedRouteScheduledRunsPerDay = 10
 )
 
 type dailyStats struct {
@@ -37,9 +38,9 @@ type dailyStats struct {
 
 // volumeHistogram: 96 fifteen-minute buckets covering one PT day (00:00 →
 // 23:45), counting observed stop arrivals per bucket. Routes is the top-N
-// routes by daily volume plus a synthetic "Other" series. Totals is the
-// across-all-routes sum per bucket — independent of the top-N reduction
-// so the y-axis reflects true daily volume even when "Other" is hidden.
+// non-limited routes by daily volume plus a synthetic "Other" series.
+// Totals is the across-included-routes sum per bucket, independent of the
+// top-N reduction so the y-axis reflects the plotted population.
 type volumeHistogram struct {
 	Routes []volumeRouteSeries `json:"routes"`
 	Totals []int64             `json:"totals"`
@@ -96,11 +97,11 @@ type scheduleCompliance struct {
 // "GPS dropped mid-route" (40–60%) vs "trip never started past the
 // first few stops" (<10%).
 type notCompletedDistribution struct {
-	P5Pct     float64 `json:"p5_pct"`
-	P25Pct    float64 `json:"p25_pct"`
-	P50Pct    float64 `json:"p50_pct"`
-	P75Pct    float64 `json:"p75_pct"`
-	P95Pct    float64 `json:"p95_pct"`
+	P5Pct  float64 `json:"p5_pct"`
+	P25Pct float64 `json:"p25_pct"`
+	P50Pct float64 `json:"p50_pct"`
+	P75Pct float64 `json:"p75_pct"`
+	P95Pct float64 `json:"p95_pct"`
 	// 10 buckets, each a 10% slice: index 0 = [0, 10), …, index 9 = [90, 100).
 	Histogram []int64 `json:"histogram"`
 }
@@ -126,6 +127,7 @@ type routeStats struct {
 	TextColor           string   `json:"text_color"`
 	ScheduledTrips      int      `json:"scheduled_trips"`
 	RanTrips            int      `json:"ran_trips"`
+	Limited             bool     `json:"limited"`
 	ServiceDeliveredPct *float64 `json:"service_delivered_pct"`
 	StopSDPct           *float64 `json:"stop_sd_pct,omitempty"`
 }
@@ -251,6 +253,7 @@ func generateDailyStats(ctx context.Context, serviceDate civil.Date) (*dailyStat
 		ran := ranByRoute[rid]
 		routes[i].ScheduledTrips = sched
 		routes[i].RanTrips = ran
+		routes[i].Limited = isLimitedRoute(rid, float64(sched))
 		if sched > 0 {
 			pct := round1(100 * float64(ran) / float64(sched))
 			routes[i].ServiceDeliveredPct = &pct
@@ -304,13 +307,13 @@ func generateDailyStats(ctx context.Context, serviceDate civil.Date) (*dailyStat
 	}
 
 	out := &dailyStats{
-		ServiceDate:        serviceDate.String(),
-		GeneratedAt:        time.Now().UTC(),
-		System:             *sys,
-		ScheduleCompliance: sc,
+		ServiceDate:          serviceDate.String(),
+		GeneratedAt:          time.Now().UTC(),
+		System:               *sys,
+		ScheduleCompliance:   sc,
 		DistortionHistogram:  distHist,
 		DelayMinuteHistogram: minuteHist,
-		VolumeHistogram:      buildVolumeHistogram(volumeByRoute, colors, 10),
+		VolumeHistogram:      buildVolumeHistogram(volumeByRoute, colors, scheduledByRoute, 10),
 		Routes:               routes,
 	}
 
@@ -1199,10 +1202,9 @@ func queryStatsVolume15Min(ctx context.Context, serviceDate civil.Date) (map[str
 
 // buildVolumeHistogram collapses the raw per-route 96-bucket map into a
 // top-N (by daily total) series plus a single "Other" rollup, attaching
-// colors from the route-color map. Totals across ALL routes are returned
-// separately so the chart can show true daily volume independent of the
-// top-N reduction.
-func buildVolumeHistogram(byRoute map[string][]int64, colors map[string]colorPair, topN int) volumeHistogram {
+// colors from the route-color map. Limited non-Transbay routes are excluded
+// before ranking and from the returned totals.
+func buildVolumeHistogram(byRoute map[string][]int64, colors map[string]colorPair, scheduledByRoute map[string]int, topN int) volumeHistogram {
 	type routeTotal struct {
 		id    string
 		total int64
@@ -1210,6 +1212,9 @@ func buildVolumeHistogram(byRoute map[string][]int64, colors map[string]colorPai
 	totals := make([]routeTotal, 0, len(byRoute))
 	system := make([]int64, 96)
 	for rid, counts := range byRoute {
+		if isLimitedRoute(rid, float64(scheduledByRoute[rid])) {
+			continue
+		}
 		var sum int64
 		for i, c := range counts {
 			sum += c
@@ -1258,6 +1263,18 @@ func buildVolumeHistogram(byRoute map[string][]int64, colors map[string]colorPai
 		})
 	}
 	return out
+}
+
+func isLimitedRoute(routeID string, scheduledRunsPerDay float64) bool {
+	if scheduledRunsPerDay >= limitedRouteScheduledRunsPerDay || routeID == "" {
+		return false
+	}
+	for _, r := range routeID {
+		if (r < 'A' || r > 'Z') && (r < 'a' || r > 'z') {
+			return true
+		}
+	}
+	return false
 }
 
 func nullableMinutes(v bigquery.NullInt64) *float64 {
