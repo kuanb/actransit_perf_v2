@@ -1161,7 +1161,7 @@ const WAIT_DAY_TYPE_COLORS = {
   weekend: "#d6336c",
 };
 
-const CALLOUT_WAIT_THRESHOLDS = [20, 60];
+const CALLOUT_LONG_WAIT_MIN = 20;
 
 function fmtMaybeMin(v) {
   return v === null || v === undefined ? "—" : `${Number(v).toFixed(1)} min`;
@@ -1211,62 +1211,46 @@ function renderWaitCallout(wait) {
       const median = block && block.summary
         ? Number(block.summary.median_wait_min)
         : NaN;
-      if (!block || !Number.isFinite(median)) return null;
-      const [longWaitMin, severeWaitMin] = CALLOUT_WAIT_THRESHOLDS;
+      const p95 = block && block.summary
+        ? Number(block.summary.p95_wait_min)
+        : NaN;
+      if (!block || !Number.isFinite(median) || !Number.isFinite(p95)) return null;
       return {
         dayType,
         median,
-        longWaitMin,
-        severeWaitMin,
-        longWaitProbability: waitProbabilityAtLeast(block.histogram, longWaitMin),
-        severeWaitProbability: waitProbabilityAtLeast(block.histogram, severeWaitMin),
+        p95,
+        longWaitProbability: waitProbabilityAtLeast(block.histogram, CALLOUT_LONG_WAIT_MIN),
       };
     })
-    .filter(Boolean);
+    .filter((block) => block && block.longWaitProbability !== null);
 
-  const focus = blocks
-    .filter((block) => block.longWaitProbability !== null && block.severeWaitProbability !== null)
-    .sort((a, b) => b.median - a.median)[0];
-  if (!focus) {
+  if (!blocks.length) {
     section.hidden = true;
     return;
   }
 
-  const parts = [calloutValue(`Route ${routeID}`), " riders typically waited "];
-  if (blocks.length === 2) {
-    const weekday = blocks.find((block) => block.dayType === "weekday");
-    const weekend = blocks.find((block) => block.dayType === "weekend");
+  const parts = [];
+  for (const [index, block] of blocks.entries()) {
+    const twoTripChance = 1 - Math.pow(1 - block.longWaitProbability, 2);
+    if (index > 0) parts.push(" ");
     parts.push(
-      calloutValue(`${weekday.median.toFixed(1)} minutes`),
-      " on weekdays and ",
-      calloutValue(`${weekend.median.toFixed(1)} minutes`),
-      " on weekends. "
-    );
-  } else {
-    parts.push(
-      calloutValue(`${focus.median.toFixed(1)} minutes`),
-      ` on ${focus.dayType}s. `
+      `On ${block.dayType}s, `,
+      calloutValue(`Route ${routeID}`),
+      " riders typically waited ",
+      calloutValue(`${block.median.toFixed(1)} minutes`),
+      "; a rider making two ",
+      block.dayType,
+      " trips in a week had a ",
+      calloutValue(calloutPct(twoTripChance)),
+      " chance of encountering at least one ",
+      calloutValue(`${CALLOUT_LONG_WAIT_MIN}-minute-or-longer wait`),
+      ", and 1 in 20 ",
+      block.dayType,
+      " riders experienced a wait of at least ",
+      calloutValue(`${block.p95.toFixed(1)} minutes`),
+      "."
     );
   }
-
-  const twoTripChance = 1 - Math.pow(1 - focus.longWaitProbability, 2);
-  parts.push(
-    `During ${focus.dayType}s, about `,
-    calloutValue(calloutPct(focus.longWaitProbability)),
-    " of riders arriving at a random time faced a wait of at least ",
-    calloutValue(`${focus.longWaitMin} minutes`),
-    ", and ",
-    calloutValue(calloutPct(focus.severeWaitProbability)),
-    " faced a wait of at least ",
-    calloutValue(`${focus.severeWaitMin} minutes`),
-    ". A rider making two ",
-    focus.dayType,
-    " trips in a week had a ",
-    calloutValue(calloutPct(twoTripChance)),
-    " chance of encountering at least one ",
-    calloutValue(`${focus.longWaitMin}-minute-or-longer wait`),
-    "."
-  );
 
   appendCalloutParts(copy, parts);
   section.hidden = false;
