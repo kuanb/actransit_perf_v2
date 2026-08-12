@@ -56,7 +56,7 @@
 
   <section id="volume-section" hidden>
     <h2>Observed arrivals by time of day</h2>
-    <p class="muted defn">Each bar = total stop arrivals we recorded in a 15-minute window, from PT midnight to midnight, stacked by route. Top-10 routes (by total arrivals for the day) are colored individually; everything else is grouped into <strong>Other</strong>.</p>
+    <p class="muted defn">Each bar = total stop arrivals we recorded in a 15-minute window, from PT midnight to midnight, stacked by route. Top-10 routes (by total arrivals for the day) are colored individually; everything else is grouped into <strong>Other</strong>. Limited non-Transbay routes are excluded.</p>
     <p class="muted defn">A "data point" here is one finalized (trip, stop) observation — the same denominator used by every other chart on this page.</p>
     <canvas id="volume-15min-chart" width="900" height="320"></canvas>
   </section>
@@ -74,10 +74,13 @@
   <section>
     <h2>Per-route</h2>
     <p class="muted">Click a column header to sort. Click any row to expand it for the full per-route metric list.</p>
+    <p class="muted defn">Limited routes have fewer than 10 scheduled runs that day. Lettered Transbay routes are always included.</p>
     <div class="route-controls">
       <input type="text" id="route-filter" placeholder="Filter routes…" autocomplete="off">
+      <button id="routes-limited-toggle" type="button" aria-pressed="false">Show Limited Routes</button>
       <button id="routes-expand-all" type="button">Expand all</button>
       <button id="routes-collapse-all" type="button">Collapse all</button>
+      <span id="routes-limited-status" class="muted limited-route-status"></span>
     </div>
     <div class="table-wrap">
       <table id="routes-table">

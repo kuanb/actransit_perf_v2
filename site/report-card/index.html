@@ -52,8 +52,11 @@
   <section>
     <h2>Route report card</h2>
     <p class="muted">Sorted best-to-worst by composite score. Click a column header to re-sort. Click any row to expand the full metric breakdown, or <em>Route page</em> for the per-route analysis.</p>
+    <p class="muted defn">The agency grade and table hide routes averaging fewer than 10 scheduled runs per active service day. Lettered Transbay routes are always included.</p>
     <div class="route-controls">
       <input type="text" id="route-filter" placeholder="Filter routes…" autocomplete="off">
+      <button id="routes-limited-toggle" type="button" aria-pressed="false">Show Limited Routes</button>
+      <span id="routes-limited-status" class="muted limited-route-status"></span>
     </div>
     <div class="table-wrap">
       <table id="report-table">

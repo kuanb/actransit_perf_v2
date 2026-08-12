@@ -71,12 +71,14 @@ type delayCell struct {
 }
 
 type routeDailySD struct {
-	RouteID            string              `json:"route_id"`
-	OverallP50DelayMin *float64            `json:"overall_p50_delay_min"`
-	ByDay              []routeDailySDByDay `json:"by_day"`
-	Color              string              `json:"color"`
-	TextColor          string              `json:"text_color"`
-	WeekStopN          int64               `json:"week_stop_n"`
+	RouteID             string              `json:"route_id"`
+	OverallP50DelayMin  *float64            `json:"overall_p50_delay_min"`
+	ByDay               []routeDailySDByDay `json:"by_day"`
+	Color               string              `json:"color"`
+	TextColor           string              `json:"text_color"`
+	WeekStopN           int64               `json:"week_stop_n"`
+	ScheduledRunsPerDay float64             `json:"scheduled_runs_per_day"`
+	Limited             bool                `json:"limited"`
 }
 
 type routeDailySDByDay struct {
@@ -85,6 +87,7 @@ type routeDailySDByDay struct {
 	Pct         *float64 `json:"pct"`
 	StopSDPct   *float64 `json:"stop_sd_pct"`
 	StopN       int64    `json:"stop_n"`
+	Scheduled   int      `json:"scheduled"`
 }
 
 type routeStopSDPoint struct {
@@ -325,6 +328,7 @@ func aggregateRouteDailySD(dailies []*dailyStats, weekStart civil.Date, routeOve
 		color     string
 		textColor string
 		byDay     [7]*float64
+		scheduled [7]int
 	}
 	byRoute := make(map[string]*accum)
 
@@ -349,13 +353,14 @@ func aggregateRouteDailySD(dailies []*dailyStats, weekStart civil.Date, routeOve
 				v := *r.ServiceDeliveredPct
 				a.byDay[i] = &v
 			}
+			a.scheduled[i] = r.ScheduledTrips
 		}
 	}
 
 	type sortItem struct {
-		a       *accum
-		p50Sec  float64
-		hasP50  bool
+		a      *accum
+		p50Sec float64
+		hasP50 bool
 	}
 	items := make([]sortItem, 0, len(byRoute))
 	for rid, a := range byRoute {
@@ -385,12 +390,18 @@ func aggregateRouteDailySD(dailies []*dailyStats, weekStart civil.Date, routeOve
 	for _, it := range items {
 		byDay := make([]routeDailySDByDay, 7)
 		var weekStopN int64
+		var scheduledRuns, scheduledDays int
 		for i := 0; i < 7; i++ {
 			sd := weekStart.AddDays(i).String()
 			cell := routeDailySDByDay{
 				Day:         dayNames[i],
 				ServiceDate: sd,
 				Pct:         it.a.byDay[i],
+				Scheduled:   it.a.scheduled[i],
+			}
+			if cell.Scheduled > 0 {
+				scheduledRuns += cell.Scheduled
+				scheduledDays++
 			}
 			if routeMap, ok := stopSD[it.a.rid]; ok {
 				if pt, ok := routeMap[sd]; ok {
@@ -407,13 +418,19 @@ func aggregateRouteDailySD(dailies []*dailyStats, weekStart civil.Date, routeOve
 			v := round1(it.p50Sec / 60.0)
 			p50Min = &v
 		}
+		scheduledRunsPerDay := 0.0
+		if scheduledDays > 0 {
+			scheduledRunsPerDay = round1(float64(scheduledRuns) / float64(scheduledDays))
+		}
 		out = append(out, routeDailySD{
-			RouteID:            it.a.rid,
-			OverallP50DelayMin: p50Min,
-			ByDay:              byDay,
-			Color:              it.a.color,
-			TextColor:          it.a.textColor,
-			WeekStopN:          weekStopN,
+			RouteID:             it.a.rid,
+			OverallP50DelayMin:  p50Min,
+			ByDay:               byDay,
+			Color:               it.a.color,
+			TextColor:           it.a.textColor,
+			WeekStopN:           weekStopN,
+			ScheduledRunsPerDay: scheduledRunsPerDay,
+			Limited:             isLimitedRoute(it.a.rid, scheduledRunsPerDay),
 		})
 	}
 	return out

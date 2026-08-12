@@ -514,6 +514,10 @@ function render(data, indexDates = [], weeklyWeeks = []) {
   let sortKey = "stop_sd_pct";
   let sortDir = -1; // descending
   let filterQ = "";
+  let showLimitedRoutes = false;
+  const limitedRoutes = data.routes.filter(isLimitedRoute);
+  const limitedToggle = document.getElementById("routes-limited-toggle");
+  const limitedStatus = document.getElementById("routes-limited-status");
   // Set of route_ids whose detail row is currently expanded. Persists
   // across sort/re-render so a column-header click doesn't collapse rows.
   const expanded = new Set();
@@ -524,8 +528,9 @@ function render(data, indexDates = [], weeklyWeeks = []) {
   const weekEnd = lastCompletedWeekEnd(data.service_date, weeklyWeeks);
 
   function renderRoutes() {
-    const rows = [...data.routes].filter(r =>
-      !filterQ || r.route_id.toLowerCase().includes(filterQ)
+    const rows = [...data.routes].filter((r) =>
+      (showLimitedRoutes || !isLimitedRoute(r)) &&
+      (!filterQ || r.route_id.toLowerCase().includes(filterQ))
     ).sort((a, b) => {
       const av = a[sortKey];
       const bv = b[sortKey];
@@ -555,7 +560,7 @@ function render(data, indexDates = [], weeklyWeeks = []) {
         const weekHref = `../route/?week_end=${encodeURIComponent(weekEnd)}&route_id=${encodeURIComponent(r.route_id)}`;
         return `
       <tr class="route-row ${isOpen ? "is-open" : ""}" data-rid="${r.route_id}">
-        <td>${routeBadge(r)}</td>
+        <td>${routeBadge(r)}${limitedRouteTag(r)}</td>
         <td>${routeBoxPlot(r)}</td>
         <td ${cellGrade(sd, sdGrade)} title="${sdTitle}">${sd === null ? "—" : fmt(sd)}</td>
         <td ${cellGrade(r.on_time_pct, gradeOnTime)}>${fmt(r.on_time_pct)}</td>
@@ -594,6 +599,11 @@ function render(data, indexDates = [], weeklyWeeks = []) {
         th.classList.add(sortDir > 0 ? "sorted-asc" : "sorted-desc");
       }
     });
+    limitedToggle.textContent = showLimitedRoutes ? "Hide Limited Routes" : "Show Limited Routes";
+    limitedToggle.setAttribute("aria-pressed", String(showLimitedRoutes));
+    limitedStatus.textContent = limitedRoutes.length
+      ? `${limitedRoutes.length} limited route${limitedRoutes.length === 1 ? "" : "s"} ${showLimitedRoutes ? "shown" : "hidden"}`
+      : "No limited routes this day";
   }
 
   document.querySelectorAll("#routes-table th").forEach((th) => {
@@ -611,8 +621,15 @@ function render(data, indexDates = [], weeklyWeeks = []) {
     renderRoutes();
   });
 
+  limitedToggle.addEventListener("click", () => {
+    showLimitedRoutes = !showLimitedRoutes;
+    renderRoutes();
+  });
+
   document.getElementById("routes-expand-all").addEventListener("click", () => {
-    for (const r of data.routes) expanded.add(r.route_id);
+    for (const r of data.routes) {
+      if (showLimitedRoutes || !isLimitedRoute(r)) expanded.add(r.route_id);
+    }
     renderRoutes();
   });
   document.getElementById("routes-collapse-all").addEventListener("click", () => {
