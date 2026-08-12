@@ -16,6 +16,7 @@ import (
 
 	"cloud.google.com/go/bigquery"
 	"cloud.google.com/go/civil"
+	"cloud.google.com/go/storage"
 	"google.golang.org/api/iterator"
 )
 
@@ -141,7 +142,7 @@ type bqStatsStats struct {
 // combine, write the JSON to GCS at stats/<date>.json AND stats/latest.json.
 // Returns the rendered struct (also for the HTTP response body).
 func generateDailyStats(ctx context.Context, serviceDate civil.Date) (*dailyStats, error) {
-	gtfsBytes, err := readGTFSCurrentZip(ctx)
+	gtfsBytes, err := readGTFSZipForServiceDate(ctx, serviceDate)
 	if err != nil {
 		return nil, fmt.Errorf("read gtfs zip: %w", err)
 	}
@@ -441,6 +442,67 @@ func readGTFSCurrentZip(ctx context.Context) ([]byte, error) {
 	}
 	defer r.Close()
 	return io.ReadAll(r)
+}
+
+func readGTFSZipForServiceDate(ctx context.Context, serviceDate civil.Date) ([]byte, error) {
+	current, err := readGTFSCurrentZip(ctx)
+	if err != nil {
+		return nil, err
+	}
+	supported, err := gtfsSupportsServiceDate(current, serviceDate)
+	if err != nil {
+		return nil, fmt.Errorf("inspect %s: %w", gtfsCurrentKey, err)
+	}
+	if supported {
+		return current, nil
+	}
+
+	it := gcsClient.Bucket(bucketName).Objects(ctx, &storage.Query{Prefix: "gtfs/"})
+	var archiveKeys []string
+	for {
+		attrs, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("list gtfs archives: %w", err)
+		}
+		if attrs.Name != gtfsCurrentKey && strings.HasSuffix(attrs.Name, ".zip") {
+			archiveKeys = append(archiveKeys, attrs.Name)
+		}
+	}
+	sort.Sort(sort.Reverse(sort.StringSlice(archiveKeys)))
+
+	for _, key := range archiveKeys {
+		body, exists, err := readObject(ctx, key)
+		if err != nil {
+			return nil, fmt.Errorf("read %s: %w", key, err)
+		}
+		if !exists {
+			continue
+		}
+		supported, err := gtfsSupportsServiceDate(body, serviceDate)
+		if err != nil {
+			return nil, fmt.Errorf("inspect %s: %w", key, err)
+		}
+		if supported {
+			slog.Info("using archived gtfs", "service_date", serviceDate.String(), "key", key)
+			return body, nil
+		}
+	}
+	return nil, fmt.Errorf("no current or archived GTFS feed covers %s", serviceDate)
+}
+
+func gtfsSupportsServiceDate(body []byte, serviceDate civil.Date) (bool, error) {
+	zr, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
+	if err != nil {
+		return false, err
+	}
+	services, err := loadActiveServices(zr, serviceDate)
+	if err != nil {
+		return false, err
+	}
+	return len(services) > 0, nil
 }
 
 func openZipCSV(zr *zip.Reader, name string) (*csv.Reader, io.Closer, []string, error) {

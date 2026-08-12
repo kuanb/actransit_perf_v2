@@ -159,6 +159,30 @@ func TestLoadActiveServices(t *testing.T) {
 	})
 }
 
+func TestGTFSSupportsServiceDate(t *testing.T) {
+	body := buildSyntheticGTFSCalendarZip(t)
+
+	supported, err := gtfsSupportsServiceDate(body, civil.Date{Year: 2026, Month: 4, Day: 28})
+	if err != nil {
+		t.Fatalf("gtfsSupportsServiceDate: %v", err)
+	}
+	if !supported {
+		t.Fatal("expected synthetic feed to support 2026-04-28")
+	}
+
+	supported, err = gtfsSupportsServiceDate(body, civil.Date{Year: 2030, Month: 1, Day: 1})
+	if err != nil {
+		t.Fatalf("gtfsSupportsServiceDate: %v", err)
+	}
+	if supported {
+		t.Fatal("synthetic feed should not support 2030-01-01")
+	}
+
+	if _, err := gtfsSupportsServiceDate([]byte("not a zip"), civil.Date{Year: 2026, Month: 4, Day: 28}); err == nil {
+		t.Fatal("invalid zip should return an error")
+	}
+}
+
 func TestLoadScheduledTripRoutes(t *testing.T) {
 	zr := openZipReader(t, buildSyntheticGTFSCalendarZip(t))
 	services := map[string]struct{}{"WKDY": {}}
