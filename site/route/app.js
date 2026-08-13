@@ -958,7 +958,7 @@ function renderServiceGapCallout(sd) {
   copy.replaceChildren(
     "Riders experienced ",
     value,
-    ` ${gaps === 1 ? "service gap" : "service gaps"} equivalent to two consecutive buses not arriving this week.`
+    ` ${gaps === 1 ? "service gap" : "service gaps"} equivalent to two consecutive buses not arriving in a row this week.`
   );
   callout.hidden = false;
 }
