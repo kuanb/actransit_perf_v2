@@ -43,7 +43,7 @@
     <p class="muted defn"><strong>On time — 15%.</strong> Percent of arrivals within <code>0&nbsp;≤&nbsp;delay&nbsp;≤&nbsp;3&nbsp;min</code> of schedule.</p>
     <p class="muted defn"><strong>Speed vs. ideal — 15%.</strong> Average per-leg bus speed as a fraction of a <strong>13&nbsp;mph</strong> ideal, capped at 100%. Slower routes score lower; <code>avg_speed&nbsp;/&nbsp;13&nbsp;×&nbsp;100</code>.</p>
     <p class="muted defn"><strong>Headway regularity — 10%.</strong> How little the typical bus distorts the scheduled gap to its neighbor (<code>100&nbsp;−&nbsp;|p50&nbsp;headway&nbsp;distortion|</code>). Bunching and gapping pull this down.</p>
-    <p class="muted defn">Components with no data for a route are dropped and the remaining weights are renormalized. Service delivered and p50 delay are observation-weighted aggregates across the days in the window (an approximation of the exact 4-week median).</p>
+    <p class="muted defn">Components with no data for a route are dropped and the remaining weights are renormalized. Service delivered and p95 delay are observation-weighted aggregates across the days in the window (an approximation of the exact 4-week 95th percentile).</p>
 
     <h3 class="sub-h">Grade scale</h3>
     <div id="grade-legend" class="grade-legend"></div>
