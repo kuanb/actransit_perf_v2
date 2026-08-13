@@ -3,6 +3,7 @@ package main
 import (
 	"math"
 	"testing"
+	"time"
 )
 
 func sumDensity(d []float64) float64 {
@@ -102,6 +103,45 @@ func TestRouteWait_EmptyInput(t *testing.T) {
 	}
 	if got := closedFormMeanWaitFromMass(make([]float64, waitHistBins)); got != 0 {
 		t.Errorf("mean wait of empty mass: want 0, got %v", got)
+	}
+}
+
+func TestRouteWait_ExpectedWaitSplitsHeadwaysAtHourBoundaries(t *testing.T) {
+	loc, err := time.LoadLocation("America/Los_Angeles")
+	if err != nil {
+		t.Fatal(err)
+	}
+	arrival := func(hour, minute int) time.Time {
+		return time.Date(2026, 8, 4, hour, minute, 0, 0, loc)
+	}
+	arrivals := []time.Time{
+		arrival(0, 55),
+		arrival(1, 10),
+		arrival(1, 20),
+		arrival(1, 50),
+		arrival(2, 10),
+	}
+	var hours [24]hourlyWaitAccumulator
+	accumulateExpectedWaitByHour(&hours, arrivals)
+
+	if got := hours[1].N; got != 4 {
+		t.Fatalf("1am contributing headways: got %d, want 4", got)
+	}
+	if got := hours[1].CoveredSeconds; got != 60*60 {
+		t.Fatalf("1am covered seconds: got %.0f, want 3600", got)
+	}
+	got := hours[1].WaitArea / hours[1].CoveredSeconds / 60
+	if !approxEqual(got, 11.6667, 0.001) {
+		t.Fatalf("1am expected wait: got %.4f, want 11.6667", got)
+	}
+
+	got = hours[0].WaitArea / hours[0].CoveredSeconds / 60
+	if !approxEqual(got, 12.5, 0.001) {
+		t.Fatalf("12am boundary contribution: got %.4f, want 12.5", got)
+	}
+	got = hours[2].WaitArea / hours[2].CoveredSeconds / 60
+	if !approxEqual(got, 5.0, 0.001) {
+		t.Fatalf("2am boundary contribution: got %.4f, want 5.0", got)
 	}
 }
 

@@ -1,12 +1,15 @@
 package main
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"math"
 	"sort"
+	"time"
 
 	"cloud.google.com/go/bigquery"
 	"cloud.google.com/go/civil"
@@ -56,15 +59,25 @@ type routeWaitHourCell struct {
 	P99WaitMin    *float64 `json:"p99_wait_min"`
 }
 
+type routeWaitExpectedHourCell struct {
+	Hour                 int      `json:"hour"`
+	ObservedMeanWaitMin  *float64 `json:"observed_mean_wait_min"`
+	ScheduledMeanWaitMin *float64 `json:"scheduled_mean_wait_min"`
+	DifferenceMin        *float64 `json:"difference_min"`
+	ObservedN            int64    `json:"observed_n"`
+	ScheduledN           int64    `json:"scheduled_n"`
+}
+
 type routeWaitHistogram struct {
 	BinLoMin []int     `json:"bin_lo_min"`
 	Density  []float64 `json:"density"`
 }
 
 type routeWaitDayBlock struct {
-	Summary   routeWaitSummary    `json:"summary"`
-	Histogram routeWaitHistogram  `json:"histogram"`
-	ByHour    []routeWaitHourCell `json:"by_hour"`
+	Summary            routeWaitSummary            `json:"summary"`
+	Histogram          routeWaitHistogram          `json:"histogram"`
+	ByHour             []routeWaitHourCell         `json:"by_hour"`
+	ExpectedWaitByHour []routeWaitExpectedHourCell `json:"expected_wait_by_hour,omitempty"`
 }
 
 type routeWaitWeeklyStats struct {
@@ -103,6 +116,14 @@ func generateAllRouteWaitTimeStats(ctx context.Context, weekStart, weekEnd civil
 	hourlyHist, err := queryRouteWaitHourlyHistogram(ctx, weekStart, weekEnd)
 	if err != nil {
 		return fmt.Errorf("wait hourly histogram: %w", err)
+	}
+	observedExpected, err := queryObservedExpectedWaitByHour(ctx, weekStart, weekEnd)
+	if err != nil {
+		return fmt.Errorf("observed expected wait by hour: %w", err)
+	}
+	scheduledExpected, err := loadScheduledExpectedWaitByHour(ctx, weekStart, weekEnd)
+	if err != nil {
+		return fmt.Errorf("scheduled expected wait by hour: %w", err)
 	}
 
 	byRoute := make(map[string]*routeWaitWeeklyStats)
@@ -194,6 +215,33 @@ func generateAllRouteWaitTimeStats(ctx context.Context, weekStart, weekEnd civil
 		r.Days[k.DayType] = block
 	}
 
+	for _, r := range byRoute {
+		for dayType, block := range r.Days {
+			key := routeDayKey{RouteID: r.RouteID, DayType: dayType}
+			cells := make([]routeWaitExpectedHourCell, 24)
+			for hour := 0; hour < 24; hour++ {
+				cell := routeWaitExpectedHourCell{Hour: hour}
+				if value, ok := observedExpected[key][hour]; ok {
+					v := value.MeanWaitMin
+					cell.ObservedMeanWaitMin = &v
+					cell.ObservedN = value.N
+				}
+				if value, ok := scheduledExpected[key][hour]; ok {
+					v := value.MeanWaitMin
+					cell.ScheduledMeanWaitMin = &v
+					cell.ScheduledN = value.N
+				}
+				if cell.ObservedMeanWaitMin != nil && cell.ScheduledMeanWaitMin != nil {
+					v := round1(*cell.ObservedMeanWaitMin - *cell.ScheduledMeanWaitMin)
+					cell.DifferenceMin = &v
+				}
+				cells[hour] = cell
+			}
+			block.ExpectedWaitByHour = cells
+			r.Days[dayType] = block
+		}
+	}
+
 	weekEndStr := weekEnd.String()
 	written := 0
 	for _, r := range byRoute {
@@ -211,6 +259,191 @@ func generateAllRouteWaitTimeStats(ctx context.Context, weekStart, weekEnd civil
 	}
 	slog.Info("route wait time weekly stats written", "week_end", weekEndStr, "routes", written)
 	return nil
+}
+
+type routeWaitExpectedValue struct {
+	N           int64
+	MeanWaitMin float64
+}
+
+func queryObservedExpectedWaitByHour(ctx context.Context, weekStart, weekEnd civil.Date) (map[routeDayKey]map[int]routeWaitExpectedValue, error) {
+	q := bqClient.Query(fmt.Sprintf(`
+		WITH %s,
+		arrivals AS (
+		  SELECT
+		    route_id, stop_id, service_date, actual_arrival,
+		    LEAD(actual_arrival) OVER (
+		      PARTITION BY route_id, stop_id, service_date
+		      ORDER BY actual_arrival
+		    ) AS next_arrival
+		  FROM obs
+		  WHERE actual_arrival IS NOT NULL AND is_stale = FALSE
+		),
+		headways AS (
+		  SELECT
+		    route_id,
+		    IF(EXTRACT(DAYOFWEEK FROM service_date) IN (1, 7), 'weekend', 'weekday') AS day_type,
+		    actual_arrival AS start_ts,
+		    next_arrival AS end_ts
+		  FROM arrivals
+		  WHERE next_arrival IS NOT NULL
+		    AND TIMESTAMP_DIFF(next_arrival, actual_arrival, SECOND) BETWEEN %d AND %d
+		),
+		slices AS (
+		  SELECT
+		    route_id,
+		    day_type,
+		    EXTRACT(HOUR FROM hour_start AT TIME ZONE 'America/Los_Angeles') AS hour,
+		    GREATEST(start_ts, hour_start) AS segment_start,
+		    LEAST(end_ts, TIMESTAMP_ADD(hour_start, INTERVAL 1 HOUR)) AS segment_end,
+		    end_ts
+		  FROM headways,
+		  UNNEST(GENERATE_TIMESTAMP_ARRAY(
+		    TIMESTAMP_TRUNC(start_ts, HOUR, 'America/Los_Angeles'),
+		    TIMESTAMP_TRUNC(TIMESTAMP_SUB(end_ts, INTERVAL 1 MICROSECOND), HOUR, 'America/Los_Angeles'),
+		    INTERVAL 1 HOUR
+		  )) AS hour_start
+		),
+		moments AS (
+		  SELECT
+		    route_id,
+		    day_type,
+		    hour,
+		    TIMESTAMP_DIFF(segment_end, segment_start, MICROSECOND) / 1000000.0 AS overlap_sec,
+		    TIMESTAMP_DIFF(end_ts, segment_start, MICROSECOND) / 1000000.0 AS wait_start_sec,
+		    TIMESTAMP_DIFF(end_ts, segment_end, MICROSECOND) / 1000000.0 AS wait_end_sec
+		  FROM slices
+		)
+		SELECT
+		  route_id,
+		  day_type,
+		  hour,
+		  COUNT(*) AS n,
+		  SAFE_DIVIDE(
+		    SUM((wait_start_sec + wait_end_sec) * overlap_sec / 2.0),
+		    SUM(overlap_sec)
+		  ) / 60.0 AS mean_wait_min
+		FROM moments
+		WHERE overlap_sec > 0
+		GROUP BY route_id, day_type, hour
+	`, dedupedRangeObservationsCTE(weekStart, weekEnd), waitMinHeadwaySeconds, waitMaxHeadwaySeconds))
+	it, err := q.Read(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[routeDayKey]map[int]routeWaitExpectedValue)
+	for {
+		var row struct {
+			RouteID     string               `bigquery:"route_id"`
+			DayType     string               `bigquery:"day_type"`
+			Hour        int64                `bigquery:"hour"`
+			N           int64                `bigquery:"n"`
+			MeanWaitMin bigquery.NullFloat64 `bigquery:"mean_wait_min"`
+		}
+		err := it.Next(&row)
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		if !row.MeanWaitMin.Valid {
+			continue
+		}
+		key := routeDayKey{RouteID: row.RouteID, DayType: row.DayType}
+		if out[key] == nil {
+			out[key] = make(map[int]routeWaitExpectedValue)
+		}
+		out[key][int(row.Hour)] = routeWaitExpectedValue{
+			N:           row.N,
+			MeanWaitMin: round1(row.MeanWaitMin.Float64),
+		}
+	}
+	return out, nil
+}
+
+type hourlyWaitAccumulator struct {
+	N              int64
+	CoveredSeconds float64
+	WaitArea       float64
+}
+
+func loadScheduledExpectedWaitByHour(ctx context.Context, weekStart, weekEnd civil.Date) (map[routeDayKey]map[int]routeWaitExpectedValue, error) {
+	accumulators := make(map[routeDayKey]*[24]hourlyWaitAccumulator)
+	for serviceDate := weekStart; !serviceDate.After(weekEnd); serviceDate = serviceDate.AddDays(1) {
+		body, err := readGTFSZipForServiceDate(ctx, serviceDate)
+		if err != nil {
+			return nil, fmt.Errorf("read GTFS for %s: %w", serviceDate, err)
+		}
+		zr, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
+		if err != nil {
+			return nil, fmt.Errorf("open GTFS for %s: %w", serviceDate, err)
+		}
+		services, err := loadActiveServices(zr, serviceDate)
+		if err != nil {
+			return nil, fmt.Errorf("active services for %s: %w", serviceDate, err)
+		}
+		schedule, err := loadScheduleByStop(zr, serviceDate, services)
+		if err != nil {
+			return nil, fmt.Errorf("schedule for %s: %w", serviceDate, err)
+		}
+		dayType := "weekday"
+		if weekday := civilWeekday(serviceDate); weekday == time.Saturday || weekday == time.Sunday {
+			dayType = "weekend"
+		}
+		for key, arrivals := range schedule {
+			routeKey := routeDayKey{RouteID: key.RouteID, DayType: dayType}
+			if accumulators[routeKey] == nil {
+				accumulators[routeKey] = &[24]hourlyWaitAccumulator{}
+			}
+			accumulateExpectedWaitByHour(accumulators[routeKey], arrivals)
+		}
+	}
+
+	out := make(map[routeDayKey]map[int]routeWaitExpectedValue)
+	for key, hours := range accumulators {
+		out[key] = make(map[int]routeWaitExpectedValue)
+		for hour, acc := range hours {
+			if acc.CoveredSeconds == 0 {
+				continue
+			}
+			out[key][hour] = routeWaitExpectedValue{
+				N:           acc.N,
+				MeanWaitMin: round1(acc.WaitArea / acc.CoveredSeconds / 60.0),
+			}
+		}
+	}
+	return out, nil
+}
+
+func accumulateExpectedWaitByHour(hours *[24]hourlyWaitAccumulator, arrivals []time.Time) {
+	loc, err := time.LoadLocation("America/Los_Angeles")
+	if err != nil {
+		loc = time.UTC
+	}
+	for i := 1; i < len(arrivals); i++ {
+		start := arrivals[i-1]
+		end := arrivals[i]
+		headwaySeconds := end.Sub(start).Seconds()
+		if headwaySeconds < waitMinHeadwaySeconds || headwaySeconds > waitMaxHeadwaySeconds {
+			continue
+		}
+		for cursor := start; cursor.Before(end); {
+			nextHour := cursor.Truncate(time.Hour).Add(time.Hour)
+			segmentEnd := end
+			if nextHour.Before(segmentEnd) {
+				segmentEnd = nextHour
+			}
+			overlapSeconds := segmentEnd.Sub(cursor).Seconds()
+			waitStartSeconds := end.Sub(cursor).Seconds()
+			waitEndSeconds := end.Sub(segmentEnd).Seconds()
+			hour := cursor.In(loc).Hour()
+			hours[hour].N++
+			hours[hour].CoveredSeconds += overlapSeconds
+			hours[hour].WaitArea += (waitStartSeconds + waitEndSeconds) * overlapSeconds / 2.0
+			cursor = segmentEnd
+		}
+	}
 }
 
 // headwaysCTE builds the SQL CTE chain ending in `headways(route_id,
