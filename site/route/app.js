@@ -1263,6 +1263,7 @@ function renderWaitTime(wait) {
 
   if (!wait || !wait.days || Object.keys(wait.days).length === 0) {
     document.getElementById("wait-cards").innerHTML = "";
+    document.getElementById("wait-expected-matrix").hidden = true;
     empty.textContent = weekEnd
       ? "Wait-time stats not yet computed for this week — check back after the next Sunday roll-up."
       : "Open this page via a route's map link on the weekly dashboard to load wait-time stats.";
@@ -1290,6 +1291,103 @@ function renderWaitTime(wait) {
   renderWaitHistogram(wd.histogram, we.histogram);
   renderWaitHourLine(wd.by_hour, we.by_hour);
   renderWaitHourTail(wd.by_hour, we.by_hour);
+  renderWaitExpectedMatrix(wd.expected_wait_by_hour, we.expected_wait_by_hour);
+}
+
+function renderWaitExpectedMatrix(weekdayCells, weekendCells) {
+  const section = document.getElementById("wait-expected-matrix");
+  const table = document.getElementById("wait-expected-table");
+  const rows = [
+    { label: "Weekday", cells: weekdayCells },
+    { label: "Weekend", cells: weekendCells },
+  ].filter(row => Array.isArray(row.cells) && row.cells.some(cell =>
+    cell && (cell.observed_mean_wait_min !== null && cell.observed_mean_wait_min !== undefined ||
+      cell.scheduled_mean_wait_min !== null && cell.scheduled_mean_wait_min !== undefined)
+  ));
+
+  if (!rows.length) {
+    table.replaceChildren();
+    section.hidden = true;
+    return;
+  }
+
+  const hourLabel = (hour) => {
+    if (hour === 0) return "12a";
+    if (hour < 12) return `${hour}a`;
+    if (hour === 12) return "12p";
+    return `${hour - 12}p`;
+  };
+  const byHour = (cells) => new Map(cells.map(cell => [Number(cell.hour), cell]));
+  const waitValue = (value) => {
+    if (value === null || value === undefined) return null;
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
+  };
+
+  const thead = document.createElement("thead");
+  const headerRow = document.createElement("tr");
+  headerRow.append(document.createElement("th"));
+  for (let hour = 0; hour < 24; hour++) {
+    const th = document.createElement("th");
+    th.scope = "col";
+    th.textContent = hourLabel(hour);
+    headerRow.append(th);
+  }
+  thead.append(headerRow);
+
+  const tbody = document.createElement("tbody");
+  for (const row of rows) {
+    const tr = document.createElement("tr");
+    const rowHeader = document.createElement("th");
+    rowHeader.scope = "row";
+    rowHeader.textContent = row.label;
+    tr.append(rowHeader);
+    const cells = byHour(row.cells);
+
+    for (let hour = 0; hour < 24; hour++) {
+      const td = document.createElement("td");
+      const cell = cells.get(hour) || {};
+      const observed = waitValue(cell.observed_mean_wait_min);
+      const scheduled = waitValue(cell.scheduled_mean_wait_min);
+      const difference = waitValue(cell.difference_min);
+
+      if (observed === null && scheduled === null) {
+        const dash = document.createElement("span");
+        dash.className = "wt-matrix-empty";
+        dash.textContent = "—";
+        td.append(dash);
+        td.title = `${row.label}, ${hourLabel(hour)}: no usable next-bus gap`;
+      } else {
+        const observedLine = document.createElement("div");
+        observedLine.className = "wt-matrix-observed";
+        observedLine.textContent = observed === null ? "—" : observed.toFixed(1);
+        const scheduledLine = document.createElement("div");
+        scheduledLine.className = "wt-matrix-scheduled";
+        scheduledLine.textContent = `sched ${scheduled === null ? "—" : scheduled.toFixed(1)}`;
+        td.append(observedLine, scheduledLine);
+
+        if (difference !== null) {
+          const deltaLine = document.createElement("div");
+          deltaLine.className = "wt-matrix-delta";
+          deltaLine.textContent = `${difference > 0 ? "+" : ""}${difference.toFixed(1)} min`;
+          td.append(deltaLine);
+          const strength = Math.min(Math.abs(difference) / 15, 1);
+          td.style.backgroundColor = difference >= 0
+            ? `rgba(177, 36, 49, ${0.08 + strength * 0.30})`
+            : `rgba(35, 139, 69, ${0.07 + strength * 0.25})`;
+        }
+
+        const observedText = observed === null ? "no observed value" : `${observed.toFixed(1)} minutes observed`;
+        const scheduledText = scheduled === null ? "no scheduled value" : `${scheduled.toFixed(1)} minutes scheduled`;
+        td.title = `${row.label}, ${hourLabel(hour)}: ${observedText}; ${scheduledText}`;
+      }
+      tr.append(td);
+    }
+    tbody.append(tr);
+  }
+
+  table.replaceChildren(thead, tbody);
+  section.hidden = false;
 }
 
 function renderWaitHistogram(weekdayHist, weekendHist) {

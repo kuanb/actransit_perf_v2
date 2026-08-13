@@ -148,6 +148,99 @@
       border-radius: 6px;
       font-size: 12px;
     }
+    #wait-expected-matrix {
+      margin-top: 24px;
+      padding-top: 18px;
+      border-top: 1px solid #e5e5e5;
+    }
+    .wt-matrix-intro {
+      max-width: 980px;
+      margin: 4px 0 12px;
+      font-size: 12px;
+      line-height: 1.55;
+    }
+    .wt-matrix-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 14px;
+      margin-bottom: 10px;
+      color: #666;
+      font-size: 11px;
+    }
+    .wt-matrix-key {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .wt-matrix-swatch {
+      width: 12px;
+      height: 12px;
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      border-radius: 2px;
+    }
+    .wt-matrix-swatch-longer { background: rgba(177, 36, 49, 0.28); }
+    .wt-matrix-swatch-shorter { background: rgba(35, 139, 69, 0.24); }
+    .wt-matrix-wrap {
+      overflow-x: auto;
+      padding-bottom: 5px;
+    }
+    .wt-matrix-table {
+      width: max-content;
+      min-width: 100%;
+      border-collapse: separate;
+      border-spacing: 3px;
+      font-variant-numeric: tabular-nums;
+    }
+    .wt-matrix-table th {
+      color: #666;
+      font-size: 10px;
+      font-weight: 600;
+      text-align: center;
+      white-space: nowrap;
+    }
+    .wt-matrix-table th[scope="row"] {
+      position: sticky;
+      left: 0;
+      z-index: 1;
+      min-width: 68px;
+      padding: 0 8px 0 2px;
+      background: #fff;
+      color: #333;
+      font-size: 11px;
+      text-align: left;
+    }
+    .wt-matrix-table th:not([scope="row"]),
+    .wt-matrix-table td {
+      width: 62px;
+      min-width: 62px;
+    }
+    .wt-matrix-table td {
+      height: 58px;
+      padding: 5px 4px;
+      border: 1px solid rgba(0, 0, 0, 0.07);
+      border-radius: 5px;
+      background: #f6f6f6;
+      text-align: center;
+      vertical-align: middle;
+    }
+    .wt-matrix-observed {
+      color: #222;
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1.1;
+    }
+    .wt-matrix-scheduled,
+    .wt-matrix-delta {
+      margin-top: 3px;
+      color: #555;
+      font-size: 9px;
+      line-height: 1.1;
+      white-space: nowrap;
+    }
+    .wt-matrix-empty {
+      color: #aaa;
+      font-size: 15px;
+    }
 
     /* ── speed section (same shell as wait-time) ────────────── */
     #speed-section {
@@ -611,6 +704,25 @@
             <canvas id="wait-hour-tail-chart" width="900" height="240"></canvas>
           </div>
         </div>
+        <section id="wait-expected-matrix" hidden aria-labelledby="wait-expected-title">
+          <h3 id="wait-expected-title" class="sub-h">Average wait by rider arrival hour (PT)</h3>
+          <p class="muted wt-matrix-intro">
+            Each cell is the average wait someone would experience if they arrived at a
+            uniformly random time within that one-hour window. A bus-to-bus gap that crosses
+            an hour boundary is split at the boundary, so each rider-arrival minute belongs
+            to exactly one hour. The larger number is the wait derived from observed arrivals;
+            <em>sched</em> is the wait if buses followed the published schedule. A dash means
+            no later arrival formed a usable gap for that hour.
+          </p>
+          <div class="wt-matrix-legend" aria-hidden="true">
+            <span>Cell background shows observed minus scheduled wait:</span>
+            <span class="wt-matrix-key"><span class="wt-matrix-swatch wt-matrix-swatch-longer"></span>longer than scheduled</span>
+            <span class="wt-matrix-key"><span class="wt-matrix-swatch wt-matrix-swatch-shorter"></span>shorter than scheduled</span>
+          </div>
+          <div class="wt-matrix-wrap">
+            <table id="wait-expected-table" class="wt-matrix-table"></table>
+          </div>
+        </section>
         <div id="wait-empty" hidden></div>
       </div>
     </details>
