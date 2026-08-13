@@ -946,19 +946,19 @@ function renderServiceGapCallout(sd) {
   const copy = document.getElementById("service-gap-copy");
   if (!callout || !copy) return;
 
-  const windows = sd ? Number(sd.two_bus_gap_windows) : NaN;
-  if (!Number.isInteger(windows) || windows < 0) {
+  const gaps = sd ? Number(sd.two_bus_gap_windows) : NaN;
+  if (!Number.isInteger(gaps) || gaps < 0) {
     callout.hidden = true;
     return;
   }
 
   const value = document.createElement("strong");
   value.className = "service-gap-value";
-  value.textContent = windows.toLocaleString();
+  value.textContent = gaps.toLocaleString();
   copy.replaceChildren(
     "Riders experienced ",
     value,
-    ` ${windows === 1 ? "window" : "windows"} equivalent to two consecutive buses not arriving this week.`
+    ` ${gaps === 1 ? "service gap" : "service gaps"} equivalent to two consecutive buses not arriving this week.`
   );
   callout.hidden = false;
 }
