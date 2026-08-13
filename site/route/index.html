@@ -211,11 +211,11 @@
     }
     .wt-matrix-table th:not([scope="row"]),
     .wt-matrix-table td {
-      width: 62px;
-      min-width: 62px;
+      width: 68px;
+      min-width: 68px;
     }
     .wt-matrix-table td {
-      height: 58px;
+      height: 102px;
       padding: 5px 4px;
       border: 1px solid rgba(0, 0, 0, 0.07);
       border-radius: 5px;
@@ -240,6 +240,25 @@
     .wt-matrix-empty {
       color: #aaa;
       font-size: 15px;
+    }
+    .wt-matrix-interval {
+      margin-top: 5px;
+      padding-top: 4px;
+      border-top: 1px solid rgba(0, 0, 0, 0.12);
+      line-height: 1.15;
+      white-space: nowrap;
+    }
+    .wt-matrix-interval-label {
+      color: #777;
+      font-size: 8px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .wt-matrix-interval-value {
+      margin-top: 2px;
+      color: #333;
+      font-size: 9px;
     }
 
     /* ── speed section (same shell as wait-time) ────────────── */
@@ -713,6 +732,14 @@
             to exactly one hour. The larger number is the wait derived from observed arrivals;
             <em>sched</em> is the wait if buses followed the published schedule. A dash means
             no later arrival formed a usable gap for that hour.
+          </p>
+          <p class="muted wt-matrix-intro">
+            <strong>Wait-equivalent service interval</strong> makes each wait easier to picture:
+            it is twice the average wait, representing the perfectly regular service interval
+            that would give a randomly arriving rider the same average wait. For example, a
+            12-minute average wait is equivalent to perfectly regular service every 24 minutes.
+            Because real gaps vary, this is a rider-experience equivalent—not the literal average
+            or maximum time measured between buses.
           </p>
           <div class="wt-matrix-legend" aria-hidden="true">
             <span>Cell background shows observed minus scheduled wait:</span>

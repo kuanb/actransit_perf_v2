@@ -1377,9 +1377,25 @@ function renderWaitExpectedMatrix(weekdayCells, weekendCells) {
             : `rgba(35, 139, 69, ${0.07 + strength * 0.25})`;
         }
 
+        const interval = document.createElement("div");
+        interval.className = "wt-matrix-interval";
+        const intervalLabel = document.createElement("div");
+        intervalLabel.className = "wt-matrix-interval-label";
+        intervalLabel.textContent = "equiv interval";
+        const observedInterval = document.createElement("div");
+        observedInterval.className = "wt-matrix-interval-value";
+        observedInterval.textContent = `actual ${observed === null ? "—" : (observed * 2).toFixed(1)} min`;
+        const scheduledInterval = document.createElement("div");
+        scheduledInterval.className = "wt-matrix-interval-value";
+        scheduledInterval.textContent = `sched ${scheduled === null ? "—" : (scheduled * 2).toFixed(1)} min`;
+        interval.append(intervalLabel, observedInterval, scheduledInterval);
+        td.append(interval);
+
         const observedText = observed === null ? "no observed value" : `${observed.toFixed(1)} minutes observed`;
         const scheduledText = scheduled === null ? "no scheduled value" : `${scheduled.toFixed(1)} minutes scheduled`;
-        td.title = `${row.label}, ${hourLabel(hour)}: ${observedText}; ${scheduledText}`;
+        const observedIntervalText = observed === null ? "no actual equivalent interval" : `${(observed * 2).toFixed(1)}-minute actual wait-equivalent interval`;
+        const scheduledIntervalText = scheduled === null ? "no scheduled equivalent interval" : `${(scheduled * 2).toFixed(1)}-minute scheduled wait-equivalent interval`;
+        td.title = `${row.label}, ${hourLabel(hour)}: ${observedText}; ${scheduledText}; ${observedIntervalText}; ${scheduledIntervalText}`;
       }
       tr.append(td);
     }
