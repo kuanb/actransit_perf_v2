@@ -1248,9 +1248,9 @@ function renderWaitCallout(wait) {
       calloutValue(`Route ${routeID}`),
       " riders typically waited ",
       calloutValue(`${block.median.toFixed(1)} minutes`),
-      "; 5% of riders waited at least ",
+      `; a regular ${block.dayType} rider making two trips each ${block.dayType === "weekday" ? "weekday" : "weekend day"} would wait at least `,
       calloutValue(`${block.p95.toFixed(1)} minutes`),
-      "."
+      ` about ${block.dayType === "weekday" ? "twice" : "once"} a month.`
     ]);
     copy.append(paragraph);
   }
