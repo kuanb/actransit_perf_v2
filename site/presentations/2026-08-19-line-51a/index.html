@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A June–July 2026 analysis of Line 51A travel times, signal-crossing hotspots, trip delivery, evening headways, and weekend reliability on Oakland's Broadway corridor.">
+  <meta property="og:title" content="Where Line 51A Loses Time on Broadway">
+  <meta property="og:description" content="Daytime street delay and evening service gaps are different reliability problems on Line 51A.">
+  <meta property="og:type" content="article">
+  <meta property="og:image" content="https://kuanbutts.com/actransit_perf_v2/presentations/2026-08-19-line-51a/plots/segment-hour-heatmap.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Where Line 51A Loses Time on Broadway">
+  <meta name="twitter:description" content="Daytime street delay and evening service gaps are different reliability problems on Line 51A.">
+  <meta name="twitter:image" content="https://kuanbutts.com/actransit_perf_v2/presentations/2026-08-19-line-51a/plots/segment-hour-heatmap.png">
+  <title>Where Line 51A Loses Time on Broadway</title>
+  <link rel="stylesheet" href="report.css">
+</head>
+<body>
+  <div class="topline"></div>
+  <div class="shell"><a class="back" href="../">← All presentations</a></div>
+
+  <header class="hero">
+    <div class="shell">
+      <p class="eyebrow">Independent corridor analysis · August 19, 2026</p>
+      <h1>Where Line 51A Loses Time on Broadway.</h1>
+      <p class="dek">Two reliability problems appear on the same route. Daytime buses lose time on particular Broadway blocks. After 7 p.m., those street delays generally ease—but scheduled service becomes much less likely to appear, and the gaps riders experience become longer and more erratic.</p>
+      <p class="byline">Prepared by Kuan Butts · Public GTFS schedules and GTFS-Realtime vehicle positions · June 1–July 31, 2026</p>
+      <div class="metric-grid" aria-label="Analysis scale">
+        <div class="metric"><strong>60</strong><span>complete service days after excluding the June 14 feed-coverage gap</span></div>
+        <div class="metric"><strong>9,711</strong><span>scheduled Line 51A trips reconstructed from two GTFS versions</span></div>
+        <div class="metric"><strong>123,081</strong><span>valid consecutive-stop observations on Oakland Broadway</span></div>
+        <div class="metric"><strong>17.7 min</strong><span>weekday evening median arrival interval, versus a 15-minute scheduled median</span></div>
+      </div>
+      <div class="shift-note">
+        <p class="eyebrow">The central distinction</p>
+        <p><strong>Roadway performance and service delivery are not the same measure.</strong> Stop-to-stop time shows where a bus already on Broadway slows down. Scheduled-versus-observed trips and actual headways show whether the next bus appears at all. Combining them would hide the fact that the dominant failure changes by time of day.</p>
+      </div>
+    </div>
+  </header>
+
+  <nav class="jump" aria-label="Report sections">
+    <div class="shell">
+      <a href="#findings">Findings</a>
+      <a href="#corridor">Corridor</a>
+      <a href="#street-delay">Street delay</a>
+      <a href="#evening">Evening gaps</a>
+      <a href="#weekends">Weekends</a>
+      <a href="#diagnosis">Diagnosis</a>
+      <a href="#actions">Actions</a>
+      <a href="#methods">Methods</a>
+    </div>
+  </nav>
+
+  <main>
+    <section class="section" id="findings">
+      <div class="shell">
+        <p class="eyebrow">What the data says</p>
+        <h2>Street friction by day. Missing service by night.</h2>
+        <p class="section-lede">The named downtown crossings are real hotspots, although they are not the only slow blocks on the corridor. The evening result is sharper: buses that do appear move faster, but nearly one weekday evening trip in five is not observed at central Broadway.</p>
+        <div class="findings">
+          <article class="finding">
+            <span class="number"><strong>+79%</strong> PM slowdown</span>
+            <h3>20th Street to Grand</h3>
+            <p>Rockridge-bound median time reaches 1.78 minutes in the PM peak, compared with a 1.00-minute low-traffic reference. Midday is 70% slower.</p>
+          </article>
+          <article class="finding">
+            <span class="number"><strong>13–23 min</strong> middle half</span>
+            <h3>Evening intervals spread out</h3>
+            <p>The weekday evening IQR is 12.8–22.9 minutes Rockridge-bound and 14.1–21.1 minutes Fruitvale-bound. The p90 reaches 34 and 31 minutes.</p>
+          </article>
+          <article class="finding">
+            <span class="number"><strong>80.7%</strong> observed</span>
+            <h3>Scheduled trips disappear</h3>
+            <p>Of 1,619 scheduled weekday evening trips at the two screenline stops, 1,307 have an arrival. Another 304 have no vehicle-position observation anywhere on the route.</p>
+          </article>
+        </div>
+        <div class="result-callout">
+          <blockquote>Evening speed recovery does not translate into evening reliability.</blockquote>
+          <p>Across the four focus segments, median times fall 14%–33% from the PM peak to evening. Yet the median arrival interval rises to 17.7 minutes, p90 rises above 30 minutes, and roughly 19% of observed intervals cross one or more missing scheduled slots.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="corridor">
+      <div class="shell">
+        <p class="eyebrow">Study design</p>
+        <h2>A block-by-block view of Oakland Broadway</h2>
+        <p class="section-lede">The corridor runs from the downtown turn at 8th/9th Street to College Avenue. Both directions are analyzed using their actual stop patterns; the patterns are not perfectly symmetric because stops fall on different blocks.</p>
+        <div class="scope-grid">
+          <div><strong>Rockridge-bound screenline</strong><span>Broadway &amp; 15th Street</span></div>
+          <div><strong>Fruitvale-bound screenline</strong><span>Broadway &amp; 17th Street</span></div>
+          <div><strong>Primary day types</strong><span>Weekday, Saturday, Sunday/holiday</span></div>
+          <div><strong>Primary time bands</strong><span>AM, midday, PM, evening, late night</span></div>
+        </div>
+        <figure class="plot tall">
+          <img src="plots/corridor-map.png" alt="Schematic of the Rockridge-bound Broadway stop pattern from 8th Street to College Avenue, highlighting 11th to 15th and 20th to Grand.">
+          <figcaption>Rockridge-bound schematic. The reverse direction uses its own GTFS stop pattern, including 17th–12th and Grand–19th as the closest opposing-direction counterparts.</figcaption>
+        </figure>
+        <figure class="plot">
+          <img src="plots/coverage.png" alt="Daily Line 51A trip and stop observation percentages for June and July 2026, with June 14 excluded.">
+          <figcaption>June 14 is omitted because the previous static feed had expired and its replacement reached this tracker at 10 p.m. PT. That is a data-coverage failure, not a service result.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section" id="street-delay">
+      <div class="shell">
+        <p class="eyebrow">Daytime street performance</p>
+        <h2>The arterial crossings slow sharply—but they are part of a wider pattern</h2>
+        <p class="section-lede">On regular weekdays, Broadway’s slow blocks emerge early and remain visible through the PM peak. The two Rockridge-bound focus segments are substantially slower than their own 5–7 a.m. reference: 11th–15th is 66% slower at midday, while 20th–Grand is 79% slower in the PM peak.</p>
+        <figure class="plot">
+          <img src="plots/segment-hour-heatmap.png" alt="Two heatmaps showing weekday median stop-to-stop times by Broadway segment and hour in both directions.">
+          <figcaption>Median elapsed time for valid consecutive-stop observations. Redder cells are slower in absolute seconds. Focus segments are marked in red type.</figcaption>
+        </figure>
+
+        <h3>Focus-segment results</h3>
+        <div class="table-wrap">
+          <table class="key-table">
+            <thead><tr><th>Direction and segment</th><th>Low-traffic ref.</th><th>AM median</th><th>Midday median</th><th>PM median</th><th>Evening median</th><th>PM slowdown</th><th>PM p90</th></tr></thead>
+            <tbody>
+              <tr><td class="target">Rockridge · 11th → 15th</td><td>1.39 min</td><td>2.05</td><td>2.30</td><td>2.10</td><td>1.48</td><td>+51%</td><td>2.98</td></tr>
+              <tr><td class="target">Rockridge · 20th → Grand</td><td>1.00 min</td><td>1.30</td><td>1.69</td><td>1.78</td><td>1.31</td><td>+79%</td><td>2.78</td></tr>
+              <tr><td class="target">Fruitvale · 17th → 12th</td><td>1.48 min</td><td>2.13</td><td>2.58</td><td>2.79</td><td>1.88</td><td>+88%</td><td>4.20</td></tr>
+              <tr><td class="target">Fruitvale · Grand → 19th</td><td>1.64 min</td><td>1.98</td><td>2.11</td><td>2.30</td><td>1.98</td><td>+40%</td><td>3.51</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="table-note">Low-traffic reference is the segment’s median on regular weekdays from 5–7 a.m. Each focus-period cell contains 485–1,209 observations. Elapsed time includes upstream dwell as well as movement, queuing, and signals.</p>
+        <figure class="plot">
+          <img src="plots/target-distributions.png" alt="Box plots of weekday elapsed times for the four focus segments across AM, midday, PM, and evening periods.">
+          <figcaption>The distribution matters as much as the median. Fruitvale-bound 17th–12th reaches a 4.20-minute p90 in the PM peak, even though its median is 2.79 minutes.</figcaption>
+        </figure>
+        <figure class="plot">
+          <img src="plots/target-hourly.png" alt="Hourly median and 90th-percentile elapsed times for the four focus segments.">
+          <figcaption>Solid lines are medians; dashed lines are p90. The shaded region begins at 7 p.m.</figcaption>
+        </figure>
+
+        <h3>The focus blocks are not the only hotspots</h3>
+        <p class="narrow">Across all Broadway stop pairs, several northern blocks post larger percentage changes from their own early-morning references. That makes a corridorwide TSP screening more defensible than treating two intersections as the whole problem.</p>
+        <figure class="plot">
+          <img src="plots/pm-hotspots.png" alt="Ranked horizontal bars of weekday PM slowdown for every Broadway segment and direction.">
+          <figcaption>Percentage change in median PM elapsed time from each segment’s own weekday 5–7 a.m. median. Red bars are the four focus segments.</figcaption>
+        </figure>
+        <div class="caution"><strong>Interpretation:</strong> the spatial pattern is consistent with intersection and cross-traffic friction, but these data do not include signal phases, traffic volumes, passenger loads, or door-open times. They cannot prove that a red signal caused a particular delay.</div>
+      </div>
+    </section>
+
+    <section class="section" id="evening">
+      <div class="shell">
+        <p class="eyebrow">Evening service reliability</p>
+        <h2>The street clears before the service does</h2>
+        <p class="section-lede">From 7 p.m. to midnight on regular weekdays, the scheduled median is 15 minutes in both directions. Actual medians are 17.6–17.7 minutes. More importantly, the upper tail expands: p90 reaches 31–34 minutes and p99 approaches one hour.</p>
+        <figure class="plot">
+          <img src="plots/headway-box.png" alt="Weekday Line 51A headway box plots for AM, midday, PM, and evening periods in both directions.">
+          <figcaption>The plot is capped near 60 minutes so the central distributions remain visible. Weekday evening maxima are 99.7 minutes Fruitvale-bound and 98.9 minutes Rockridge-bound.</figcaption>
+        </figure>
+        <div class="table-wrap">
+          <table class="key-table">
+            <thead><tr><th>Weekday evening</th><th>Scheduled median</th><th>Actual IQR</th><th>Actual median</th><th>p90</th><th>p95</th><th>p99</th><th>&gt;2× schedule</th><th>Mean rider wait</th></tr></thead>
+            <tbody>
+              <tr><td>Rockridge-bound</td><td>15.0 min</td><td>12.8–22.9</td><td>17.7</td><td>33.9</td><td>40.3</td><td>59.5</td><td>12.2%</td><td>12.8 min</td></tr>
+              <tr><td>Fruitvale-bound</td><td>15.0 min</td><td>14.1–21.1</td><td>17.6</td><td>31.0</td><td>39.0</td><td>59.6</td><td>11.0%</td><td>12.6 min</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="table-note">Mean random-arrival wait is <span class="formula">Σh² ÷ 2Σh</span>. Evenly spaced 15-minute service implies 7.5 minutes; the observed distribution raises that to 12.6–12.8 minutes.</p>
+        <figure class="plot">
+          <img src="plots/headway-survival.png" alt="Curves showing the percentage of Line 51A intervals exceeding each duration at midday, PM peak, and evening.">
+          <figcaption>Evening headways remain above a given long-gap threshold more frequently than midday or PM headways.</figcaption>
+        </figure>
+
+        <h3>What is behind the gaps?</h3>
+        <p class="narrow">At the screenline, 19.9% of scheduled Rockridge-bound evening trips and 17.6% of Fruitvale-bound trips have no vehicle-position observation anywhere on Line 51A. Only 0.5% in each direction are seen elsewhere on the route but not at the screenline. The dominant signature is therefore whole-trip non-observation, not a bus routinely disappearing midway along Broadway.</p>
+        <figure class="plot">
+          <img src="plots/delivery-by-hour.png" alt="Hourly stacked bars showing the weekday percentage of scheduled Line 51A trips observed at the screenline, observed elsewhere only, or not observed on the route.">
+          <figcaption>The vertical scale begins at 75% to show hour-to-hour variation. “No route observation” may mean a trip did not operate, or that it operated without a usable GTFS-Realtime vehicle-position trace.</figcaption>
+        </figure>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Weekday evening screenline</th><th>Scheduled trips</th><th>Observed at stop</th><th>Observed elsewhere only</th><th>No route observation</th><th>Stop observation</th></tr></thead>
+            <tbody>
+              <tr><td>Rockridge · Broadway &amp; 15th</td><td>831</td><td>662</td><td>4</td><td>165</td><td>79.7%</td></tr>
+              <tr><td>Fruitvale · Broadway &amp; 17th</td><td>788</td><td>645</td><td>4</td><td>139</td><td>81.9%</td></tr>
+              <tr><td><strong>Combined</strong></td><td><strong>1,619</strong></td><td><strong>1,307</strong></td><td><strong>8</strong></td><td><strong>304</strong></td><td><strong>80.7%</strong></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <figure class="plot compact">
+          <img src="plots/gap-calendar.png" alt="Calendar heatmap of the longest evening Line 51A headway on each June and July service day.">
+          <figcaption>Long gaps recur rather than concentrating on a single incident. The two-month maximum is 151.8 minutes on Saturday, July 11.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section" id="weekends">
+      <div class="shell">
+        <p class="eyebrow">Weekend extension</p>
+        <h2>Weekend service is the sharper reliability warning</h2>
+        <p class="section-lede">Saturday and Sunday/holiday street times are not uniformly worse than weekdays. Service delivery is. Only 52.6% of scheduled Saturday evening trips and 64.7% of Sunday/holiday evening trips are observed at the two central screenline stops.</p>
+        <div class="table-wrap">
+          <table class="key-table">
+            <thead><tr><th>Day type</th><th>Days</th><th>Route trips observed</th><th>Evening screenline observed</th><th>Median evening interval</th><th>p90 evening interval</th><th>Longest evening gap</th></tr></thead>
+            <tbody>
+              <tr><td>Regular weekday</td><td>44</td><td>87.8%</td><td>80.7%</td><td>17.7 min</td><td>32.3 min</td><td>99.7 min</td></tr>
+              <tr><td>Saturday</td><td>7</td><td>75.4%</td><td>52.6%</td><td>24.2 min</td><td>68.8 min</td><td>151.8 min</td></tr>
+              <tr><td>Sunday / holiday</td><td>9</td><td>81.1%</td><td>64.7%</td><td>23.1 min</td><td>58.0 min</td><td>112.9 min</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <figure class="plot">
+          <img src="plots/weekend.png" alt="Grouped bars comparing median Broadway segment elapsed time by day type and time band in both directions.">
+          <figcaption>Weekend roadway conditions do not explain the much larger weekend service-delivery gap.</figcaption>
+        </figure>
+        <div class="caution"><strong>Priority follow-up:</strong> validate a sample of the worst weekend dates against dispatch, operator, and AVL-health records. Vehicle-position data alone cannot distinguish a dropped run from a bus whose tracking equipment or trip assignment failed.</div>
+      </div>
+    </section>
+
+    <section class="section" id="diagnosis">
+      <div class="shell">
+        <p class="eyebrow">Joint diagnosis</p>
+        <h2>Traffic and operations move independently</h2>
+        <p class="section-lede">The chart below treats each service hour as two coordinates: how much slower Broadway segments are than their low-traffic reference, and how irregular the arrival intervals are. Evening hours move left as street delay falls, but often remain high on spacing variation.</p>
+        <figure class="plot">
+          <img src="plots/traffic-operations.png" alt="Scatter plots comparing hourly segment slowdown with headway variability, with evening hours in purple and marker size showing missing scheduled trips.">
+          <figcaption>Labels are hours; purple points are 7 p.m. or later. Larger markers indicate a greater share of scheduled trips without an arrival at the direction’s screenline.</figcaption>
+        </figure>
+        <div class="split">
+          <div>
+            <h3>The schedule change is not driving the street result</h3>
+            <p>The focus-segment PM medians are similar across the two GTFS versions. Rockridge-bound 11th–15th is 2.15 minutes before the June 14 schedule shift and 2.08 afterward; 20th–Grand is 1.81 versus 1.77. The opposing-direction changes are mixed rather than uniformly worse.</p>
+          </div>
+          <div class="definition">
+            <strong>Evening delivery did change</strong>
+            <p>At the Rockridge-bound screenline, weekday evening observation falls from 83.7% in the June 1–13 feed era to 78.5% from June 15–July 31. Fruitvale-bound falls from 88.3% to 79.9%. This is descriptive, not evidence that the schedule change caused the decline.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="actions">
+      <div class="shell">
+        <p class="eyebrow">Engineering and operations agenda</p>
+        <h2>Treat the two problems with different tools</h2>
+        <div class="accountability-list" aria-label="Recommended follow-up work">
+          <div><strong>Signal study</strong><span>Collect phase, split, queue, and traffic-volume data at 14th, Grand, MacArthur, and the northern hotspots.</span></div>
+          <div><strong>TSP screening</strong><span>Model conditional priority first where both median and p90 segment penalties remain high.</span></div>
+          <div><strong>Run-delivery audit</strong><span>Reconcile the 304 unobserved weekday evening trips with dispatch and operator records.</span></div>
+          <div><strong>AVL health</strong><span>Separate trips that did not operate from vehicles that ran without a valid realtime trace.</span></div>
+          <div><strong>Weekend control</strong><span>Review pull-outs, reliefs, recovery time, and supervision on the dates with 60–150 minute gaps.</span></div>
+        </div>
+        <p class="stakes">TSP can reduce a bus’s exposure to cross traffic. It cannot replace a bus that never enters the data—or guarantee that unevenly spaced buses leave a terminal evenly. Line 51A needs both a street-running program and a run-delivery program.</p>
+      </div>
+    </section>
+
+    <section class="section" id="methods">
+      <div class="shell">
+        <p class="eyebrow">Methodology and limitations</p>
+        <h2>How the analysis was constructed</h2>
+        <div class="methods-grid">
+          <div>
+            <h3>Schedule denominator</h3>
+            <ul>
+              <li>Every scheduled 51A trip and stop was reconstructed from the GTFS version valid on that service date.</li>
+              <li>S1000251 covers June 1–13; S1000252 covers June 15–July 31.</li>
+              <li>June 14 is excluded because the tracker did not archive the newly effective feed until 10 p.m. PT.</li>
+              <li>GTFS calendar and calendar-date exceptions determine weekday, Saturday, and Sunday/holiday service.</li>
+            </ul>
+          </div>
+          <div>
+            <h3>Realtime observations</h3>
+            <ul>
+              <li>Vehicle positions are projected onto the scheduled shape; stop-crossing timestamps are linearly interpolated between adjacent probes.</li>
+              <li>Live finalization duplicates are removed by service date, trip, and stop sequence, preferring a row with an arrival and then the latest ingestion.</li>
+              <li>512,860 raw 51A rows become 356,115 deduplicated rows—a 30.6% reduction.</li>
+              <li>All observed trip IDs in the study match the date-correct static schedule.</li>
+            </ul>
+          </div>
+          <div>
+            <h3>Street-time measures</h3>
+            <ul>
+              <li>A segment requires valid arrivals at consecutive scheduled stops and positive elapsed time from 10 seconds through 30 minutes.</li>
+              <li>123,081 of 145,016 scheduled Broadway segment opportunities meet those requirements.</li>
+              <li>The low-traffic reference is each segment’s regular-weekday 5–7 a.m. median.</li>
+              <li>Confidence intervals in the underlying result tables use a service-day bootstrap so repeated trips on one date do not masquerade as independent days.</li>
+            </ul>
+          </div>
+          <div>
+            <h3>Headway measures</h3>
+            <ul>
+              <li>Headways are ordered actual arrivals within the same service date and direction; overnight non-service is never counted as a gap.</li>
+              <li>Screenline stops are Broadway &amp; 15th Rockridge-bound and Broadway &amp; 17th Fruitvale-bound.</li>
+              <li>A missing slot means one or more scheduled screenline trips fall between consecutive observed trips.</li>
+              <li>Random-arrival wait weights long headways in proportion to the time riders are exposed to them.</li>
+            </ul>
+          </div>
+        </div>
+        <h3>What this analysis cannot establish</h3>
+        <ul class="narrow">
+          <li>Stop-to-stop elapsed time includes upstream dwell. Without door-open or passenger-load data, it is not pure roadway running time.</li>
+          <li>No signal-phase or traffic-volume data are available, so intersection causation and TSP benefits require a separate engineering study.</li>
+          <li>“No route observation” is a probable service-delivery failure, not a confirmed cancellation. A missing or incorrect GTFS-Realtime trip assignment can create the same signature.</li>
+          <li>The results are trip- and stop-weighted, not passenger-weighted.</li>
+          <li>These two months describe June and July 2026; they do not establish a permanent seasonal pattern.</li>
+        </ul>
+        <h3>Sources</h3>
+        <ul class="source-list">
+          <li>AC Transit public GTFS schedules and GTFS-Realtime vehicle positions archived by the <a href="https://kuanbutts.com/actransit_perf_v2/report-card/">AC Transit performance tracker</a>.</li>
+          <li>Archived schedule feeds <a href="https://storage.googleapis.com/transit-203605-actransit-cache/gtfs/20260426T045642Z.zip">S1000251</a> and <a href="https://storage.googleapis.com/transit-203605-actransit-cache/gtfs/20260615T050002Z.zip">S1000252</a>.</li>
+          <li>Deduplicated observations from <code>transit-203605.actransit.trip_observations</code>.</li>
+          <li>Reproducible query, calculations, result tables, and plotting code in this project’s <code>analysis/line_51a_2026_08_19</code> directory.</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="shell"><span>Where Line 51A Loses Time on Broadway</span><span>Prepared August 19, 2026 · Public data only</span></div>
+  </footer>
+</body>
+</html>

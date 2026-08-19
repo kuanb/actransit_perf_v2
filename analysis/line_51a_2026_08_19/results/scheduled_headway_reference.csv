@@ -1,0 +1,35 @@
+direction_id,day_type,actual_band,reference_scheduled_headway_min
+0,Saturday,AM peak,20.0
+0,Saturday,Early AM,30.0
+0,Saturday,Evening,20.0
+0,Saturday,Late night,30.0
+0,Saturday,Midday,15.0
+0,Saturday,PM peak,15.0
+0,Sunday / holiday,AM peak,20.0
+0,Sunday / holiday,Early AM,30.0
+0,Sunday / holiday,Evening,20.0
+0,Sunday / holiday,Late night,30.0
+0,Sunday / holiday,Midday,15.0
+0,Sunday / holiday,PM peak,15.0
+0,Weekday,AM peak,13.0
+0,Weekday,Early AM,15.0
+0,Weekday,Evening,15.0
+0,Weekday,Late night,20.0
+0,Weekday,Midday,12.0
+0,Weekday,PM peak,12.0
+1,Saturday,AM peak,20.0
+1,Saturday,Evening,20.0
+1,Saturday,Late night,30.0
+1,Saturday,Midday,15.0
+1,Saturday,PM peak,15.0
+1,Sunday / holiday,AM peak,20.0
+1,Sunday / holiday,Evening,20.0
+1,Sunday / holiday,Late night,30.0
+1,Sunday / holiday,Midday,15.0
+1,Sunday / holiday,PM peak,15.0
+1,Weekday,AM peak,15.0
+1,Weekday,Early AM,15.0
+1,Weekday,Evening,15.0
+1,Weekday,Late night,20.0
+1,Weekday,Midday,12.0
+1,Weekday,PM peak,12.0

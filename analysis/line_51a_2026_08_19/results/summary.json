@@ -1,0 +1,483 @@
+{
+  "audit": {
+    "scheduled_rows": 412195,
+    "deduped_observation_rows": 356115,
+    "raw_observation_rows": 512860,
+    "actual_arrivals": 338708,
+    "scheduled_trips": 9711,
+    "observed_trips": 8336,
+    "unmatched_observed_trips": 0,
+    "service_days": 60,
+    "duplicate_pct": 30.56292165503256
+  },
+  "corridor_scheduled_legs": 145016,
+  "corridor_valid_legs": 123081,
+  "corridor_invalid_or_missing_legs": 21935,
+  "targets": [
+    {
+      "target": "11th \u2192 15th",
+      "direction": "Rockridge-bound",
+      "bands": {
+        "AM peak": {
+          "n": 510,
+          "median_min": 2.048244175,
+          "p25_min": 1.5455378166666667,
+          "p75_min": 2.6887242958333335,
+          "p90_min": 3.044900125,
+          "p95_min": 3.158014705,
+          "slowdown_pct": 47.263858310519666,
+          "scheduled_min": 1.2
+        },
+        "Early AM": {
+          "n": 119,
+          "median_min": 1.3001990833333332,
+          "p25_min": 1.1310853250000001,
+          "p75_min": 1.500136475,
+          "p90_min": 1.7843140966666666,
+          "p95_min": 1.9324338583333334,
+          "slowdown_pct": -6.518795014531142,
+          "scheduled_min": 0.85
+        },
+        "Evening": {
+          "n": 654,
+          "median_min": 1.4783409416666666,
+          "p25_min": 1.220046625,
+          "p75_min": 1.7917616291666667,
+          "p90_min": 2.0551464433333337,
+          "p95_min": 2.1980502325000004,
+          "slowdown_pct": 6.289178617212587,
+          "scheduled_min": 0.9666666666666667
+        },
+        "Late night": {
+          "n": 70,
+          "median_min": 1.419482875,
+          "p25_min": 1.1936957166666666,
+          "p75_min": 1.6150719791666668,
+          "p90_min": 1.8827852583333333,
+          "p95_min": 2.01402759,
+          "slowdown_pct": 2.057424368463834,
+          "scheduled_min": 0.9666666666666667
+        },
+        "Midday": {
+          "n": 1172,
+          "median_min": 2.302567183333333,
+          "p25_min": 1.9640027416666668,
+          "p75_min": 2.8802441958333334,
+          "p90_min": 3.1121278450000003,
+          "p95_min": 3.3042346708333334,
+          "slowdown_pct": 65.5490744587873,
+          "scheduled_min": 1.3166666666666667
+        },
+        "PM peak": {
+          "n": 770,
+          "median_min": 2.1004226916666666,
+          "p25_min": 1.8649214833333332,
+          "p75_min": 2.51301915,
+          "p90_min": 2.981067695,
+          "p95_min": 3.153661801666666,
+          "slowdown_pct": 51.01536888676876,
+          "scheduled_min": 1.4333333333333333
+        }
+      }
+    },
+    {
+      "target": "17th \u2192 12th",
+      "direction": "Fruitvale-bound",
+      "bands": {
+        "AM peak": {
+          "n": 505,
+          "median_min": 2.1263414833333334,
+          "p25_min": 1.6105435666666668,
+          "p75_min": 2.6986505166666666,
+          "p90_min": 3.4345697466666665,
+          "p95_min": 3.873685556666665,
+          "slowdown_pct": 43.420306695247476,
+          "scheduled_min": 1.8666666666666667
+        },
+        "Early AM": {
+          "n": 160,
+          "median_min": 1.4521524749999999,
+          "p25_min": 1.2205737166666666,
+          "p75_min": 1.70795975,
+          "p90_min": 2.1484112316666666,
+          "p95_min": 2.586174433333333,
+          "slowdown_pct": -2.053289669035818,
+          "scheduled_min": 1.2833333333333334
+        },
+        "Evening": {
+          "n": 652,
+          "median_min": 1.879062775,
+          "p25_min": 1.5557194583333334,
+          "p75_min": 2.2927863250000002,
+          "p90_min": 2.8154603166666665,
+          "p95_min": 3.083989753333333,
+          "slowdown_pct": 26.74152369338676,
+          "scheduled_min": 1.5833333333333333
+        },
+        "Late night": {
+          "n": 33,
+          "median_min": 1.7821876166666668,
+          "p25_min": 1.5622067333333334,
+          "p75_min": 2.7187292833333334,
+          "p90_min": 3.345230673333333,
+          "p95_min": 3.4844961833333334,
+          "slowdown_pct": 20.207359247920188,
+          "scheduled_min": 1.4333333333333333
+        },
+        "Midday": {
+          "n": 1209,
+          "median_min": 2.5779924333333333,
+          "p25_min": 2.1527219833333335,
+          "p75_min": 3.150230983333333,
+          "p90_min": 3.81232863,
+          "p95_min": 4.340562256666664,
+          "slowdown_pct": 73.88386030407548,
+          "scheduled_min": 2.15
+        },
+        "PM peak": {
+          "n": 728,
+          "median_min": 2.7944472,
+          "p25_min": 2.258165979166667,
+          "p75_min": 3.3638173166666667,
+          "p90_min": 4.200915926666667,
+          "p95_min": 5.028943671666666,
+          "slowdown_pct": 88.48358911730251,
+          "scheduled_min": 2.3
+        }
+      }
+    },
+    {
+      "target": "20th \u2192 Grand",
+      "direction": "Rockridge-bound",
+      "bands": {
+        "AM peak": {
+          "n": 485,
+          "median_min": 1.2952422166666666,
+          "p25_min": 1.0645997,
+          "p75_min": 1.7364092999999998,
+          "p90_min": 2.13792633,
+          "p95_min": 2.3772865499999987,
+          "slowdown_pct": 29.829406242362012,
+          "scheduled_min": 1.3333333333333333
+        },
+        "Early AM": {
+          "n": 114,
+          "median_min": 0.8471744999999999,
+          "p25_min": 0.7241332,
+          "p75_min": 1.0486136041666667,
+          "p90_min": 1.176165005,
+          "p95_min": 1.4991692808333323,
+          "slowdown_pct": -15.082939002925045,
+          "scheduled_min": 0.9666666666666667
+        },
+        "Evening": {
+          "n": 669,
+          "median_min": 1.3147482,
+          "p25_min": 0.9802944,
+          "p75_min": 1.8107418166666667,
+          "p90_min": 2.3151042366666674,
+          "p95_min": 2.70939174,
+          "slowdown_pct": 31.784600569533783,
+          "scheduled_min": 1.1
+        },
+        "Late night": {
+          "n": 70,
+          "median_min": 0.9125133000000001,
+          "p25_min": 0.73725325,
+          "p75_min": 1.3492118833333333,
+          "p90_min": 1.6576557383333332,
+          "p95_min": 1.8870574291666664,
+          "slowdown_pct": -8.533663894814868,
+          "scheduled_min": 0.9666666666666667
+        },
+        "Midday": {
+          "n": 1183,
+          "median_min": 1.6935052666666666,
+          "p25_min": 1.2437986416666666,
+          "p75_min": 2.0914667583333335,
+          "p90_min": 2.5741822566666666,
+          "p95_min": 2.8888484583333334,
+          "slowdown_pct": 69.74954986062613,
+          "scheduled_min": 1.8166666666666667
+        },
+        "PM peak": {
+          "n": 775,
+          "median_min": 1.7833194833333332,
+          "p25_min": 1.2945656499999998,
+          "p75_min": 2.1664187499999996,
+          "p90_min": 2.7787574000000004,
+          "p95_min": 3.052114408333333,
+          "slowdown_pct": 78.75213352560641,
+          "scheduled_min": 1.8166666666666667
+        }
+      }
+    },
+    {
+      "target": "Grand \u2192 19th",
+      "direction": "Fruitvale-bound",
+      "bands": {
+        "AM peak": {
+          "n": 514,
+          "median_min": 1.9826974083333333,
+          "p25_min": 1.4924266041666665,
+          "p75_min": 2.5023269958333336,
+          "p90_min": 3.0663065683333333,
+          "p95_min": 3.271243689166667,
+          "slowdown_pct": 20.815779551425774,
+          "scheduled_min": 1.65
+        },
+        "Early AM": {
+          "n": 163,
+          "median_min": 1.5118749666666667,
+          "p25_min": 1.1261683166666667,
+          "p75_min": 1.8553573333333333,
+          "p90_min": 2.5415364633333337,
+          "p95_min": 2.712663851666667,
+          "slowdown_pct": -7.873812759122522,
+          "scheduled_min": 1.15
+        },
+        "Evening": {
+          "n": 652,
+          "median_min": 1.9779718916666666,
+          "p25_min": 1.5159967708333333,
+          "p75_min": 2.6106108375,
+          "p90_min": 3.097257003333333,
+          "p95_min": 3.395766047499999,
+          "slowdown_pct": 20.52782992408122,
+          "scheduled_min": 1.3833333333333333
+        },
+        "Late night": {
+          "n": 33,
+          "median_min": 1.4308113,
+          "p25_min": 1.12388405,
+          "p75_min": 1.8696544666666666,
+          "p90_min": 2.361821186666667,
+          "p95_min": 2.70639648,
+          "slowdown_pct": -12.813431906485484,
+          "scheduled_min": 1.2666666666666666
+        },
+        "Midday": {
+          "n": 1207,
+          "median_min": 2.1106259666666665,
+          "p25_min": 1.708029775,
+          "p75_min": 2.7393643666666665,
+          "p90_min": 3.225274456666667,
+          "p95_min": 3.4849683183333338,
+          "slowdown_pct": 28.611113542871248,
+          "scheduled_min": 1.9
+        },
+        "PM peak": {
+          "n": 720,
+          "median_min": 2.3033285499999994,
+          "p25_min": 1.8339017833333335,
+          "p75_min": 2.9584970541666666,
+          "p90_min": 3.50615695,
+          "p95_min": 3.8850589708333327,
+          "slowdown_pct": 40.353456438533165,
+          "scheduled_min": 2.0166666666666666
+        }
+      }
+    }
+  ],
+  "weekday_evening_headways": [
+    {
+      "direction_id": 0,
+      "direction": "Fruitvale-bound",
+      "day_type": "Weekday",
+      "time_band": "Evening",
+      "n": 653,
+      "service_days": 44,
+      "scheduled_headway_min": 15.0,
+      "p25_min": 14.117778833333334,
+      "median_min": 17.635374449999997,
+      "p75_min": 21.117473716666666,
+      "p90_min": 30.990106396666675,
+      "p95_min": 39.03556794,
+      "p99_min": 59.61793820266671,
+      "max_min": 99.73181921666666,
+      "mean_min": 19.67441864004594,
+      "cv": 0.5338856550340174,
+      "mean_rider_wait_min": 12.636853452614119,
+      "bunching_pct": 2.1439509954058193,
+      "gap_1_5x_pct": 20.06125574272588,
+      "gap_2x_pct": 11.0260336906585,
+      "intervals_with_missing_slots_pct": 18.376722817764165
+    },
+    {
+      "direction_id": 1,
+      "direction": "Rockridge-bound",
+      "day_type": "Weekday",
+      "time_band": "Evening",
+      "n": 662,
+      "service_days": 44,
+      "scheduled_headway_min": 15.0,
+      "p25_min": 12.802665091666666,
+      "median_min": 17.732645066666667,
+      "p75_min": 22.9316714375,
+      "p90_min": 33.85003129333332,
+      "p95_min": 40.34640287916666,
+      "p99_min": 59.49680029483329,
+      "max_min": 98.91319575000001,
+      "mean_min": 19.682007734793554,
+      "cv": 0.5496064562772083,
+      "mean_rider_wait_min": 12.809158509232486,
+      "bunching_pct": 4.833836858006042,
+      "gap_1_5x_pct": 25.981873111782477,
+      "gap_2x_pct": 12.235649546827794,
+      "intervals_with_missing_slots_pct": 19.335347432024168
+    }
+  ],
+  "weekday_daytime_headways": [
+    {
+      "direction_id": 0,
+      "direction": "Fruitvale-bound",
+      "day_type": "Weekday",
+      "time_band": "AM peak",
+      "n": 504,
+      "service_days": 44,
+      "scheduled_headway_min": 13.0,
+      "p25_min": 11.876205529166665,
+      "median_min": 14.655524466666666,
+      "p75_min": 17.53223521666667,
+      "p90_min": 22.54452360833333,
+      "p95_min": 27.45604232999999,
+      "p99_min": 33.29984081983332,
+      "max_min": 44.771416433333336,
+      "mean_min": 15.373296993683862,
+      "cv": 0.37122601735920185,
+      "mean_rider_wait_min": 8.743834202880153,
+      "bunching_pct": 2.976190476190476,
+      "gap_1_5x_pct": 15.873015873015872,
+      "gap_2x_pct": 6.349206349206349,
+      "intervals_with_missing_slots_pct": 9.126984126984127
+    },
+    {
+      "direction_id": 0,
+      "direction": "Fruitvale-bound",
+      "day_type": "Weekday",
+      "time_band": "Midday",
+      "n": 1202,
+      "service_days": 44,
+      "scheduled_headway_min": 12.0,
+      "p25_min": 9.415263666666666,
+      "median_min": 12.379778175,
+      "p75_min": 15.739580175,
+      "p90_min": 19.968571503333333,
+      "p95_min": 24.254020665833337,
+      "p99_min": 32.664666248500005,
+      "max_min": 65.52650311666666,
+      "mean_min": 13.245879066417084,
+      "cv": 0.45914570379740377,
+      "mean_rider_wait_min": 8.017991480766463,
+      "bunching_pct": 7.487520798668886,
+      "gap_1_5x_pct": 15.141430948419302,
+      "gap_2x_pct": 5.490848585690515,
+      "intervals_with_missing_slots_pct": 8.569051580698835
+    },
+    {
+      "direction_id": 0,
+      "direction": "Fruitvale-bound",
+      "day_type": "Weekday",
+      "time_band": "PM peak",
+      "n": 723,
+      "service_days": 44,
+      "scheduled_headway_min": 12.0,
+      "p25_min": 9.651625508333332,
+      "median_min": 12.687560600000001,
+      "p75_min": 16.83137845,
+      "p90_min": 25.51290459666667,
+      "p95_min": 31.676517054999984,
+      "p99_min": 40.98484645233331,
+      "max_min": 59.335492683333335,
+      "mean_min": 14.58125523976487,
+      "cv": 0.5523407606054169,
+      "mean_rider_wait_min": 9.51177821086708,
+      "bunching_pct": 8.437067773167358,
+      "gap_1_5x_pct": 22.821576763485478,
+      "gap_2x_pct": 12.171507607192254,
+      "intervals_with_missing_slots_pct": 18.118948824343015
+    },
+    {
+      "direction_id": 1,
+      "direction": "Rockridge-bound",
+      "day_type": "Weekday",
+      "time_band": "AM peak",
+      "n": 486,
+      "service_days": 44,
+      "scheduled_headway_min": 15.0,
+      "p25_min": 11.963418491666665,
+      "median_min": 15.203649841666667,
+      "p75_min": 18.401231425,
+      "p90_min": 23.979459275,
+      "p95_min": 28.882542116666666,
+      "p99_min": 37.34848552083331,
+      "max_min": 53.87689218333333,
+      "mean_min": 15.904658973593962,
+      "cv": 0.4414150100126467,
+      "mean_rider_wait_min": 9.498630459337166,
+      "bunching_pct": 8.024691358024691,
+      "gap_1_5x_pct": 12.139917695473251,
+      "gap_2x_pct": 4.732510288065844,
+      "intervals_with_missing_slots_pct": 9.670781893004115
+    },
+    {
+      "direction_id": 1,
+      "direction": "Rockridge-bound",
+      "day_type": "Weekday",
+      "time_band": "Midday",
+      "n": 1157,
+      "service_days": 44,
+      "scheduled_headway_min": 12.0,
+      "p25_min": 8.77434785,
+      "median_min": 12.987995116666667,
+      "p75_min": 17.008003633333335,
+      "p90_min": 23.113174393333335,
+      "p95_min": 27.215312116666666,
+      "p99_min": 36.59720598800001,
+      "max_min": 77.06418401666666,
+      "mean_min": 13.680536237899743,
+      "cv": 0.5768951760502631,
+      "mean_rider_wait_min": 9.114796787726002,
+      "bunching_pct": 13.915298184961106,
+      "gap_1_5x_pct": 21.34831460674157,
+      "gap_2x_pct": 8.556611927398444,
+      "intervals_with_missing_slots_pct": 12.878133102852205
+    },
+    {
+      "direction_id": 1,
+      "direction": "Rockridge-bound",
+      "day_type": "Weekday",
+      "time_band": "PM peak",
+      "n": 763,
+      "service_days": 44,
+      "scheduled_headway_min": 12.0,
+      "p25_min": 8.258506966666666,
+      "median_min": 12.1840125,
+      "p75_min": 16.677298133333334,
+      "p90_min": 24.76946717666667,
+      "p95_min": 29.63737950499999,
+      "p99_min": 40.40629696399999,
+      "max_min": 52.93332686666667,
+      "mean_min": 13.846498585757972,
+      "cv": 0.5775994002918914,
+      "mean_rider_wait_min": 9.229963926024507,
+      "bunching_pct": 10.878112712975097,
+      "gap_1_5x_pct": 20.0524246395806,
+      "gap_2x_pct": 11.140235910878113,
+      "intervals_with_missing_slots_pct": 14.285714285714285
+    }
+  ],
+  "weekday_evening_delivery_status": {
+    "Observed at screenline": 1307,
+    "No route observation": 304,
+    "Observed elsewhere only": 8
+  },
+  "weekday_evening_scheduled_trips": 1619,
+  "weekday_evening_screen_observation_pct": 80.72884496602842,
+  "max_headway_min": 151.80634721666667,
+  "max_evening_headway_min": 151.80634721666667,
+  "screen_stops": {
+    "Fruitvale-bound": "Broadway & 17th St (19th St BART)",
+    "Rockridge-bound": "Broadway & 15th St"
+  }
+}

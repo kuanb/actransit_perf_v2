@@ -1,0 +1,26 @@
+service_date,direction,stop_name,trip_id,actual_local,headway_min,reference_scheduled_headway_min,missed_slots,day_type,time_band
+2026-07-11,Fruitvale-bound,Broadway & 17th St (19th St BART),6849070,2026-07-11 22:41:16.455171-07:00,151.80634721666667,20.0,6.0,Saturday,Evening
+2026-06-13,Fruitvale-bound,Broadway & 17th St (19th St BART),2441070,2026-06-13 20:35:44.869954-07:00,126.77857924999999,20.0,7.0,Saturday,Evening
+2026-07-05,Rockridge-bound,Broadway & 15th St,1406010,2026-07-06 00:13:13.398212-07:00,125.047065,30.0,4.0,Sunday / holiday,Late night
+2026-07-11,Rockridge-bound,Broadway & 15th St,3000070,2026-07-11 21:22:35.372568-07:00,115.09009406666668,20.0,5.0,Saturday,Evening
+2026-07-19,Fruitvale-bound,Broadway & 17th St (19th St BART),4443010,2026-07-19 23:48:40.895941-07:00,112.89459888333334,20.0,3.0,Sunday / holiday,Evening
+2026-07-25,Rockridge-bound,Broadway & 15th St,6485070,2026-07-25 22:49:33.193849-07:00,111.81759566666666,20.0,4.0,Saturday,Evening
+2026-07-25,Fruitvale-bound,Broadway & 17th St (19th St BART),3271070,2026-07-25 23:38:23.782660-07:00,107.11015155,20.0,3.0,Saturday,Evening
+2026-07-25,Fruitvale-bound,Broadway & 17th St (19th St BART),2960070,2026-07-25 21:29:09.195757-07:00,105.4576608,20.0,5.0,Saturday,Evening
+2026-07-11,Rockridge-bound,Broadway & 15th St,7720070,2026-07-11 23:43:07.811102-07:00,102.81062653333333,20.0,3.0,Saturday,Evening
+2026-06-03,Fruitvale-bound,Broadway & 17th St (19th St BART),4205020,2026-06-03 23:34:26.025703-07:00,99.73181921666666,15.0,4.0,Weekday,Evening
+2026-06-03,Rockridge-bound,Broadway & 15th St,12247020,2026-06-03 22:52:39.974017-07:00,98.91319575000001,15.0,4.0,Weekday,Evening
+2026-06-15,Fruitvale-bound,Broadway & 17th St (19th St BART),7261020,2026-06-15 22:55:35-07:00,97.2863323,15.0,4.0,Weekday,Evening
+2026-06-21,Fruitvale-bound,Broadway & 17th St (19th St BART),6706010,2026-06-21 22:49:07.941441-07:00,95.84241866666666,20.0,3.0,Sunday / holiday,Evening
+2026-07-04,Rockridge-bound,Broadway & 15th St,6485070,2026-07-04 22:52:49.308098-07:00,93.29096548333334,20.0,3.0,Sunday / holiday,Evening
+2026-06-20,Fruitvale-bound,Broadway & 17th St (19th St BART),8146070,2026-06-21 00:13:05.438433-07:00,88.77982753333335,30.0,2.0,Saturday,Late night
+2026-07-26,Rockridge-bound,Broadway & 15th St,1406010,2026-07-27 00:11:27.259235-07:00,86.87144021666667,30.0,2.0,Sunday / holiday,Late night
+2026-07-04,Fruitvale-bound,Broadway & 17th St (19th St BART),3271070,2026-07-04 23:42:49.560393-07:00,86.78489936666666,20.0,2.0,Sunday / holiday,Evening
+2026-07-26,Rockridge-bound,Broadway & 15th St,5593010,2026-07-26 19:06:26.502090-07:00,82.84226396666666,20.0,4.0,Sunday / holiday,Evening
+2026-07-05,Rockridge-bound,Broadway & 15th St,3796010,2026-07-05 22:08:10.574312-07:00,80.41791956666665,20.0,3.0,Sunday / holiday,Evening
+2026-06-13,Rockridge-bound,Broadway & 15th St,880070,2026-06-13 21:03:41.763610-07:00,80.04693563333333,20.0,3.0,Saturday,Evening
+2026-06-30,Fruitvale-bound,Broadway & 17th St (19th St BART),4557020,2026-06-30 22:37:42.071967-07:00,79.81145521666667,15.0,3.0,Weekday,Evening
+2026-06-15,Rockridge-bound,Broadway & 15th St,3888020,2026-06-15 23:51:06.905860-07:00,79.05475138333333,15.0,3.0,Weekday,Evening
+2026-07-13,Fruitvale-bound,Broadway & 17th St (19th St BART),4311020,2026-07-14 00:10:14.288845-07:00,78.16834735,20.0,3.0,Weekday,Late night
+2026-07-16,Fruitvale-bound,Broadway & 17th St (19th St BART),9275020,2026-07-16 21:00:10.386101-07:00,77.22351433333333,15.0,4.0,Weekday,Evening
+2026-07-06,Rockridge-bound,Broadway & 15th St,11161020,2026-07-06 10:38:40.958808-07:00,77.06418401666666,12.0,5.0,Weekday,Midday
