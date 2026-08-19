@@ -157,7 +157,7 @@ function renderScheduleCompliance(data) {
     { label: "Observed running",       val: intFmt(sc.ran_trips) },
     { label: "Trip delivery",          val: `${fmt(tripDeliveryPct)}%`,
       grade: gradeServiceDelivered(tripDeliveryPct) },
-    { label: "Stop service delivered", val: `${fmt(stopSDPct)}%`,
+    { label: "On Time Service Delivered", val: `${fmt(stopSDPct)}%`,
       grade: gradeStopSD(stopSDPct) },
     { label: "Dropped / not observed", val: `${intFmt(sc.dropped_trips)} (${fmt(droppedPct)}%)` },
     { label: "Trips truncated",        val: `${intFmt(sc.trips_not_completed)} (${fmt(notCompletedPct)}%)`,
@@ -463,7 +463,7 @@ function renderRouteDayGrid(data) {
         html += `<div class="rdgrid-cell rdgrid-empty" data-rid="${ridAttr}" data-limited="${limitedAttr}" title="${r.route_id} ${cell.day} — no data">—</div>`;
       } else {
         const grade = gradeStopSD(pct);
-        const tip = `${r.route_id} ${cell.day} ${cell.service_date}: ${fmt(pct)}% stops delivered on time (n=${intFmt(cell.stop_n)})`;
+        const tip = `${r.route_id} ${cell.day} ${cell.service_date}: ${fmt(pct)}% stops inside the rider window (n=${intFmt(cell.stop_n)})`;
         html += `<div class="rdgrid-cell" data-rid="${ridAttr}" data-limited="${limitedAttr}" style="background:${grade.bg};color:${grade.fg}" title="${tip}" data-date="${cell.service_date}">${fmt(pct, 0)}</div>`;
       }
     }

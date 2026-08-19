@@ -97,7 +97,7 @@ function gradeLate(pct) {
   return gradeColor(1 - (pct - 2) / (20 - 2));
 }
 
-// Service delivered: 99%+ = green, 90%- = dark red, linear in between.
+// On Time Service Delivered: 99%+ = green, 90%- = dark red, linear in between.
 function gradeServiceDelivered(pct) {
   return gradeColor((pct - 90) / (99 - 90));
 }
@@ -118,7 +118,7 @@ function gradePctStops(pct, stops) {
   return { bg: `rgb(${r},${g},${b})`, fg: lum < 110 ? "#ffffff" : "#1a1a1a" };
 }
 
-// Stop-level SD colour scale. Anything ≥95% is green; the scale
+// Stop-level On Time Service Delivered colour scale. Anything ≥95% is green; the scale
 // transitions through orange at 90%, into reds at 80–75%, and
 // clamps to darkest red at 65% and below.
 function gradeStopSD(pct) {

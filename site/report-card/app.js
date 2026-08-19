@@ -69,8 +69,8 @@ async function latestWeekEnd() {
   }
 }
 
-// Aggregate every route across the fetched daily payloads. Service delivery
-// uses exact delivered/scheduled counts; observed-only metrics are weighted
+// Aggregate every route across the fetched daily payloads. On Time Service Delivered
+// uses exact qualifying/scheduled counts; observed-only metrics are weighted
 // by that day's observation count.
 function aggregateRoutes(dailies) {
   const acc = new Map();
@@ -222,7 +222,7 @@ function renderAgencyHero(a) {
         <div class="agency-title">Agency-wide grade</div>
         <div class="agency-sub">Non-limited routes over the last four weeks, weighted by each route's share of measured trip-stops. Lettered Transbay routes remain included.</div>
         <div class="agency-stats">
-          ${stat("Service delivered", a.stop_sd_pct == null ? "—" : fmt(a.stop_sd_pct) + "%")}
+          ${stat("On Time Service Delivered", a.stop_sd_pct == null ? "—" : fmt(a.stop_sd_pct) + "%")}
           ${stat("On time (≤3 min)", a.on_time_pct == null ? "—" : fmt(a.on_time_pct) + "%")}
           ${stat("p95 delay", a.p95_delay_minutes == null ? "—" : fmt(a.p95_delay_minutes) + " min")}
           ${stat("Avg speed", fmt(a.avg_speed_mph) + " mph", speedPct == null ? "" : `${fmt(speedPct, 0)}% of ideal`)}
@@ -527,7 +527,7 @@ function render(routes, weekEnd) {
         <td colspan="7">
           <dl class="route-detail-list">
             <div><dt>Composite score</dt><dd>${fmt(r.score)} / 100</dd></div>
-            <div><dt>Service delivered (stops, −1 to +7 min)</dt><dd>${pill(r.stop_sd_pct, gradeStopSD)}</dd></div>
+            <div><dt>On Time Service Delivered (stops, −1 to +7 min)</dt><dd>${pill(r.stop_sd_pct, gradeStopSD)}</dd></div>
             <div><dt>On time (≤3 min)</dt><dd>${pill(r.on_time_pct, gradeOnTime)}</dd></div>
             <div><dt>p95 delay</dt><dd>${r.p95_delay_minutes == null ? "—" : fmt(r.p95_delay_minutes) + " min"}</dd></div>
             <div><dt>Avg speed</dt><dd>${fmt(r.avg_speed_mph)} mph (speed sub-score ${fmt(Math.min(100, (r.avg_speed_mph || 0) / IDEAL_SPEED_MPH * 100), 0)} / 100, capped at the ${IDEAL_SPEED_MPH} mph ideal)</dd></div>

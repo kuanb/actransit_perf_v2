@@ -625,36 +625,38 @@
   <section id="sd-section">
     <details id="sd-details" open>
       <summary>
-        <span class="sd-title">Service delivered</span>
+        <span class="sd-title">On Time Service Delivered</span>
         <span class="muted sd-sub" id="sd-sub">Stops arriving on time (−1 to +7 min) · past week</span>
       </summary>
       <div class="sd-body">
         <p class="muted defn">
-          <strong>What this is.</strong> The same <em>service delivered</em>
+          <strong>What this is.</strong> The same <em>On Time Service Delivered</em>
           metric shown on the <a href="../weekly/">weekly</a> dashboard, scoped
-          to this route. An eligible scheduled stop arrival counts as <strong>delivered</strong>
+          to this route. An eligible scheduled stop arrival counts toward the metric
           only if the bus arrived between <strong>1 minute early and 7 minutes
-          late</strong> (<code>−60 s ≤ delay ≤ 420 s</code>); eligible stops where the
-          bus never arrived count as <em>not delivered</em>. The denominator includes
+          late</strong> (<code>−60 s ≤ delay ≤ 420 s</code>). Stops outside that window
+          remain in the denominator but do not count toward the metric; this includes
+          eligible stops where the bus was never observed. The denominator includes
           wholly unobserved trips but excludes route origins, final terminals, and
           stops where GTFS prohibits pickup.
-          SD% = delivered stops ÷ scheduled stops × 100. Delivered events come
+          On Time Service Delivered = qualifying stops ÷ eligible scheduled stops × 100.
+          Qualifying events come
           from BigQuery and the complete denominator comes from archived GTFS;
           the exact counts are reused from the weekly roll-up.
         </p>
         <p class="muted defn">
-          <strong>Time resolution.</strong> The left chart is the true SD% per
+          <strong>Time resolution.</strong> The left chart is the true On Time Service Delivered percentage per
           day (the finest count-based resolution we precompute). The right chart
           adds hourly context: median (p50) and p95 delay by hour of day, with
           the shaded band marking the accepted −1…+7 min window — hours whose
-          line sits inside the band are mostly being delivered on time, hours
-          above it are running late. Finer (e.g. 15-min) true SD% would require
+          line sits inside the band mostly fall within the rider window, while hours
+          above it are running late. Finer (e.g. 15-min) On Time Service Delivered data would require
           a new aggregation in the stats pipeline.
         </p>
         <div id="sd-cards" class="cards"></div>
         <div class="sd-charts">
           <div class="sd-pane sd-daily">
-            <h3 class="sub-h">Service delivered by day (stop-level)</h3>
+            <h3 class="sub-h">On Time Service Delivered by day (stop-level)</h3>
             <canvas id="sd-daily-chart" width="900" height="260"></canvas>
           </div>
           <div class="sd-pane sd-hour">

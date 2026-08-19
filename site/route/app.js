@@ -975,8 +975,8 @@ function renderServiceDelivered(sd, delayByHour) {
   if (!haveDaily && !haveHourly) {
     document.getElementById("sd-cards").innerHTML = "";
     empty.textContent = weekEnd
-      ? "Service-delivered stats not yet computed for this week — check back after the next Sunday roll-up."
-      : "Open this page via a route's map link on the weekly dashboard to load service-delivered stats.";
+      ? "On Time Service Delivered stats are not yet computed for this week — check back after the next Sunday roll-up."
+      : "Open this page via a route's map link on the weekly dashboard to load On Time Service Delivered stats.";
     empty.hidden = false;
     return;
   }
@@ -986,11 +986,11 @@ function renderServiceDelivered(sd, delayByHour) {
   const cards = [];
   if (week) {
     cards.push({
-      label: "Service delivered — week",
+      label: "On Time Service Delivered — week",
       val: `${fmt(week.pct)}%`,
       grade: gradeStopSD(week.pct),
     });
-    cards.push({ label: "Not delivered — week", val: `${fmt(100 - week.pct)}%` });
+    cards.push({ label: "Outside rider window — week", val: `${fmt(100 - week.pct)}%` });
     cards.push({ label: "Scheduled stops — week", val: intFmt(week.n) });
   }
   if (sd && sd.overall_p50_delay_min !== null && sd.overall_p50_delay_min !== undefined) {
@@ -1002,7 +1002,7 @@ function renderServiceDelivered(sd, delayByHour) {
   renderSDHourChart(delayByHour);
 }
 
-// 100%-stacked per-day bar: delivered (within window) vs not delivered.
+// 100%-stacked per-day bar: inside vs outside the rider window.
 function renderSDDailyChart(byDay) {
   const canvas = document.getElementById("sd-daily-chart");
   if (!canvas) return;
@@ -1023,14 +1023,14 @@ function renderSDDailyChart(byDay) {
       labels,
       datasets: [
         {
-          label: "Delivered",
+          label: "Inside rider window",
           data: delivered,
           backgroundColor: barColors,
           borderWidth: 0,
           stack: "sd",
         },
         {
-          label: "Not delivered",
+          label: "Outside rider window",
           data: notDelivered,
           backgroundColor: "rgba(120,120,120,0.18)",
           borderWidth: 0,
@@ -1048,9 +1048,9 @@ function renderSDDailyChart(byDay) {
               const pct = delivered[c.dataIndex];
               if (pct === null) return "no data";
               if (c.datasetIndex === 0) {
-                return `${pct.toFixed(1)}% delivered — n=${counts[c.dataIndex].toLocaleString()}`;
+                return `${pct.toFixed(1)}% inside rider window — n=${counts[c.dataIndex].toLocaleString()}`;
               }
-              return `${(100 - pct).toFixed(1)}% not delivered`;
+              return `${(100 - pct).toFixed(1)}% outside rider window`;
             },
           },
         },

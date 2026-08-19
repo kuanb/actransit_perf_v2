@@ -345,7 +345,7 @@ function render(data, indexDates = [], weeklyWeeks = []) {
   // renderCards moved to /lib.js (shared with /weekly/).
 
   // System summary holds stop-level metrics; trip counts live in
-  // schedule compliance (Observed running / Scheduled / Service delivered).
+  // schedule compliance (Observed running / Scheduled / rider-window performance).
   renderCards("#system-cards", [
     { label: "Stops observed",   val: intFmt(s.total_observations) },
     { label: "Vehicles seen",    val: intFmt(s.vehicles_observed) },
@@ -379,8 +379,8 @@ function render(data, indexDates = [], weeklyWeeks = []) {
 
   const stopSD = sc.stop_sd_pct;
   const stopSDCard = stopSD !== null && stopSD !== undefined
-    ? { label: "Service delivered", val: `${fmt(stopSD)}%`, grade: gradeStopSD(stopSD) }
-    : { label: "Service delivered", val: `${fmt(tripSDPct)}%`, grade: gradeServiceDelivered(tripSDPct) };
+    ? { label: "On Time Service Delivered", val: `${fmt(stopSD)}%`, grade: gradeStopSD(stopSD) }
+    : { label: "Trip delivery", val: `${fmt(tripSDPct)}%`, grade: gradeServiceDelivered(tripSDPct) };
 
   renderCards("#schedule-cards", [
     { label: "Scheduled trips",        val: intFmt(sc.scheduled_trips) },
@@ -550,7 +550,7 @@ function render(data, indexDates = [], weeklyWeeks = []) {
           ? r.stop_sd_pct : null;
         const sdGrade = gradeStopSD;
         const sdTitle = r.stop_sd_pct !== null && r.stop_sd_pct !== undefined
-          ? `${fmt(r.stop_sd_pct)}% of scheduled stops delivered on time (−1 to +7 min)`
+          ? `${fmt(r.stop_sd_pct)}% of scheduled stops inside the rider window (−1 to +7 min)`
           : "no eligible scheduled stops";
         const isOpen = expanded.has(r.route_id);
         const detailHidden = isOpen ? "" : "hidden";
@@ -570,7 +570,7 @@ function render(data, indexDates = [], weeklyWeeks = []) {
           <dl class="route-detail-list">
             <div><dt>Trips observed</dt><dd>${intFmt(r.trips_observed)}${r.scheduled_trips ? ` (of ${intFmt(r.scheduled_trips)} scheduled)` : ""}</dd></div>
             <div><dt>Stop arrivals</dt><dd>${intFmt(r.observations)}</dd></div>
-            <div><dt>Service delivered (stops, −1 to +7 min)</dt><dd>${r.stop_sd_pct !== null && r.stop_sd_pct !== undefined ? `${fmt(r.stop_sd_pct)}% of ${intFmt(r.stop_sd_n)} scheduled` : "—"}</dd></div>
+            <div><dt>On Time Service Delivered (stops, −1 to +7 min)</dt><dd>${r.stop_sd_pct !== null && r.stop_sd_pct !== undefined ? `${fmt(r.stop_sd_pct)}% of ${intFmt(r.stop_sd_n)} scheduled` : "—"}</dd></div>
             <div><dt>On time (≤3 min)</dt><dd>${fmt(r.on_time_pct)}%</dd></div>
             <div><dt>Within 5 min</dt><dd>${fmt(r.within_5min_pct)}%</dd></div>
             <div><dt>Within 7 min</dt><dd>${fmt(r.within_7min_pct)}%</dd></div>

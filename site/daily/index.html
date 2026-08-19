@@ -41,7 +41,7 @@
 
   <section>
     <h2>Schedule compliance</h2>
-    <p class="muted defn"><strong>Service delivered</strong> = percent of scheduled passenger stop-arrivals that occurred within the rider-experience window: no more than <strong>1 minute early</strong> and no more than <strong>7 minutes late</strong> (<code>−60 s ≤ delay ≤ 420 s</code>). Route origins, final terminals, and stops where GTFS prohibits pickup are excluded because this tracker cannot measure an arrival there for a waiting rider. Every other scheduled stop counts, including stops on trips that were never observed. Colour scale: green ≥ 95%, orange at 90%, red at 80–75%, darkest red ≤ 65%.</p>
+    <p class="muted defn"><strong>On Time Service Delivered</strong> = percent of scheduled passenger stop-arrivals that occurred within the rider-experience window: no more than <strong>1 minute early</strong> and no more than <strong>7 minutes late</strong> (<code>−60 s ≤ delay ≤ 420 s</code>). Route origins, final terminals, and stops where GTFS prohibits pickup are excluded because this tracker cannot measure an arrival there for a waiting rider. Every other scheduled stop counts, including stops on trips that were never observed. Colour scale: green ≥ 95%, orange at 90%, red at 80–75%, darkest red ≤ 65%.</p>
     <p class="muted defn"><strong>Observed running</strong> = trips with at least one recorded stop arrival (regardless of delay). <strong>Dropped trips</strong> = scheduled trips with no observed arrivals at all.</p>
     <p class="muted defn"><strong>Trips truncated</strong> = trips that ran but were not observed reaching their last passenger-boarding stop before the final terminal. The unreliable final-terminal ping is not used.</p>
     <div id="schedule-cards" class="cards"></div>
@@ -88,7 +88,7 @@
           <tr>
             <th data-key="route_id">Route</th>
             <th>Δ distribution</th>
-            <th data-key="stop_sd_pct">Service delivered %</th>
+            <th data-key="stop_sd_pct">On Time Service Delivered %</th>
             <th data-key="on_time_pct">On time % (≤3 min)</th>
             <th data-key="p50_delay_minutes">p50 delay (min)</th>
             <th class="expand-th"></th>

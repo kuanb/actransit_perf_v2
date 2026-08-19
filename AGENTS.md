@@ -103,6 +103,17 @@ Two custom Cloud Monitoring metrics emitted from `/track-performance`:
   whose only purpose is to redirect to another tracked page, because that can
   count one visit twice.
 
+### Static site terminology
+
+- Name the stop-level rider-window metric **On Time Service Delivered** in all
+  user-facing copy. It measures eligible scheduled stops reached between one
+  minute early and seven minutes late; it is not a pure ran-versus-cancelled
+  service-delivery measure.
+- Describe the complement as **outside rider window**, not **not delivered**.
+  Keep **Trip delivery**, **Observed running**, and **Dropped / not observed**
+  for the separate trip-operation measures. Internal field and function names
+  such as `stop_sd_pct` and `renderServiceDelivered` remain unchanged.
+
 ### Commits
 
 - **No Claude attribution.** Strip the `Co-Authored-By: Claude ...` trailer
