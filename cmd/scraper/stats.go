@@ -27,6 +27,7 @@ const (
 )
 
 type dailyStats struct {
+	MethodologyVersion   int                 `json:"methodology_version"`
 	ServiceDate          string              `json:"service_date"`
 	GeneratedAt          time.Time           `json:"generated_at"`
 	System               systemStats         `json:"system"`
@@ -85,18 +86,15 @@ type scheduleCompliance struct {
 	TripsNotCompleted             int                       `json:"trips_not_completed"`
 	TripsNotCompletedDistribution *notCompletedDistribution `json:"trips_not_completed_distribution,omitempty"`
 	DroppedTripIDsSample          []string                  `json:"dropped_trip_ids_sample"`
-	// Stop-level service delivery: fraction of scheduled stop-arrivals that
-	// occurred within the rider-experience window (−1 min to +7 min).
-	StopSDPct *float64 `json:"stop_sd_pct,omitempty"`
-	StopSDN   int64    `json:"stop_sd_n,omitempty"`
+	// Stop-level service delivery excludes origins, final terminals, and
+	// no-pickup stops. The denominator comes from GTFS, including dropped trips.
+	StopSDPct        *float64 `json:"stop_sd_pct,omitempty"`
+	StopSDN          int64    `json:"stop_sd_n,omitempty"`
+	StopSDDeliveredN int64    `json:"stop_sd_delivered_n,omitempty"`
 }
 
-// notCompletedDistribution describes how far through their route the
-// trips counted in TripsNotCompleted got, in stops-observed-of-stops-
-// scheduled terms (last_obs_seq / final_seq * 100). Helps tell the
-// difference between "buses bailed at the last 1–2 stops" (90%+) vs
-// "GPS dropped mid-route" (40–60%) vs "trip never started past the
-// first few stops" (<10%).
+// notCompletedDistribution describes how far trips counted in
+// TripsNotCompleted got relative to their last passenger-boarding stop.
 type notCompletedDistribution struct {
 	P5Pct  float64 `json:"p5_pct"`
 	P25Pct float64 `json:"p25_pct"`
@@ -108,30 +106,32 @@ type notCompletedDistribution struct {
 }
 
 type routeStats struct {
-	RouteID             string   `json:"route_id"`
-	TripsObserved       int64    `json:"trips_observed"`
-	Observations        int64    `json:"observations"`
-	OnTimePct           float64  `json:"on_time_pct"`
-	Within5MinPct       float64  `json:"within_5min_pct"`
-	Within7MinPct       float64  `json:"within_7min_pct"`
-	LatePct             float64  `json:"late_pct"`
-	EarlyPct            float64  `json:"early_pct"`
-	P5DelayMinutes      *float64 `json:"p5_delay_minutes"`
-	P25DelayMinutes     *float64 `json:"p25_delay_minutes"`
-	P50DelayMinutes     *float64 `json:"p50_delay_minutes"`
-	P75DelayMinutes     *float64 `json:"p75_delay_minutes"`
-	P95DelayMinutes     *float64 `json:"p95_delay_minutes"`
-	P50DistortionPct    *float64 `json:"p50_distortion_pct"`
-	P95DistortionPct    *float64 `json:"p95_distortion_pct"`
-	AvgSpeedMph         float64  `json:"avg_speed_mph"`
-	Color               string   `json:"color"`
-	TextColor           string   `json:"text_color"`
-	ScheduledTrips      int      `json:"scheduled_trips"`
-	RanTrips            int      `json:"ran_trips"`
-	Limited             bool     `json:"limited"`
-	ServiceDeliveredPct *float64 `json:"service_delivered_pct"`
-	StopSDPct           *float64 `json:"stop_sd_pct,omitempty"`
-	TwoBusGapWindows    *int     `json:"two_bus_gap_windows,omitempty"`
+	RouteID          string   `json:"route_id"`
+	TripsObserved    int64    `json:"trips_observed"`
+	Observations     int64    `json:"observations"`
+	OnTimePct        float64  `json:"on_time_pct"`
+	Within5MinPct    float64  `json:"within_5min_pct"`
+	Within7MinPct    float64  `json:"within_7min_pct"`
+	LatePct          float64  `json:"late_pct"`
+	EarlyPct         float64  `json:"early_pct"`
+	P5DelayMinutes   *float64 `json:"p5_delay_minutes"`
+	P25DelayMinutes  *float64 `json:"p25_delay_minutes"`
+	P50DelayMinutes  *float64 `json:"p50_delay_minutes"`
+	P75DelayMinutes  *float64 `json:"p75_delay_minutes"`
+	P95DelayMinutes  *float64 `json:"p95_delay_minutes"`
+	P50DistortionPct *float64 `json:"p50_distortion_pct"`
+	P95DistortionPct *float64 `json:"p95_distortion_pct"`
+	AvgSpeedMph      float64  `json:"avg_speed_mph"`
+	Color            string   `json:"color"`
+	TextColor        string   `json:"text_color"`
+	ScheduledTrips   int      `json:"scheduled_trips"`
+	RanTrips         int      `json:"ran_trips"`
+	Limited          bool     `json:"limited"`
+	TripDeliveryPct  *float64 `json:"trip_delivery_pct"`
+	StopSDPct        *float64 `json:"stop_sd_pct,omitempty"`
+	StopSDN          int64    `json:"stop_sd_n,omitempty"`
+	StopSDDeliveredN int64    `json:"stop_sd_delivered_n,omitempty"`
+	TwoBusGapWindows *int     `json:"two_bus_gap_windows,omitempty"`
 }
 
 type bqStatsStats struct {
@@ -159,6 +159,10 @@ func generateDailyStats(ctx context.Context, serviceDate civil.Date) (*dailyStat
 	if err != nil {
 		return nil, fmt.Errorf("scheduled trips: %w", err)
 	}
+	stopPlan, err := loadScheduledStopPlan(zr, scheduledTripRoute)
+	if err != nil {
+		return nil, fmt.Errorf("scheduled stops: %w", err)
+	}
 	colors, err := loadRouteColors(zr)
 	if err != nil {
 		return nil, fmt.Errorf("route colors: %w", err)
@@ -169,19 +173,20 @@ func generateDailyStats(ctx context.Context, serviceDate civil.Date) (*dailyStat
 		scheduledByRoute[rid]++
 	}
 
-	ranTrips, err := queryRanTrips(ctx, serviceDate)
+	tripProgress, err := queryTripProgress(ctx, serviceDate)
 	if err != nil {
-		return nil, fmt.Errorf("query ran trips: %w", err)
+		return nil, fmt.Errorf("query trip progress: %w", err)
+	}
+	ranTrips := make(map[string]struct{}, len(tripProgress))
+	for tripID := range tripProgress {
+		ranTrips[tripID] = struct{}{}
 	}
 	scheduledRuns, err := loadScheduledRuns(zr, serviceDate, activeServices)
 	if err != nil {
 		return nil, fmt.Errorf("load scheduled runs: %w", err)
 	}
 	twoBusGapWindowsByRoute := countTwoBusGapWindows(scheduledRuns, ranTrips)
-	notCompleted, notCompletedDist, err := queryTripsNotCompleted(ctx, serviceDate)
-	if err != nil {
-		return nil, fmt.Errorf("query trips not completed: %w", err)
-	}
+	notCompleted, notCompletedDist := computeTripsNotCompleted(tripProgress, stopPlan)
 
 	ranByRoute := make(map[string]int)
 	for tid := range ranTrips {
@@ -205,10 +210,11 @@ func generateDailyStats(ctx context.Context, serviceDate civil.Date) (*dailyStat
 	if err != nil {
 		return nil, fmt.Errorf("query route stats: %w", err)
 	}
-	routeStopSD, err := queryDailyRouteStopSD(ctx, serviceDate)
+	deliveredStops, err := queryDeliveredStops(ctx, serviceDate)
 	if err != nil {
-		return nil, fmt.Errorf("query route stop sd: %w", err)
+		return nil, fmt.Errorf("query delivered stops: %w", err)
 	}
+	routeStopSD := computeRouteStopSD(stopPlan, deliveredStops)
 	minuteHist, err := queryStatsMinuteHistogram(ctx, serviceDate)
 	if err != nil {
 		return nil, fmt.Errorf("query minute histogram: %w", err)
@@ -265,11 +271,13 @@ func generateDailyStats(ctx context.Context, serviceDate civil.Date) (*dailyStat
 			twoBusGapWindows := twoBusGapWindowsByRoute[rid]
 			routes[i].TwoBusGapWindows = &twoBusGapWindows
 			pct := round1(100 * float64(ran) / float64(sched))
-			routes[i].ServiceDeliveredPct = &pct
+			routes[i].TripDeliveryPct = &pct
 		}
 		if pt, ok := routeStopSD[rid]; ok {
 			pct := pt.Pct
 			routes[i].StopSDPct = &pct
+			routes[i].StopSDN = pt.TotalN
+			routes[i].StopSDDeliveredN = pt.DeliveredN
 			sysStopTotalN += pt.TotalN
 			sysStopDeliveredN += pt.DeliveredN
 		}
@@ -309,6 +317,7 @@ func generateDailyStats(ctx context.Context, serviceDate civil.Date) (*dailyStat
 		TripsNotCompletedDistribution: notCompletedDist,
 		DroppedTripIDsSample:          sample,
 		StopSDN:                       sysStopTotalN,
+		StopSDDeliveredN:              sysStopDeliveredN,
 	}
 	if sysStopTotalN > 0 {
 		pct := round1(100.0 * float64(sysStopDeliveredN) / float64(sysStopTotalN))
@@ -316,6 +325,7 @@ func generateDailyStats(ctx context.Context, serviceDate civil.Date) (*dailyStat
 	}
 
 	out := &dailyStats{
+		MethodologyVersion:   2,
 		ServiceDate:          serviceDate.String(),
 		GeneratedAt:          time.Now().UTC(),
 		System:               *sys,
@@ -630,6 +640,69 @@ func loadScheduledTripRoutes(zr *zip.Reader, services map[string]struct{}) (map[
 	return out, nil
 }
 
+func loadScheduledStopPlan(zr *zip.Reader, tripRoutes map[string]string) (*scheduledStopPlan, error) {
+	type scheduledStop struct {
+		sequence      int64
+		pickupAllowed bool
+	}
+
+	cr, rc, headers, err := openZipCSV(zr, "stop_times.txt")
+	if err != nil {
+		return nil, err
+	}
+	defer rc.Close()
+	idx := headerIndex(headers)
+	byTrip := make(map[string][]scheduledStop)
+	for {
+		row, err := cr.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		tripID := col(row, idx, "trip_id")
+		if _, ok := tripRoutes[tripID]; !ok {
+			continue
+		}
+		sequence, err := strconv.ParseInt(col(row, idx, "stop_sequence"), 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("trip %s has invalid stop_sequence: %w", tripID, err)
+		}
+		byTrip[tripID] = append(byTrip[tripID], scheduledStop{
+			sequence:      sequence,
+			pickupAllowed: col(row, idx, "pickup_type") != "1",
+		})
+	}
+
+	plan := &scheduledStopPlan{
+		ScoredStops:          make(map[scheduledStopKey]string),
+		ScoredByRoute:        make(map[string]int64),
+		StopPositions:        make(map[scheduledStopKey]int),
+		LastBoardingSequence: make(map[string]int64),
+		LastBoardingPosition: make(map[string]int),
+	}
+	for tripID, stops := range byTrip {
+		sort.Slice(stops, func(i, j int) bool { return stops[i].sequence < stops[j].sequence })
+		routeID := tripRoutes[tripID]
+		for i, stop := range stops {
+			key := scheduledStopKey{TripID: tripID, StopSequence: stop.sequence}
+			position := i + 1
+			plan.StopPositions[key] = position
+			if stop.pickupAllowed && i < len(stops)-1 {
+				plan.LastBoardingSequence[tripID] = stop.sequence
+				plan.LastBoardingPosition[tripID] = position
+			}
+			if i == 0 || i == len(stops)-1 || !stop.pickupAllowed {
+				continue
+			}
+			plan.ScoredStops[key] = routeID
+			plan.ScoredByRoute[routeID]++
+		}
+	}
+	return plan, nil
+}
+
 type scheduledRun struct {
 	TripID      string
 	RouteID     string
@@ -768,33 +841,73 @@ func loadRouteColors(zr *zip.Reader) (map[string]colorPair, error) {
 	return out, nil
 }
 
-// queryDailyRouteStopSD counts stop-level service delivery per route for the
-// given service_date. A stop is "delivered" when the bus arrived no earlier
-// than 1 min before schedule and no later than 7 min after
-// (delay_seconds BETWEEN -60 AND 420). The denominator is all deduped rows
-// in trip_observations for that route/day, including stops where the bus
-// never arrived (actual_arrival IS NULL). Returns map[route_id]routeStopSDPoint.
-func queryDailyRouteStopSD(ctx context.Context, serviceDate civil.Date) (map[string]routeStopSDPoint, error) {
+func queryDeliveredStops(ctx context.Context, serviceDate civil.Date) ([]scheduledStopKey, error) {
 	q := bqClient.Query(fmt.Sprintf(`
 		WITH %s
-		SELECT
-		  route_id,
-		  COUNT(*) AS total_n,
-		  COUNTIF(actual_arrival IS NOT NULL AND delay_seconds BETWEEN -60 AND 420) AS delivered_n
+		SELECT trip_id, stop_sequence
 		FROM obs
-		GROUP BY route_id
-		ORDER BY route_id
+		WHERE actual_arrival IS NOT NULL
+		  AND delay_seconds BETWEEN -60 AND 420
 	`, dedupedDayObservationsCTE(serviceDate)))
 	it, err := q.Read(ctx)
 	if err != nil {
 		return nil, err
 	}
-	out := make(map[string]routeStopSDPoint)
+	var out []scheduledStopKey
+	for {
+		var row scheduledStopKey
+		err := it.Next(&row)
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, row)
+	}
+	return out, nil
+}
+
+func computeRouteStopSD(plan *scheduledStopPlan, delivered []scheduledStopKey) map[string]routeStopSDPoint {
+	out := make(map[string]routeStopSDPoint, len(plan.ScoredByRoute))
+	for routeID, total := range plan.ScoredByRoute {
+		out[routeID] = routeStopSDPoint{TotalN: total}
+	}
+	for _, stop := range delivered {
+		routeID, ok := plan.ScoredStops[stop]
+		if !ok {
+			continue
+		}
+		point := out[routeID]
+		point.DeliveredN++
+		out[routeID] = point
+	}
+	for routeID, point := range out {
+		if point.TotalN > 0 {
+			point.Pct = round1(100 * float64(point.DeliveredN) / float64(point.TotalN))
+			out[routeID] = point
+		}
+	}
+	return out
+}
+
+func queryTripProgress(ctx context.Context, serviceDate civil.Date) (map[string]int64, error) {
+	q := bqClient.Query(fmt.Sprintf(`
+		WITH %s
+		SELECT trip_id, MAX(stop_sequence) AS last_observed_sequence
+		FROM obs
+		WHERE actual_arrival IS NOT NULL
+		GROUP BY trip_id
+	`, dedupedDayObservationsCTE(serviceDate)))
+	it, err := q.Read(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]int64)
 	for {
 		var row struct {
-			RouteID    string `bigquery:"route_id"`
-			TotalN     int64  `bigquery:"total_n"`
-			DeliveredN int64  `bigquery:"delivered_n"`
+			TripID               string `bigquery:"trip_id"`
+			LastObservedSequence int64  `bigquery:"last_observed_sequence"`
 		}
 		err := it.Next(&row)
 		if err == iterator.Done {
@@ -803,119 +916,41 @@ func queryDailyRouteStopSD(ctx context.Context, serviceDate civil.Date) (map[str
 		if err != nil {
 			return nil, err
 		}
-		pct := 0.0
-		if row.TotalN > 0 {
-			pct = round1(100.0 * float64(row.DeliveredN) / float64(row.TotalN))
-		}
-		out[row.RouteID] = routeStopSDPoint{TotalN: row.TotalN, DeliveredN: row.DeliveredN, Pct: pct}
+		out[row.TripID] = row.LastObservedSequence
 	}
 	return out, nil
 }
 
-func queryRanTrips(ctx context.Context, serviceDate civil.Date) (map[string]struct{}, error) {
-	q := bqClient.Query(fmt.Sprintf(`
-		SELECT DISTINCT trip_id
-		FROM `+"`%s.actransit.trip_observations`"+`
-		WHERE service_date = "%s"
-		  AND actual_arrival IS NOT NULL
-	`, projectID, serviceDate))
-	it, err := q.Read(ctx)
-	if err != nil {
-		return nil, err
-	}
-	out := make(map[string]struct{})
-	for {
-		var row struct {
-			TripID string `bigquery:"trip_id"`
-		}
-		err := it.Next(&row)
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-		out[row.TripID] = struct{}{}
-	}
-	return out, nil
-}
-
-// queryTripsNotCompleted counts trips that ran (had ≥1 stop arrival
-// observed) but never reached their final scheduled stop, AND returns
-// a percentile + 10-bucket histogram of how far through the route those
-// not-completed trips got (last_obs_seq / final_seq * 100). One BQ
-// scan, single query.
-func queryTripsNotCompleted(ctx context.Context, serviceDate civil.Date) (int, *notCompletedDistribution, error) {
-	q := bqClient.Query(fmt.Sprintf(`
-		WITH %s,
-		per_trip AS (
-		  SELECT
-		    trip_id,
-		    MAX(stop_sequence) AS final_seq,
-		    MAX(IF(actual_arrival IS NOT NULL, stop_sequence, NULL)) AS last_observed_seq
-		  FROM obs
-		  GROUP BY trip_id
-		),
-		not_completed AS (
-		  SELECT 100.0 * last_observed_seq / final_seq AS completion_pct
-		  FROM per_trip
-		  WHERE last_observed_seq IS NOT NULL
-		    AND last_observed_seq < final_seq
-		    AND final_seq > 0
-		),
-		bucketed AS (
-		  SELECT
-		    LEAST(CAST(FLOOR(completion_pct / 10) AS INT64), 9) AS bucket,
-		    COUNT(*) AS n
-		  FROM not_completed
-		  GROUP BY bucket
-		)
-		SELECT
-		  (SELECT COUNT(*) FROM not_completed) AS n,
-		  (SELECT APPROX_QUANTILES(completion_pct, 100)[OFFSET(5)]  FROM not_completed) AS p5,
-		  (SELECT APPROX_QUANTILES(completion_pct, 100)[OFFSET(25)] FROM not_completed) AS p25,
-		  (SELECT APPROX_QUANTILES(completion_pct, 100)[OFFSET(50)] FROM not_completed) AS p50,
-		  (SELECT APPROX_QUANTILES(completion_pct, 100)[OFFSET(75)] FROM not_completed) AS p75,
-		  (SELECT APPROX_QUANTILES(completion_pct, 100)[OFFSET(95)] FROM not_completed) AS p95,
-		  ARRAY(SELECT AS STRUCT bucket, n FROM bucketed ORDER BY bucket) AS histogram
-	`, dedupedDayObservationsCTE(serviceDate)))
-	it, err := q.Read(ctx)
-	if err != nil {
-		return 0, nil, err
-	}
-	var row struct {
-		N         bigquery.NullInt64   `bigquery:"n"`
-		P5        bigquery.NullFloat64 `bigquery:"p5"`
-		P25       bigquery.NullFloat64 `bigquery:"p25"`
-		P50       bigquery.NullFloat64 `bigquery:"p50"`
-		P75       bigquery.NullFloat64 `bigquery:"p75"`
-		P95       bigquery.NullFloat64 `bigquery:"p95"`
-		Histogram []struct {
-			Bucket int64 `bigquery:"bucket"`
-			N      int64 `bigquery:"n"`
-		} `bigquery:"histogram"`
-	}
-	if err := it.Next(&row); err != nil {
-		return 0, nil, err
-	}
-	count := int(row.N.Int64)
-	if count == 0 {
-		return 0, nil, nil
-	}
+func computeTripsNotCompleted(progress map[string]int64, plan *scheduledStopPlan) (int, *notCompletedDistribution) {
+	var completionPcts []float64
 	hist := make([]int64, 10)
-	for _, b := range row.Histogram {
-		if b.Bucket >= 0 && b.Bucket < 10 {
-			hist[b.Bucket] = b.N
+	for tripID, lastObservedSequence := range progress {
+		lastBoardingSequence, ok := plan.LastBoardingSequence[tripID]
+		if !ok || lastObservedSequence >= lastBoardingSequence {
+			continue
 		}
+		lastPosition, ok := plan.StopPositions[scheduledStopKey{TripID: tripID, StopSequence: lastObservedSequence}]
+		lastBoardingPosition := plan.LastBoardingPosition[tripID]
+		if !ok || lastBoardingPosition == 0 {
+			continue
+		}
+		completionPct := 100 * float64(lastPosition) / float64(lastBoardingPosition)
+		completionPcts = append(completionPcts, completionPct)
+		bucket := min(int(completionPct/10), 9)
+		hist[bucket]++
 	}
-	return count, &notCompletedDistribution{
-		P5Pct:     round1(row.P5.Float64),
-		P25Pct:    round1(row.P25.Float64),
-		P50Pct:    round1(row.P50.Float64),
-		P75Pct:    round1(row.P75.Float64),
-		P95Pct:    round1(row.P95.Float64),
+	if len(completionPcts) == 0 {
+		return 0, nil
+	}
+	sort.Float64s(completionPcts)
+	return len(completionPcts), &notCompletedDistribution{
+		P5Pct:     round1(percentileSorted(completionPcts, 0.05)),
+		P25Pct:    round1(percentileSorted(completionPcts, 0.25)),
+		P50Pct:    round1(percentileSorted(completionPcts, 0.50)),
+		P75Pct:    round1(percentileSorted(completionPcts, 0.75)),
+		P95Pct:    round1(percentileSorted(completionPcts, 0.95)),
 		Histogram: hist,
-	}, nil
+	}
 }
 
 // dedupedDayObservationsCTE renders a CTE definition named `obs` that
@@ -1093,6 +1128,19 @@ func queryStatsPerRoute(ctx context.Context, serviceDate civil.Date) ([]routeSta
 type stopKey struct {
 	RouteID string
 	StopID  string
+}
+
+type scheduledStopKey struct {
+	TripID       string `bigquery:"trip_id"`
+	StopSequence int64  `bigquery:"stop_sequence"`
+}
+
+type scheduledStopPlan struct {
+	ScoredStops          map[scheduledStopKey]string
+	ScoredByRoute        map[string]int64
+	StopPositions        map[scheduledStopKey]int
+	LastBoardingSequence map[string]int64
+	LastBoardingPosition map[string]int
 }
 
 // loadScheduleByStop reads stop_times.txt + trips.txt and produces a sorted

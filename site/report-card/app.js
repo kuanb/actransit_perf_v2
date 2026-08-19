@@ -66,8 +66,9 @@ async function latestWeekEnd() {
   }
 }
 
-// Aggregate every route across the fetched daily payloads. Each metric is
-// weighted by that day's stop-observation count so busy days count more.
+// Aggregate every route across the fetched daily payloads. Service delivery
+// uses exact delivered/scheduled counts; observed-only metrics are weighted
+// by that day's observation count.
 function aggregateRoutes(dailies) {
   const acc = new Map();
   for (const d of dailies) {
@@ -85,8 +86,8 @@ function aggregateRoutes(dailies) {
           days: 0,
           scheduled_runs: 0,
           scheduled_days: 0,
+          sd_delivered: 0, sd_n: 0,
           // weighted sums + the weight actually present for each metric
-          sd_sum: 0, sd_w: 0,
           ot_sum: 0, ot_w: 0,
           sp_sum: 0, sp_w: 0,
           p95_sum: 0, p95_w: 0,
@@ -99,15 +100,18 @@ function aggregateRoutes(dailies) {
         a.scheduled_runs += scheduled;
         a.scheduled_days += 1;
       }
-      if (w <= 0) continue;
+      const stopN = Number(r.stop_sd_n) || 0;
+      if (stopN > 0) {
+        a.sd_n += stopN;
+        a.sd_delivered += Number(r.stop_sd_delivered_n) || 0;
+      }
       a.color = r.color || a.color;
       a.text_color = r.text_color || a.text_color;
+      if (w <= 0) continue;
       a.obs += w;
       a.trips += Number(r.trips_observed) || 0;
       a.days += 1;
 
-      const sd = r.stop_sd_pct != null ? r.stop_sd_pct : r.service_delivered_pct;
-      if (sd != null) { a.sd_sum += sd * w; a.sd_w += w; }
       if (r.on_time_pct != null) { a.ot_sum += r.on_time_pct * w; a.ot_w += w; }
       if (r.avg_speed_mph != null) { a.sp_sum += r.avg_speed_mph * w; a.sp_w += w; }
       if (r.p95_delay_minutes != null) { a.p95_sum += r.p95_delay_minutes * w; a.p95_w += w; }
@@ -121,7 +125,7 @@ function aggregateRoutes(dailies) {
       ? a.scheduled_runs / a.scheduled_days
       : 0;
     const metrics = {
-      stop_sd_pct: a.sd_w ? a.sd_sum / a.sd_w : null,
+      stop_sd_pct: a.sd_n ? 100 * a.sd_delivered / a.sd_n : null,
       on_time_pct: a.ot_w ? a.ot_sum / a.ot_w : null,
       avg_speed_mph: a.sp_w ? a.sp_sum / a.sp_w : null,
       p95_delay_minutes: a.p95_w ? a.p95_sum / a.p95_w : null,
@@ -134,6 +138,7 @@ function aggregateRoutes(dailies) {
       text_color: a.text_color,
       trips_observed: a.trips,
       observations: a.obs,
+      scheduled_stops_scored: a.sd_n,
       days: a.days,
       scheduled_runs_per_day: scheduledRunsPerDay,
       limited: isLimitedRoute({
@@ -353,6 +358,7 @@ function render(routes, weekEnd) {
             <div><dt>p50 headway distortion</dt><dd>${r.p50_distortion_pct == null ? "—" : fmt(r.p50_distortion_pct) + "%"}</dd></div>
             <div><dt>Unique trips observed</dt><dd>${intFmt(r.trips_observed)}</dd></div>
             <div><dt>Stops measured</dt><dd>${intFmt(r.observations)}</dd></div>
+            <div><dt>Scheduled stops scored</dt><dd>${intFmt(r.scheduled_stops_scored)}</dd></div>
             <div><dt>Service days in window</dt><dd>${intFmt(r.days)}</dd></div>
           </dl>
         </td>

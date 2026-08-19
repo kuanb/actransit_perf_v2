@@ -75,12 +75,18 @@ T3,R2,WKDY,1
 T4,R3,SAT,0
 T5,R4,HOLIDAY,1
 `,
-		"stop_times.txt": `trip_id,arrival_time,departure_time,stop_id,stop_sequence
-T1,08:00:00,08:00:00,S1,1
-T2,09:00:00,09:00:00,S1,1
-T3,10:00:00,10:00:00,S2,1
-T4,11:00:00,11:00:00,S3,1
-T5,12:00:00,12:00:00,S4,1
+		"stop_times.txt": `trip_id,arrival_time,departure_time,stop_id,stop_sequence,pickup_type
+T1,08:00:00,08:00:00,S1,1,0
+T1,08:10:00,08:10:00,S2,2,0
+T1,08:20:00,08:20:00,S3,3,1
+T2,09:00:00,09:00:00,S1,1,0
+T2,09:10:00,09:10:00,S2,2,1
+T2,09:20:00,09:20:00,S3,3,0
+T2,09:30:00,09:30:00,S4,4,0
+T3,10:00:00,10:00:00,S2,1,0
+T3,10:10:00,10:10:00,S3,2,1
+T4,11:00:00,11:00:00,S3,1,0
+T5,12:00:00,12:00:00,S4,1,0
 `,
 		"routes.txt": `route_id,route_color,route_text_color
 R1,A30D11,FFFFFF
@@ -218,6 +224,81 @@ func TestLoadScheduledRuns(t *testing.T) {
 	}
 	if got := byTrip["T1"]; got.RouteID != "R1" || got.DirectionID != "0" || got.Start.Hour() != 15 {
 		t.Fatalf("T1 = %+v, want route R1 direction 0 at 08:00 PT", got)
+	}
+}
+
+func TestLoadScheduledStopPlan(t *testing.T) {
+	zr := openZipReader(t, buildSyntheticGTFSCalendarZip(t))
+	tripRoutes := map[string]string{"T1": "R1", "T2": "R1", "T3": "R2"}
+	plan, err := loadScheduledStopPlan(zr, tripRoutes)
+	if err != nil {
+		t.Fatalf("loadScheduledStopPlan: %v", err)
+	}
+
+	if got := plan.ScoredByRoute["R1"]; got != 2 {
+		t.Fatalf("R1 scored stops = %d, want 2", got)
+	}
+	if got := plan.ScoredByRoute["R2"]; got != 0 {
+		t.Fatalf("R2 scored stops = %d, want 0", got)
+	}
+	for _, key := range []scheduledStopKey{{"T1", 2}, {"T2", 3}} {
+		if _, ok := plan.ScoredStops[key]; !ok {
+			t.Errorf("expected scored stop %+v", key)
+		}
+	}
+	for _, key := range []scheduledStopKey{{"T1", 1}, {"T1", 3}, {"T2", 2}, {"T2", 4}} {
+		if _, ok := plan.ScoredStops[key]; ok {
+			t.Errorf("stop %+v should be excluded", key)
+		}
+	}
+	if got := plan.LastBoardingSequence["T1"]; got != 2 {
+		t.Fatalf("T1 last boarding sequence = %d, want 2", got)
+	}
+	if got := plan.LastBoardingSequence["T2"]; got != 3 {
+		t.Fatalf("T2 last boarding sequence = %d, want 3", got)
+	}
+	if got := plan.LastBoardingSequence["T3"]; got != 1 {
+		t.Fatalf("T3 last boarding sequence = %d, want 1", got)
+	}
+}
+
+func TestComputeRouteStopSD(t *testing.T) {
+	plan := &scheduledStopPlan{
+		ScoredStops: map[scheduledStopKey]string{
+			{"T1", 2}: "R1",
+			{"T2", 3}: "R1",
+			{"T3", 2}: "R2",
+		},
+		ScoredByRoute: map[string]int64{"R1": 2, "R2": 1},
+	}
+	delivered := []scheduledStopKey{{"T1", 2}, {"T1", 3}, {"OTHER", 2}}
+	got := computeRouteStopSD(plan, delivered)
+	if got["R1"].DeliveredN != 1 || got["R1"].TotalN != 2 || got["R1"].Pct != 50 {
+		t.Fatalf("R1 = %+v, want 1/2 (50%%)", got["R1"])
+	}
+	if got["R2"].DeliveredN != 0 || got["R2"].TotalN != 1 || got["R2"].Pct != 0 {
+		t.Fatalf("R2 = %+v, want 0/1 (0%%)", got["R2"])
+	}
+}
+
+func TestComputeTripsNotCompleted(t *testing.T) {
+	plan := &scheduledStopPlan{
+		StopPositions: map[scheduledStopKey]int{
+			{"T1", 1}: 1, {"T1", 2}: 2,
+			{"T2", 1}: 1, {"T2", 2}: 2, {"T2", 3}: 3,
+			{"T3", 1}: 1,
+		},
+		LastBoardingSequence: map[string]int64{"T1": 2, "T2": 3, "T3": 1},
+		LastBoardingPosition: map[string]int{"T1": 2, "T2": 3, "T3": 1},
+	}
+	progress := map[string]int64{"T1": 1, "T2": 2, "T3": 1, "UNSCHEDULED": 7}
+
+	count, dist := computeTripsNotCompleted(progress, plan)
+	if count != 2 {
+		t.Fatalf("count = %d, want 2", count)
+	}
+	if dist == nil || dist.Histogram[5] != 1 || dist.Histogram[6] != 1 {
+		t.Fatalf("distribution = %+v, want one trip each in 50%% and 60%% buckets", dist)
 	}
 }
 

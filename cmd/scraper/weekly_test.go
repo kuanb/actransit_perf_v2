@@ -101,15 +101,16 @@ func TestAggregateRouteDailySDClassifiesLimitedRoutes(t *testing.T) {
 	dailies := make([]*dailyStats, 7)
 	for i := 0; i < 5; i++ {
 		gapWindows := i
+		stopSD := 75.0
 		dailies[i] = &dailyStats{Routes: []routeStats{
-			{RouteID: "99", ScheduledTrips: 8, TwoBusGapWindows: &gapWindows},
+			{RouteID: "99", ScheduledTrips: 8, StopSDPct: &stopSD, StopSDN: 20, StopSDDeliveredN: 15, TwoBusGapWindows: &gapWindows},
 			{RouteID: "1T", ScheduledTrips: 9},
 			{RouteID: "O", ScheduledTrips: 4},
 			{RouteID: "6", ScheduledTrips: 20},
 		}}
 	}
 
-	routes := aggregateRouteDailySD(dailies, weekStart, nil, nil)
+	routes := aggregateRouteDailySD(dailies, weekStart, nil)
 	byID := make(map[string]routeDailySD, len(routes))
 	for _, route := range routes {
 		byID[route.RouteID] = route
@@ -135,7 +136,37 @@ func TestAggregateRouteDailySDClassifiesLimitedRoutes(t *testing.T) {
 	if got := byID["99"].TwoBusGapWindows; got == nil || *got != 10 {
 		t.Errorf("route 99 two-bus gap windows = %v, want 10", got)
 	}
+	if got := byID["99"].WeekStopN; got != 100 {
+		t.Errorf("route 99 week stop n = %d, want 100", got)
+	}
+	if got := byID["99"].ByDay[0].StopDeliveredN; got != 15 {
+		t.Errorf("route 99 Sunday delivered stops = %d, want 15", got)
+	}
 	if got := byID["1T"].TwoBusGapWindows; got != nil {
 		t.Errorf("route 1T should omit incomplete two-bus gap data, got %d", *got)
+	}
+}
+
+func TestAggregateScheduleCompliance(t *testing.T) {
+	dailies := []*dailyStats{
+		{ScheduleCompliance: scheduleCompliance{
+			ScheduledTrips: 100, RanTrips: 80, DroppedTrips: 20, TripsNotCompleted: 5,
+			StopSDN: 1000, StopSDDeliveredN: 700,
+		}},
+		{ScheduleCompliance: scheduleCompliance{
+			ScheduledTrips: 50, RanTrips: 40, DroppedTrips: 10, TripsNotCompleted: 2,
+			StopSDN: 400, StopSDDeliveredN: 320,
+		}},
+	}
+
+	got := aggregateScheduleCompliance(dailies)
+	if got.ScheduledTrips != 150 || got.RanTrips != 120 || got.DroppedTrips != 30 || got.TripsNotCompleted != 7 {
+		t.Fatalf("trip totals = %+v", got)
+	}
+	if got.TripDeliveryPct != 80 {
+		t.Fatalf("trip delivery = %v, want 80", got.TripDeliveryPct)
+	}
+	if got.StopSDN != 1400 || got.StopSDPct != 72.9 {
+		t.Fatalf("stop delivery = %v over %d, want 72.9 over 1400", got.StopSDPct, got.StopSDN)
 	}
 }

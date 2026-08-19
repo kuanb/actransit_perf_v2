@@ -41,14 +41,14 @@
 
   <section>
     <h2>Schedule compliance</h2>
-    <p class="muted defn"><strong>Service delivered</strong> = percent of scheduled stop-arrivals that occurred within the rider-experience window: no more than <strong>1 minute early</strong> and no more than <strong>7 minutes late</strong> (<code>−60 s ≤ delay ≤ 420 s</code>). Stops outside that window — whether the bus never came, ran too early, or ran too late — count against the score. This is intentionally stricter than an operator's internal on-time definition: a bus that runs 10 minutes late delivered its trip but did not deliver the service a rider waiting at the stop needed. Colour scale: green ≥ 95%, orange at 90%, red at 80–75%, darkest red ≤ 65%.</p>
+    <p class="muted defn"><strong>Service delivered</strong> = percent of scheduled passenger stop-arrivals that occurred within the rider-experience window: no more than <strong>1 minute early</strong> and no more than <strong>7 minutes late</strong> (<code>−60 s ≤ delay ≤ 420 s</code>). Route origins, final terminals, and stops where GTFS prohibits pickup are excluded because this tracker cannot measure an arrival there for a waiting rider. Every other scheduled stop counts, including stops on trips that were never observed. Colour scale: green ≥ 95%, orange at 90%, red at 80–75%, darkest red ≤ 65%.</p>
     <p class="muted defn"><strong>Observed running</strong> = trips with at least one recorded stop arrival (regardless of delay). <strong>Dropped trips</strong> = scheduled trips with no observed arrivals at all.</p>
-    <p class="muted defn"><strong>Trips not completed</strong> = trips that ran but never reached their final scheduled stop (bus broke down, was reassigned mid-trip, or GPS dropped out before the end of the route).</p>
+    <p class="muted defn"><strong>Trips truncated</strong> = trips that ran but were not observed reaching their last passenger-boarding stop before the final terminal. The unreliable final-terminal ping is not used.</p>
     <div id="schedule-cards" class="cards"></div>
 
     <div id="not-completed-section" hidden>
-      <h3 class="sub-h">How far did "not completed" trips get?</h3>
-      <p class="muted defn">For each trip counted as "not completed," what fraction of its scheduled stops were observed (<code>last_observed_stop_seq / final_stop_seq</code>). A heavy tail near 90–100% means buses are bailing on the very last stop or two; a flatter shape means GPS is dropping mid-route.</p>
+      <h3 class="sub-h">How far did truncated trips get?</h3>
+      <p class="muted defn">For each truncated trip, what fraction of the route to its last boarding stop was observed. A heavy tail near 90–100% means tracking ended near the route terminus; a flatter shape means the trip stopped being observed earlier.</p>
       <p class="muted defn" id="not-completed-summary"></p>
       <canvas id="not-completed-chart" width="900" height="200"></canvas>
     </div>

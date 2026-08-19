@@ -26,6 +26,7 @@ const (
 var dayNames = [7]string{"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"}
 
 type weeklyStats struct {
+	MethodologyVersion         int                      `json:"methodology_version"`
 	WeekStart                  string                   `json:"week_start"`
 	WeekEnd                    string                   `json:"week_end"`
 	GeneratedAt                time.Time                `json:"generated_at"`
@@ -39,16 +40,16 @@ type weeklyStats struct {
 }
 
 // weeklyScheduleCompliance is the week-aggregated counterpart to
-// scheduleCompliance. It sums scheduled / ran / dropped / not-completed
-// across the 7 daily files and recomputes the service-delivered ratio
-// against the week's totals (not the average of per-day ratios — those
-// are size-weighted differently).
+// scheduleCompliance. Trip delivery and stop delivery are recomputed from
+// their week-level numerators and denominators.
 type weeklyScheduleCompliance struct {
-	ScheduledTrips      int     `json:"scheduled_trips"`
-	RanTrips            int     `json:"ran_trips"`
-	DroppedTrips        int     `json:"dropped_trips"`
-	TripsNotCompleted   int     `json:"trips_not_completed"`
-	ServiceDeliveredPct float64 `json:"service_delivered_pct"`
+	ScheduledTrips    int     `json:"scheduled_trips"`
+	RanTrips          int     `json:"ran_trips"`
+	DroppedTrips      int     `json:"dropped_trips"`
+	TripsNotCompleted int     `json:"trips_not_completed"`
+	TripDeliveryPct   float64 `json:"trip_delivery_pct"`
+	StopSDPct         float64 `json:"stop_sd_pct"`
+	StopSDN           int64   `json:"stop_sd_n"`
 }
 
 type dailyServiceDelivered struct {
@@ -83,12 +84,13 @@ type routeDailySD struct {
 }
 
 type routeDailySDByDay struct {
-	Day         string   `json:"day"`
-	ServiceDate string   `json:"service_date"`
-	Pct         *float64 `json:"pct"`
-	StopSDPct   *float64 `json:"stop_sd_pct"`
-	StopN       int64    `json:"stop_n"`
-	Scheduled   int      `json:"scheduled"`
+	Day            string   `json:"day"`
+	ServiceDate    string   `json:"service_date"`
+	Pct            *float64 `json:"pct"`
+	StopSDPct      *float64 `json:"stop_sd_pct"`
+	StopN          int64    `json:"stop_n"`
+	StopDeliveredN int64    `json:"stop_delivered_n"`
+	Scheduled      int      `json:"scheduled"`
 }
 
 type routeStopSDPoint struct {
@@ -109,9 +111,10 @@ func processWeeklyStats(ctx context.Context, weekEndSat civil.Date) (*weeklyStat
 	weekStart := weekEndSat.AddDays(-6)
 
 	out := &weeklyStats{
-		WeekStart:   weekStart.String(),
-		WeekEnd:     weekEndSat.String(),
-		GeneratedAt: time.Now().UTC(),
+		MethodologyVersion: 2,
+		WeekStart:          weekStart.String(),
+		WeekEnd:            weekEndSat.String(),
+		GeneratedAt:        time.Now().UTC(),
 	}
 
 	dailies, err := readDailyStatsForWeek(ctx, weekStart)
@@ -156,11 +159,7 @@ func processWeeklyStats(ctx context.Context, weekEndSat civil.Date) (*weeklyStat
 	if err != nil {
 		return nil, fmt.Errorf("query route overall: %w", err)
 	}
-	routeStopSD, err := queryWeeklyRouteStopSD(ctx, weekStart, weekEndSat)
-	if err != nil {
-		return nil, fmt.Errorf("query route stop sd: %w", err)
-	}
-	out.RouteDailyServiceDelivered = aggregateRouteDailySD(dailies, weekStart, routeOverall, routeStopSD)
+	out.RouteDailyServiceDelivered = aggregateRouteDailySD(dailies, weekStart, routeOverall)
 
 	payload, err := json.MarshalIndent(out, "", "  ")
 	if err != nil {
@@ -273,65 +272,18 @@ func aggregateDailyServiceDelivered(dailies []*dailyStats, weekStart civil.Date)
 // matrix [route_id][day_idx] of SD%, attaches each route's overall p50
 // delay (in seconds, from BQ) for sorting, and sorts worst→best so the
 // frontend can render the grid top-down without re-sorting.
-// queryWeeklyRouteStopSD computes stop-level service delivery for each
-// (route_id, service_date) in the week. A stop is counted as "delivered"
-// when the bus arrived no earlier than 1 minute before schedule and no
-// later than 7 minutes after (delay_seconds BETWEEN -60 AND 420). The
-// denominator is all deduped rows in trip_observations for that route/day,
-// including stops where actual_arrival is NULL (bus never reached that stop).
-// Returns map[route_id][service_date_string]routeStopSDPoint.
-func queryWeeklyRouteStopSD(ctx context.Context, weekStart, weekEnd civil.Date) (map[string]map[string]routeStopSDPoint, error) {
-	q := bqClient.Query(fmt.Sprintf(`
-		WITH %s
-		SELECT
-		  route_id,
-		  FORMAT_DATE('%%Y-%%m-%%d', service_date) AS service_date_str,
-		  COUNT(*) AS total_n,
-		  COUNTIF(actual_arrival IS NOT NULL AND delay_seconds BETWEEN -60 AND 420) AS delivered_n
-		FROM obs
-		GROUP BY route_id, service_date
-		ORDER BY route_id, service_date
-	`, dedupedRangeObservationsCTE(weekStart, weekEnd)))
-	it, err := q.Read(ctx)
-	if err != nil {
-		return nil, err
-	}
-	out := make(map[string]map[string]routeStopSDPoint)
-	for {
-		var row struct {
-			RouteID        string `bigquery:"route_id"`
-			ServiceDateStr string `bigquery:"service_date_str"`
-			TotalN         int64  `bigquery:"total_n"`
-			DeliveredN     int64  `bigquery:"delivered_n"`
-		}
-		err := it.Next(&row)
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-		if _, ok := out[row.RouteID]; !ok {
-			out[row.RouteID] = make(map[string]routeStopSDPoint)
-		}
-		pct := 0.0
-		if row.TotalN > 0 {
-			pct = round1(100.0 * float64(row.DeliveredN) / float64(row.TotalN))
-		}
-		out[row.RouteID][row.ServiceDateStr] = routeStopSDPoint{TotalN: row.TotalN, DeliveredN: row.DeliveredN, Pct: pct}
-	}
-	return out, nil
-}
-
-func aggregateRouteDailySD(dailies []*dailyStats, weekStart civil.Date, routeOverallSec map[string]float64, stopSD map[string]map[string]routeStopSDPoint) []routeDailySD {
+func aggregateRouteDailySD(dailies []*dailyStats, weekStart civil.Date, routeOverallSec map[string]float64) []routeDailySD {
 	type accum struct {
-		rid        string
-		color      string
-		textColor  string
-		byDay      [7]*float64
-		scheduled  [7]int
-		gapWindows int
-		gapDays    int
+		rid            string
+		color          string
+		textColor      string
+		byDay          [7]*float64
+		stopSDByDay    [7]*float64
+		stopNByDay     [7]int64
+		deliveredByDay [7]int64
+		scheduled      [7]int
+		gapWindows     int
+		gapDays        int
 	}
 	byRoute := make(map[string]*accum)
 
@@ -352,10 +304,16 @@ func aggregateRouteDailySD(dailies []*dailyStats, weekStart civil.Date, routeOve
 			if a.textColor == "" && r.TextColor != "" {
 				a.textColor = r.TextColor
 			}
-			if r.ServiceDeliveredPct != nil {
-				v := *r.ServiceDeliveredPct
+			if r.TripDeliveryPct != nil {
+				v := *r.TripDeliveryPct
 				a.byDay[i] = &v
 			}
+			if r.StopSDPct != nil {
+				v := *r.StopSDPct
+				a.stopSDByDay[i] = &v
+			}
+			a.stopNByDay[i] = r.StopSDN
+			a.deliveredByDay[i] = r.StopSDDeliveredN
 			a.scheduled[i] = r.ScheduledTrips
 			if r.TwoBusGapWindows != nil {
 				a.gapWindows += *r.TwoBusGapWindows
@@ -401,23 +359,19 @@ func aggregateRouteDailySD(dailies []*dailyStats, weekStart civil.Date, routeOve
 		for i := 0; i < 7; i++ {
 			sd := weekStart.AddDays(i).String()
 			cell := routeDailySDByDay{
-				Day:         dayNames[i],
-				ServiceDate: sd,
-				Pct:         it.a.byDay[i],
-				Scheduled:   it.a.scheduled[i],
+				Day:            dayNames[i],
+				ServiceDate:    sd,
+				Pct:            it.a.byDay[i],
+				StopSDPct:      it.a.stopSDByDay[i],
+				StopN:          it.a.stopNByDay[i],
+				StopDeliveredN: it.a.deliveredByDay[i],
+				Scheduled:      it.a.scheduled[i],
 			}
 			if cell.Scheduled > 0 {
 				scheduledRuns += cell.Scheduled
 				scheduledDays++
 			}
-			if routeMap, ok := stopSD[it.a.rid]; ok {
-				if pt, ok := routeMap[sd]; ok {
-					pct := pt.Pct
-					cell.StopSDPct = &pct
-					cell.StopN = pt.TotalN
-					weekStopN += pt.TotalN
-				}
-			}
+			weekStopN += cell.StopN
 			byDay[i] = cell
 		}
 		var p50Min *float64
@@ -665,11 +619,11 @@ func queryWeeklyMinuteHistogram(ctx context.Context, weekStart, weekEnd civil.Da
 }
 
 // aggregateScheduleCompliance sums the schedule-compliance counters from
-// the 7 daily files and recomputes service_delivered_pct against the
-// week totals. Per-day ratios shouldn't be averaged because each day
-// has a different denominator (Sat/Sun service is much smaller).
+// the 7 daily files and recomputes both delivery percentages from week-level
+// counts. Per-day ratios shouldn't be averaged because denominators differ.
 func aggregateScheduleCompliance(dailies []*dailyStats) weeklyScheduleCompliance {
 	var sc weeklyScheduleCompliance
+	var stopDeliveredN int64
 	for _, ds := range dailies {
 		if ds == nil {
 			continue
@@ -678,9 +632,14 @@ func aggregateScheduleCompliance(dailies []*dailyStats) weeklyScheduleCompliance
 		sc.RanTrips += ds.ScheduleCompliance.RanTrips
 		sc.DroppedTrips += ds.ScheduleCompliance.DroppedTrips
 		sc.TripsNotCompleted += ds.ScheduleCompliance.TripsNotCompleted
+		sc.StopSDN += ds.ScheduleCompliance.StopSDN
+		stopDeliveredN += ds.ScheduleCompliance.StopSDDeliveredN
 	}
 	if sc.ScheduledTrips > 0 {
-		sc.ServiceDeliveredPct = round1(100 * float64(sc.RanTrips) / float64(sc.ScheduledTrips))
+		sc.TripDeliveryPct = round1(100 * float64(sc.RanTrips) / float64(sc.ScheduledTrips))
+	}
+	if sc.StopSDN > 0 {
+		sc.StopSDPct = round1(100 * float64(stopDeliveredN) / float64(sc.StopSDN))
 	}
 	return sc
 }

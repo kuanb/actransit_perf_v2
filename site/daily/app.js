@@ -131,8 +131,7 @@ function priorSameDowDates(serviceDate, indexDates, weeksBack = 2) {
   return out;
 }
 
-// Trips not completed (as % of running trips): 0% = green, 25%+ = dark red.
-// Higher means more buses didn't finish their route. Daily-only.
+// Truncated trips (as % of running trips): 0% = green, 25%+ = dark red.
 function gradeNotCompleted(pct) {
   return gradeColor(1 - pct / 25);
 }
@@ -373,9 +372,8 @@ function render(data, indexDates = [], weeklyWeeks = []) {
     : 0;
   const droppedPct = 100 - tripSDPct;
 
-  // Trips that ran but never reached their final scheduled stop, as a
-  // percent of trips that ran. Counts buses that broke down mid-route,
-  // were reassigned mid-trip, or lost GPS before completion.
+  // Trips that ran but were not observed at their last passenger-boarding
+  // stop before the final terminal, as a percent of trips that ran.
   const notCompleted = sc.trips_not_completed || 0;
   const notCompletedPct = sc.ran_trips ? (100 * notCompleted) / sc.ran_trips : 0;
 
@@ -389,7 +387,7 @@ function render(data, indexDates = [], weeklyWeeks = []) {
     { label: "Observed running",       val: intFmt(sc.ran_trips) },
     stopSDCard,
     { label: "Dropped / not observed", val: `${intFmt(sc.dropped_trips)} (${fmt(droppedPct)}%)` },
-    { label: "Trips not completed",    val: `${intFmt(notCompleted)} (${fmt(notCompletedPct)}%)`,
+    { label: "Trips truncated",        val: `${intFmt(notCompleted)} (${fmt(notCompletedPct)}%)`,
       grade: gradeNotCompleted(notCompletedPct) },
   ]);
 
@@ -399,7 +397,7 @@ function render(data, indexDates = [], weeklyWeeks = []) {
   if (ncDist && ncDist.histogram && ncDist.histogram.some((n) => n > 0)) {
     ncSection.hidden = false;
     document.getElementById("not-completed-summary").innerHTML =
-      `Across ${intFmt(notCompleted)} not-completed trips: ` +
+      `Across ${intFmt(notCompleted)} truncated trips: ` +
       `p5 <strong>${fmt(ncDist.p5_pct)}%</strong> · ` +
       `p25 <strong>${fmt(ncDist.p25_pct)}%</strong> · ` +
       `p50 <strong>${fmt(ncDist.p50_pct)}%</strong> · ` +
@@ -549,12 +547,11 @@ function render(data, indexDates = [], weeklyWeeks = []) {
     tbody.innerHTML = rows
       .map((r) => {
         const sd = r.stop_sd_pct !== null && r.stop_sd_pct !== undefined
-          ? r.stop_sd_pct : r.service_delivered_pct;
-        const sdGrade = r.stop_sd_pct !== null && r.stop_sd_pct !== undefined
-          ? gradeStopSD : gradeServiceDelivered;
+          ? r.stop_sd_pct : null;
+        const sdGrade = gradeStopSD;
         const sdTitle = r.stop_sd_pct !== null && r.stop_sd_pct !== undefined
           ? `${fmt(r.stop_sd_pct)}% of scheduled stops delivered on time (−1 to +7 min)`
-          : `ran ${intFmt(r.ran_trips)} of ${intFmt(r.scheduled_trips)} scheduled`;
+          : "no eligible scheduled stops";
         const isOpen = expanded.has(r.route_id);
         const detailHidden = isOpen ? "" : "hidden";
         const weekHref = `../route/?week_end=${encodeURIComponent(weekEnd)}&route_id=${encodeURIComponent(r.route_id)}`;
@@ -573,7 +570,7 @@ function render(data, indexDates = [], weeklyWeeks = []) {
           <dl class="route-detail-list">
             <div><dt>Trips observed</dt><dd>${intFmt(r.trips_observed)}${r.scheduled_trips ? ` (of ${intFmt(r.scheduled_trips)} scheduled)` : ""}</dd></div>
             <div><dt>Stop arrivals</dt><dd>${intFmt(r.observations)}</dd></div>
-            <div><dt>Service delivered (stops, −1 to +7 min)</dt><dd>${r.stop_sd_pct !== null && r.stop_sd_pct !== undefined ? `${fmt(r.stop_sd_pct)}%` : "—"}</dd></div>
+            <div><dt>Service delivered (stops, −1 to +7 min)</dt><dd>${r.stop_sd_pct !== null && r.stop_sd_pct !== undefined ? `${fmt(r.stop_sd_pct)}% of ${intFmt(r.stop_sd_n)} scheduled` : "—"}</dd></div>
             <div><dt>On time (≤3 min)</dt><dd>${fmt(r.on_time_pct)}%</dd></div>
             <div><dt>Within 5 min</dt><dd>${fmt(r.within_5min_pct)}%</dd></div>
             <div><dt>Within 7 min</dt><dd>${fmt(r.within_7min_pct)}%</dd></div>

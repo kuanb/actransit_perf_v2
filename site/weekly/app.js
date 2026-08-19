@@ -141,7 +141,8 @@ function renderSystemSummary(data) {
 // ---- schedule compliance cards ----
 function renderScheduleCompliance(data) {
   const sc = data.schedule_compliance_total || {};
-  const sdPct = sc.service_delivered_pct || 0;
+  const tripDeliveryPct = sc.trip_delivery_pct || 0;
+  const stopSDPct = sc.stop_sd_pct || 0;
   const droppedPct = sc.scheduled_trips
     ? 100 * (sc.dropped_trips / sc.scheduled_trips)
     : 0;
@@ -154,10 +155,12 @@ function renderScheduleCompliance(data) {
   renderCards("#schedule-cards", [
     { label: "Scheduled trips",        val: intFmt(sc.scheduled_trips) },
     { label: "Observed running",       val: intFmt(sc.ran_trips) },
-    { label: "Service delivered",      val: `${fmt(sdPct)}%`,
-      grade: gradeServiceDelivered(sdPct) },
+    { label: "Trip delivery",          val: `${fmt(tripDeliveryPct)}%`,
+      grade: gradeServiceDelivered(tripDeliveryPct) },
+    { label: "Stop service delivered", val: `${fmt(stopSDPct)}%`,
+      grade: gradeStopSD(stopSDPct) },
     { label: "Dropped / not observed", val: `${intFmt(sc.dropped_trips)} (${fmt(droppedPct)}%)` },
-    { label: "Trips not completed",    val: `${intFmt(sc.trips_not_completed)} (${fmt(notCompletedPct)}%)`,
+    { label: "Trips truncated",        val: `${intFmt(sc.trips_not_completed)} (${fmt(notCompletedPct)}%)`,
       grade: gradeNC(notCompletedPct) },
   ]);
 }
@@ -173,7 +176,7 @@ function renderDailySD(data) {
     type: "bar",
     data: {
       labels,
-      datasets: [{ label: "Service delivered", data: values, backgroundColor: colors, borderWidth: 0 }],
+      datasets: [{ label: "Trip delivery", data: values, backgroundColor: colors, borderWidth: 0 }],
     },
     options: {
       onClick: (_e, els) => {
@@ -201,7 +204,7 @@ function renderDailySD(data) {
           beginAtZero: false,
           min: 80,
           max: 100,
-          title: { display: true, text: "% service delivered" },
+          title: { display: true, text: "% trips observed running" },
           ticks: { callback: (v) => `${v}%` },
         },
       },
@@ -431,7 +434,7 @@ function renderRouteDayGrid(data) {
   const days = data.daily_service_delivered;
   const weekEndParam = data.week_end || "";
 
-  // Sort by week_stop_n descending (most-observed routes first).
+  // Sort by week_stop_n descending (most scheduled eligible stops first).
   const routes = [...data.route_daily_service_delivered].sort(
     (a, b) => (b.week_stop_n || 0) - (a.week_stop_n || 0)
   );

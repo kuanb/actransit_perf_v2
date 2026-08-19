@@ -935,7 +935,7 @@ function weekStopSD(byDay) {
   let totalN = 0;
   for (const d of byDay || []) {
     if (d.stop_sd_pct === null || d.stop_sd_pct === undefined || !d.stop_n) continue;
-    deliveredN += (d.stop_sd_pct / 100) * d.stop_n;
+    deliveredN += Number(d.stop_delivered_n) || 0;
     totalN += d.stop_n;
   }
   return totalN > 0 ? { pct: (100 * deliveredN) / totalN, n: totalN } : null;

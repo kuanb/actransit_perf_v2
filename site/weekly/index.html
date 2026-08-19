@@ -39,12 +39,12 @@
 
   <section>
     <h2>Schedule compliance</h2>
-    <p class="muted defn">Sum of trips across all 7 days. <strong>Service delivered</strong> is recomputed against the week totals (not an average of per-day rates) so days with more scheduled trips weigh more.</p>
+    <p class="muted defn">Sum of trips and eligible passenger stops across all 7 days. <strong>Trip delivery</strong> measures trips observed running; <strong>stop service delivered</strong> measures scheduled intermediate pickup stops reached within the −1 to +7 minute rider window. Both are recomputed from week totals rather than averaging daily percentages.</p>
     <div id="schedule-cards" class="cards"></div>
   </section>
 
   <section>
-    <h2>Service delivered by day</h2>
+    <h2>Trip delivery by day</h2>
     <p class="muted defn">Trips observed running ÷ trips scheduled, per day. Click a bar to drill into that day.</p>
     <canvas id="daily-sd-chart" width="900" height="240"></canvas>
   </section>
@@ -80,9 +80,9 @@
 
   <section>
     <h2>Service delivered by route × day</h2>
-    <p class="muted defn">Routes sorted by total stop observations in the week (busiest first). Each label shows the week's median delay and observation count <em>n</em>. Each cell is the per-day stop-level SD%. Click a cell to drill into that day's view.</p>
+    <p class="muted defn">Routes sorted by scheduled eligible stops in the week (busiest first). Each label shows the week's median delay and scored-stop count <em>n</em>. Each cell is the per-day stop-level SD%. Click a cell to drill into that day's view.</p>
     <p class="muted defn">Limited routes average fewer than 10 scheduled runs per active service day. Lettered Transbay routes are always included.</p>
-    <p class="muted defn"><strong>How stop-level SD% is computed:</strong> for each (route, day) cell, every scheduled stop from finalized trips in our tracker is evaluated. A stop counts as <strong>delivered</strong> only if the bus arrived between <strong>1 minute early</strong> and <strong>7 minutes late</strong> of its scheduled time (<code>−60 s ≤ delay ≤ 420 s</code>). Arrivals earlier than −1 min or later than +7 min are counted as <strong>not delivered</strong>. SD% = delivered stops ÷ total scheduled stops × 100. The denominator includes stops where the bus never arrived (null actual arrival), so a trip that ran but cut short drags the route's number down. Colour scale: green ≥ 95%, orange at 90%, red at 80–75%, darkest red ≤ 65%.</p>
+    <p class="muted defn"><strong>How stop-level SD% is computed:</strong> every scheduled intermediate passenger-pickup stop is evaluated, including stops on wholly unobserved trips. Route origins, final terminals, and stops where GTFS prohibits pickup are excluded. A stop is <strong>delivered</strong> only when the bus arrived between <strong>1 minute early</strong> and <strong>7 minutes late</strong> (<code>−60 s ≤ delay ≤ 420 s</code>). Colour scale: green ≥ 95%, orange at 90%, red at 80–75%, darkest red ≤ 65%.</p>
     <div class="route-select-controls" id="rdgrid-controls">
       <input type="text" id="rdgrid-search" placeholder="Filter by route id (e.g. 18, 6, NL)…">
       <button id="rdgrid-search-clear" type="button">Clear</button>
