@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A rider-centered analysis of AC Transit trip delivery, stop arrivals, punctuality, trip completion, and waits through summer 2026.">
+  <title>A Bus That Runs Is Not Always a Bus You Can Rely On</title>
+  <link rel="stylesheet" href="report.css">
+</head>
+<body>
+  <div class="topline"></div>
+  <div class="shell"><a class="back" href="../">← All presentations</a></div>
+
+  <header class="hero">
+    <div class="shell">
+      <p class="eyebrow">Independent analysis · August 19, 2026</p>
+      <h1>A Bus That Runs Is Not Always a Bus You Can Rely On.</h1>
+      <p class="dek">AC Transit delivered most scheduled trips through summer 2026. But reliability looks different from the rider’s stop—and the first complete days after the fall schedule shift show why that distinction matters.</p>
+      <p class="byline">Prepared by Kuan Butts · Public GTFS schedule and real-time data · Data through August 18, 2026</p>
+      <div class="metric-grid" aria-label="Analysis scale">
+        <div class="metric"><strong>123</strong><span>consecutive archived service days audited</span></div>
+        <div class="metric"><strong>18.27M</strong><span>deduplicated scheduled stop rows in the study windows</span></div>
+        <div class="metric"><strong>433,746</strong><span>scheduled trips evaluated against observed service</span></div>
+        <div class="metric"><strong>2</strong><span>partial schedule-shift dates excluded from comparisons</span></div>
+      </div>
+      <div class="shift-note">
+        <p class="eyebrow">Schedule-shift dates are data gaps</p>
+        <p>A <strong>schedule-shift date</strong> is the first service date covered by a new GTFS version. On June 14 and August 9, the prior feed had expired the day before, while this tracker did not archive the newly effective feed until 10:00 p.m. PT. Each date therefore contains only the final hours of tracked service and produces an artificial trip-delivery result—7.1% on June 14 and 6.2% on August 9. Both dates are excluded. <strong>Post-shift</strong> in this report means the nine complete days after the fall change, August 10–18.</p>
+      </div>
+      <div class="gtfs-timeline" aria-label="GTFS version coverage timeline">
+        <article>
+          <time datetime="2026-04-24T19:33:45-07:00">Apr 24 · 7:33 p.m. PT</time>
+          <div><strong>S1000251 archived</strong><span>Feed coverage: Apr 5–Jun 13</span><p>Baseline schedule. Two later April captures were byte-for-byte identical.</p></div>
+        </article>
+        <article class="shift">
+          <time datetime="2026-06-14T22:00:02-07:00">Jun 14 · 10:00 p.m. PT</time>
+          <div><strong>S1000252 archived</strong><span>Feed coverage: Jun 14–Aug 8</span><p>Summer schedule and route files arrived after nearly all of the first covered day had passed.</p></div>
+        </article>
+        <article>
+          <time datetime="2026-07-01T22:00:03-07:00">Jul 1 · 10:00 p.m. PT</time>
+          <div><strong>S1000252 refreshed</strong><span>Service coverage unchanged</span><p>Only fare tables changed; schedule, route, trip, and stop files were unchanged.</p></div>
+        </article>
+        <article class="shift">
+          <time datetime="2026-08-09T22:00:03-07:00">Aug 9 · 10:00 p.m. PT</time>
+          <div><strong>S1000256 archived</strong><span>Feed coverage: Aug 9–Apr 3, 2027</span><p>Fall schedule and school service returned after nearly all of the first covered day had passed.</p></div>
+        </article>
+      </div>
+      <p class="timeline-note">Archive timestamps show when this tracker picked up each feed; they do not establish when AC Transit first published it.</p>
+    </div>
+  </header>
+
+  <nav class="jump" aria-label="Report sections">
+    <div class="shell">
+      <a href="#distinction">The distinction</a>
+      <a href="#summer">Summer</a>
+      <a href="#post-shift">Post-shift</a>
+      <a href="#school">School service</a>
+      <a href="#routes">Routes</a>
+      <a href="#accountability">Accountability</a>
+      <a href="#methods">Methods</a>
+    </div>
+  </nav>
+
+  <main>
+    <section class="section" id="distinction">
+      <div class="shell">
+        <p class="eyebrow">The rider experience</p>
+        <h2>A bus can run and still fail the rider</h2>
+        <p class="section-lede">Across the study, AC Transit delivered 90.2% of 433,746 scheduled trips. But only 73.4% of scheduled stop rows on observed trips produced an arrival from one minute early through seven minutes late. Reliability depends on both.</p>
+        <blockquote class="quote">A trip can appear to have run in the data and still be unusable from a rider’s perspective. After repeated frequency cuts over the past decade, every missed or no-show bus carries a larger penalty: riders must plan work, medical appointments, and other commitments around scheduled arrivals, and one failure can unravel the whole trip.</blockquote>
+
+        <h3>What the data supports</h3>
+        <p class="narrow">The strongest conclusion is not that summer caused a systemwide reliability decline. Local and Transbay performance was broadly stable through the summer schedule. The preliminary post-shift period is the period that deserves attention.</p>
+        <div class="findings">
+          <article class="finding">
+            <span class="number">Finding 01</span>
+            <h3>Summer was mostly steady</h3>
+            <p>Local stop delivery was 73.9% both before and during summer. Transbay improved from 65.0% to 66.3%, while strict on-time performance rose slightly in both groups.</p>
+          </article>
+          <article class="finding">
+            <span class="number">Finding 02</span>
+            <h3>Post-shift service softened at stops</h3>
+            <p>Across the system, stop delivery fell from 73.6% in the baseline to 71.5% after the fall schedule shift. Transbay fell 4.4 points and All Nighter fell 4.7 points, even though a larger share of their scheduled trips ran.</p>
+          </article>
+          <article class="finding">
+            <span class="number">Finding 03</span>
+            <h3>School trips returned, but late</h3>
+            <p>School-route trip delivery returned near baseline: 93.0% versus 94.3%. Stop delivery improved, but strict on-time arrivals slipped to 34.0% and arrivals over seven minutes late rose to 14.4%.</p>
+          </article>
+        </div>
+        <div class="periods" aria-label="Comparison windows">
+          <div class="period"><strong>Pre-summer baseline</strong><span>May 17–June 13 · 28 days</span></div>
+          <div class="period"><strong>Summer schedule</strong><span>June 15–August 8 · 55 complete days</span></div>
+          <div class="period"><strong>Fall post-shift</strong><span>August 10–18 · 9 complete days</span></div>
+        </div>
+
+        <h3>A continuous archive, with two visible holes</h3>
+        <p class="section-lede">The daily archive runs without a missing date from April 18 through August 18, but the feed coverage does not. On June 14, S1000251 had expired and S1000252 was not archived until 10:00 p.m.; the same gap recurred between S1000252 and S1000256 on August 9. Those schedule-shift dates are retained in the audit and excluded from every comparison metric.</p>
+        <figure class="plot">
+          <img src="plots/coverage.png" alt="Line chart of daily deduplicated arrivals from April 18 through August 18, with sharp partial-day drops on June 14 and August 9.">
+          <figcaption>Daily deduplicated arrivals. Weekends normally have lower volume; the two red schedule-shift dates are materially below even the surrounding Sundays.</figcaption>
+        </figure>
+        <div class="statline">
+          <div><strong>31.43M</strong><span>raw BigQuery rows in the 123-day audit</span></div>
+          <div><strong>24.35M</strong><span>unique date × trip × stop records after deduplication</span></div>
+          <div><strong>22.5%</strong><span>duplicate rows removed before any reliability calculation</span></div>
+        </div>
+        <div class="definition">
+          <strong>Why deduplication matters</strong>
+          <p>The live tracker can finalize the same trip more than once. Every query keeps one row per service date, trip, and stop, preferring a row with an actual arrival and then the latest ingestion. Without this step, counts and percentages would be biased toward repeatedly finalized trips.</p>
+        </div>
+
+        <h3>Concern 1: Did the bus run?</h3>
+        <p class="section-lede">Trip delivery compares the GTFS schedule with trips that produced at least one actual stop arrival. Across the full study, 90.2% of 433,746 scheduled trips were observed.</p>
+        <figure class="plot">
+          <img src="plots/trip-delivery.png" alt="Grouped bar chart comparing scheduled trip delivery in baseline, summer, and post-shift periods across five route groups.">
+          <figcaption>School routes 600–699 were officially suspended for summer. Early Bird percentages use only 76 baseline, 152 summer, and 28 post-shift scheduled trips.</figcaption>
+        </figure>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Route family</th><th>Baseline</th><th>Summer</th><th>Post-shift</th><th>Post-shift vs. baseline</th></tr></thead>
+            <tbody>
+              <tr><td class="group-local">Local / other</td><td>90.8%</td><td>90.1%</td><td>89.8%</td><td>−1.0 pt</td></tr>
+              <tr><td class="group-transbay">Transbay</td><td>87.0%</td><td>88.3%</td><td>88.3%</td><td>+1.3 pts</td></tr>
+              <tr><td class="group-night">All Nighter</td><td>86.3%</td><td>92.9%</td><td>92.2%</td><td>+5.9 pts</td></tr>
+              <tr><td class="group-school">School 600–699</td><td>94.3%</td><td>Suspended</td><td>93.0%</td><td>−1.3 pts</td></tr>
+              <tr><td class="group-early">Early Bird 7xx</td><td>75.0%</td><td>93.4%</td><td>96.4%</td><td>+21.4 pts</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="narrow">This is the most generous reliability test: a trip counts as having run after one observed arrival. It is necessary, but not sufficient, for rider reliability. A bus can register as running and still miss stops, arrive outside a useful window, or end early.</p>
+
+        <h3>Concern 2: Did it serve the stop usefully?</h3>
+        <p class="section-lede">A stop is counted as delivered when an actual arrival is observed from one minute early through seven minutes late. The denominator includes every scheduled stop on observed trips, including stops the bus never reached.</p>
+        <figure class="plot">
+          <img src="plots/stop-delivery.png" alt="Grouped bar chart showing stop-level delivery by route family and period.">
+          <figcaption>Stop-level delivery is deliberately stricter than trip delivery. It combines missed downstream stops with arrivals outside the rider-useful window.</figcaption>
+        </figure>
+        <p class="narrow">The divergence between trips and stops is the most important result. All Nighter trip delivery improved by 5.9 points after the fall shift, but stop delivery declined by 4.7 points. Transbay shows the same direction: more scheduled trips were observed, yet fewer scheduled stops were reached within the useful window.</p>
+      </div>
+    </section>
+
+    <section class="section" id="summer">
+      <div class="shell">
+        <p class="eyebrow">Summer performance</p>
+        <h2>Summer was broadly stable</h2>
+        <p class="section-lede">The eight-week summer window does not support a blanket claim that service became less reliable. Local stop delivery held at 73.9%, while Transbay rose from 65.0% to 66.3%. Strict on-time performance also rose slightly in both groups.</p>
+        <figure class="plot">
+          <img src="plots/weekly-trend.png" alt="Weekly line chart of stop delivery for Local, Transbay, and All Nighter service, with the summer and fall schedule shifts marked.">
+          <figcaption>Weekly trend from May 17. The partial schedule-shift Sundays are excluded; the weeks containing them therefore have six complete days.</figcaption>
+        </figure>
+        <div class="statline">
+          <div><strong>73.9% → 73.9%</strong><span>Local stop delivery, baseline to summer</span></div>
+          <div><strong>65.0% → 66.3%</strong><span>Transbay stop delivery, baseline to summer</span></div>
+          <div><strong>60.6%</strong><span>Transbay stop delivery in the preliminary post-shift period</span></div>
+        </div>
+        <p class="narrow">Stability is not the same as strong performance. The result says that summer did not produce a broad deterioration against the pre-summer baseline; it does not say that a 73.9% useful-stop result is good enough.</p>
+      </div>
+    </section>
+
+    <section class="section" id="post-shift">
+      <div class="shell">
+        <p class="eyebrow">After the fall schedule shift</p>
+        <h2>The first complete post-shift days deserve attention</h2>
+        <p class="section-lede">Across August 10–18, systemwide stop delivery fell to 71.5%. Transbay fell 4.4 points from baseline and All Nighter fell 4.7 points, even as their scheduled-trip delivery improved. Nine complete days are a warning signal to monitor, not proof that the schedule change caused the decline.</p>
+        <div class="caution"><strong>Read the post-shift period as preliminary.</strong> It contains nine complete service days, August 10–18. The changes are signals to monitor, not evidence that the schedule change caused them.</div>
+
+        <h3>Concern 3: Was it on time?</h3>
+        <p class="section-lede">The tracker’s strict on-time measure counts actual arrivals from scheduled time through three minutes late. Early arrivals are reported separately rather than treated as on time.</p>
+        <figure class="plot">
+          <img src="plots/punctuality.png" alt="Three-panel horizontal bar chart of strict on-time arrival percentages by route family in baseline, summer, and post-shift periods.">
+          <figcaption>Summer school service is omitted because routes 600–699 were suspended. Early Bird has a small sample and should be read diagnostically.</figcaption>
+        </figure>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Route family</th><th>Baseline on time</th><th>Summer on time</th><th>Post-shift on time</th><th>Post-shift &gt;7 min late</th></tr></thead>
+            <tbody>
+              <tr><td class="group-local">Local / other</td><td>41.1%</td><td>41.4%</td><td>40.3%</td><td>12.3%</td></tr>
+              <tr><td class="group-transbay">Transbay</td><td>35.5%</td><td>36.4%</td><td>32.3%</td><td>15.7%</td></tr>
+              <tr><td class="group-night">All Nighter</td><td>45.0%</td><td>44.2%</td><td>42.0%</td><td>11.6%</td></tr>
+              <tr><td class="group-school">School 600–699</td><td>36.0%</td><td>—</td><td>34.0%</td><td>14.4%</td></tr>
+              <tr><td class="group-early">Early Bird 7xx</td><td>23.3%</td><td>20.2%</td><td>26.8%</td><td>14.6%</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>The waiting burden is the most severe rider pain point—not completely dropped buses</h3>
+        <p class="section-lede">Completely dropped or severely truncated trips are uncommon in these windows. The more persistent burden is time: post-shift waits averaged 18.8 minutes on Local service, 19.2 minutes on Transbay service, and 26.7 minutes on All Nighter service. Because a bus can appear to miss its final stop when its last GPS point falls just short of the terminal, this report counts a trip as severely truncated only when no arrival is observed beyond 80% of its scheduled stop sequence.</p>
+        <div class="two-plots">
+          <figure class="plot">
+            <img src="plots/completion.png" alt="Grouped bar chart of the share of trips severely truncated before 80 percent of the scheduled route.">
+            <figcaption>Severe truncation is below 1.5% for Local, All Nighter, and Early Bird service in the post-shift window, but 1.9% on Transbay and 3.3% on school routes.</figcaption>
+          </figure>
+          <figure class="plot">
+            <img src="plots/rider-wait.png" alt="Grouped bar chart estimating mean wait for a random-arrival rider by service family and period.">
+            <figcaption>Mean rider wait uses actual headways from 1 to 120 minutes and the random-arrival formula E(H²) ÷ 2E(H). Early Bird is omitted because it produced only 6–33 valid headways per period.</figcaption>
+          </figure>
+        </div>
+        <div class="statline">
+          <div><strong>18.8 min</strong><span>post-shift mean random-arrival wait, Local</span></div>
+          <div><strong>19.2 min</strong><span>post-shift mean random-arrival wait, Transbay</span></div>
+          <div><strong>26.7 min</strong><span>post-shift mean random-arrival wait, All Nighter</span></div>
+        </div>
+        <p class="narrow">Waits changed little across the three windows. That matters: the preliminary post-shift decline is mostly a stop-delivery and punctuality story, not evidence of a systemwide headway collapse.</p>
+      </div>
+    </section>
+
+    <section class="section" id="school">
+      <div class="shell">
+        <p class="eyebrow">School service</p>
+        <h2>School service returned near baseline—with more lateness</h2>
+        <p class="section-lede">AC Transit suspended lines 600–699 for summer and resumed them on August 9. Comparing their active pre-summer days with seven complete post-shift school-service days shows a near-baseline return in trip delivery and severe truncation, but a less punctual service.</p>
+        <figure class="plot">
+          <img src="plots/school-post-shift.png" alt="Dumbbell plot comparing baseline and post-shift percentages for school trip delivery, stop delivery, strict punctuality, and trips not severely truncated.">
+          <figcaption>Baseline includes 1,708 scheduled school trips across 19 active days; the post-shift period includes 781 across seven active days.</figcaption>
+        </figure>
+        <div class="split">
+          <div>
+            <h3>School 600–699</h3>
+            <p>Trip delivery was 93.0%, versus 94.3% before summer. Stop delivery improved from 63.6% to 65.4%. But on-time arrivals fell two points, while the share over seven minutes late rose 3.7 points. Severe truncation was also near baseline: 3.3% post-shift versus 3.5% before summer.</p>
+          </div>
+          <div class="definition">
+            <strong>Calendar caveat</strong>
+            <p>School routes do not all operate on every weekday. The comparison uses only service that appears in each date’s GTFS schedule; it does not assume every 600-series route should run daily.</p>
+          </div>
+        </div>
+        <h3>All Nighter and Early Bird</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Post-shift family</th><th>Scheduled trips</th><th>Trips observed</th><th>Trip delivery</th><th>Stop delivery</th><th>Strictly on time</th></tr></thead>
+            <tbody>
+              <tr><td class="group-night">All Nighter</td><td>730</td><td>673</td><td>92.2%</td><td>73.8%</td><td>42.0%</td></tr>
+              <tr><td class="group-early">Early Bird</td><td>28</td><td>27</td><td>96.4%</td><td>34.3%</td><td>26.8%</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="narrow">Early Bird’s schedule-delivery result improved sharply, but the stop sample is tiny: 70 scheduled stop rows and 41 actual arrivals in the post-shift window. These lines are short, cross the service-day boundary, and often finalize through the stale-trip path. Their stop and headway results should be treated as a tracker diagnostic, not a campaign headline.</p>
+      </div>
+    </section>
+
+    <section class="section" id="routes">
+      <div class="shell">
+        <p class="eyebrow">Route-by-route results</p>
+        <h2>The average hides routes moving in opposite directions</h2>
+        <p class="section-lede">The post-shift signal is not universal. Among routes with at least 100 observed baseline trips and 50 post-shift trips, Line 802, Line O, and Line 840 had the largest stop-delivery declines. Lines 851, P, and V had some of the largest gains.</p>
+        <figure class="plot">
+          <img src="plots/route-changes.png" alt="Horizontal diverging bar chart of routes with the largest gains and declines in stop delivery from baseline to the post-shift period.">
+          <figcaption>Percentage-point change in stop delivery, baseline to August 10–18. This threshold controls tiny samples but does not make nine days a long-term trend.</figcaption>
+        </figure>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Route</th><th>Family</th><th>Baseline stop delivery</th><th>Post-shift stop delivery</th><th>Change</th></tr></thead>
+            <tbody>
+              <tr><td>802 · San Pablo All Nighter</td><td class="group-night">All Nighter</td><td>87.5%</td><td>64.3%</td><td>−23.2 pts</td></tr>
+              <tr><td>O · Santa Clara–Encinal</td><td class="group-transbay">Transbay</td><td>65.2%</td><td>51.6%</td><td>−13.6 pts</td></tr>
+              <tr><td>840 · Foothill–Eastmont</td><td class="group-night">All Nighter</td><td>91.2%</td><td>78.7%</td><td>−12.5 pts</td></tr>
+              <tr><td>851 · Santa Clara–Broadway</td><td class="group-night">All Nighter</td><td>69.1%</td><td>81.2%</td><td>+12.1 pts</td></tr>
+              <tr><td>P · Piedmont–Oakland Ave.</td><td class="group-transbay">Transbay</td><td>45.6%</td><td>56.7%</td><td>+11.2 pts</td></tr>
+              <tr><td>V · Montclair–Park Blvd.</td><td class="group-transbay">Transbay</td><td>37.3%</td><td>45.6%</td><td>+8.3 pts</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="accountability">
+      <div class="shell">
+        <p class="eyebrow">A public reliability scorecard</p>
+        <h2>Measure reliability at the stop</h2>
+        <p class="section-lede">Publishing whether scheduled trips ran is a useful start. A rider-centered scorecard should also show whether those trips reached their scheduled stops, when they arrived, whether they completed most of the route, and how irregular service changed the wait.</p>
+        <div class="accountability-list" aria-label="Recommended public reliability measures">
+          <div><strong>Scheduled-trip delivery</strong><span>Did the service in the timetable appear?</span></div>
+          <div><strong>Stop-level delivery</strong><span>Did the trip reach each stop inside a rider-useful window?</span></div>
+          <div><strong>Early and late shares</strong><span>How often did an arrival miss the promise in either direction?</span></div>
+          <div><strong>Severe truncation</strong><span>How often did a trip fail to reach the final fifth of its stop sequence?</span></div>
+          <div><strong>Headway-based waits</strong><span>What wait did irregular spacing impose on a random-arrival rider?</span></div>
+        </div>
+        <p class="narrow">These measures should be published routinely by service family and by route. The summer result shows why: a stable system average can coexist with weak stop-level performance, and a post-shift system signal can hide routes moving sharply in opposite directions.</p>
+        <div class="do-dont">
+          <div>
+            <h3>Claims the data supports</h3>
+            <ul>
+              <li>Summer was broadly stable.</li>
+              <li>The preliminary post-shift period deserves monitoring.</li>
+              <li>Trip delivery alone overstates the rider experience.</li>
+              <li>School service returned near baseline but with more very-late arrivals.</li>
+            </ul>
+          </div>
+          <div>
+            <h3>Claims to avoid</h3>
+            <ul>
+              <li>That the August schedule change caused the declines.</li>
+              <li>That Early Bird is definitively the least reliable family.</li>
+              <li>That every trip missing its final observed stop was cut short.</li>
+              <li>That these route-weighted results equal rider-weighted experience.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="methods">
+      <div class="shell">
+        <p class="eyebrow">Methodology &amp; sources</p>
+        <h2>How to reproduce and interpret the analysis</h2>
+        <div class="methods-grid">
+          <div>
+            <h3>Definitions</h3>
+            <ul>
+              <li><strong>Trip delivery:</strong> observed trips ÷ GTFS-scheduled trips.</li>
+              <li><strong>Stop delivery:</strong> actual arrival from −1 to +7 minutes ÷ all scheduled stops on observed trips.</li>
+              <li><strong>Strictly on time:</strong> actual arrival from scheduled time through +3 minutes.</li>
+              <li><strong>Very late:</strong> more than 7 minutes after schedule.</li>
+              <li><strong>Severely truncated:</strong> no arrival observed beyond 80% of the scheduled stop sequence.</li>
+              <li><strong>Mean rider wait:</strong> random-arrival wait estimated from actual 1–120 minute headways.</li>
+            </ul>
+          </div>
+          <div>
+            <h3>Route groups</h3>
+            <ul>
+              <li><strong>Early Bird:</strong> 701, 702, 703.</li>
+              <li><strong>All Nighter:</strong> 800, 801, 802, 805, 840, 851.</li>
+              <li><strong>School:</strong> numeric routes 600–699.</li>
+              <li><strong>Transbay:</strong> E, F, FS, G, J, L, NL, NX, NX3, O, P, U, V, W, excluding the special groups above.</li>
+              <li><strong>Local / other:</strong> all remaining routes.</li>
+            </ul>
+          </div>
+        </div>
+        <h3>Limitations</h3>
+        <ul class="narrow">
+          <li>The post-shift period is only nine complete days, so it is preliminary and not causal evidence.</li>
+          <li>June 14 and August 9 are excluded pipeline-coverage gaps, not evidence that transit service collapsed on those dates.</li>
+          <li>Metrics weight stop observations, trips, or route-stop headways—not passenger boardings. High-ridership routes do not receive extra weight.</li>
+          <li>Final-terminal GPS behavior makes “any incomplete trip” too noisy for a headline; the 80% threshold is used instead.</li>
+          <li>Early Bird results have very small stop and headway samples and unusual service-day behavior.</li>
+          <li>The archived two-consecutive-missed-bus metric begins July 12 and is not used for baseline comparisons.</li>
+        </ul>
+        <h3>Sources</h3>
+        <ul class="source-list">
+          <li>AC Transit public GTFS static schedules and GTFS-Realtime vehicle positions, archived by the <a href="https://kuanbutts.com/actransit_perf_v2/report-card/">AC Transit performance tracker</a>.</li>
+          <li>Archived GTFS versions <a href="https://storage.googleapis.com/transit-203605-actransit-cache/gtfs/20260615T050002Z.zip">S1000252</a> and <a href="https://storage.googleapis.com/transit-203605-actransit-cache/gtfs/20260810T050003Z.zip">S1000256</a>, including their <code>feed_info.txt</code> coverage dates.</li>
+          <li><a href="https://www.actransit.org/article/service-changes-june-2026">AC Transit service changes effective June 14, 2026</a>, including the summer suspension of lines 600–699.</li>
+          <li><a href="https://www.actransit.org/article/service-changes-aug-2026">AC Transit service changes effective August 9, 2026</a>, including the resumption of school service.</li>
+          <li><a href="https://www.actransit.org/realign/service-changes">AC Transit service-family listings</a> and current GTFS route definitions for Transbay, All Nighter, and Early Bird classification.</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="shell"><span>A Bus That Runs Is Not Always a Bus You Can Rely On</span><span>Prepared August 19, 2026 · Public data only</span></div>
+  </footer>
+</body>
+</html>
