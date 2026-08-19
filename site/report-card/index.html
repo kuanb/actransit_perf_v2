@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AC Transit route report card</title>
   <link rel="stylesheet" href="../styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 </head>
 <body>
   <header>
@@ -33,6 +34,27 @@
     <div class="report-actions">
       <a class="report-action" href="../daily/">View latest daily overview →</a>
       <a class="report-action" href="../weekly/">View latest weekly overview →</a>
+    </div>
+  </section>
+
+  <section id="grade-history" aria-labelledby="grade-history-title">
+    <h2 id="grade-history-title">Grade history</h2>
+    <p class="muted defn">Each point is the same trailing four-week score used above, sampled every seven service days. History starts once a complete 28-day evaluation window is available.</p>
+    <div class="grade-history-grid">
+      <article class="grade-history-card">
+        <h3>Agency-wide score</h3>
+        <p id="agency-history-meta" class="muted grade-history-meta">Loading available history…</p>
+        <div class="grade-history-canvas">
+          <canvas id="agency-grade-history" role="img" aria-label="Agency-wide numerical grade score by week"></canvas>
+        </div>
+      </article>
+      <article class="grade-history-card">
+        <h3>Busiest routes</h3>
+        <p id="route-history-meta" class="muted grade-history-meta">Loading available history…</p>
+        <div class="grade-history-canvas">
+          <canvas id="route-grade-history" role="img" aria-label="Numerical grade scores by week for the ten routes with the most scheduled trips in the current evaluation period"></canvas>
+        </div>
+      </article>
     </div>
   </section>
 

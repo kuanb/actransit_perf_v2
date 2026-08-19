@@ -5,6 +5,9 @@
 
 const WINDOW_DAYS = 28;
 const IDEAL_SPEED_MPH = 13;
+const HISTORY_MONTHS = 6;
+const HISTORY_STEP_DAYS = 7;
+const HISTORY_FETCH_BATCH = 24;
 
 // Composite weights. Components with no data for a route are dropped and
 // the remaining weights renormalized at score time.
@@ -140,6 +143,7 @@ function aggregateRoutes(dailies) {
       observations: a.obs,
       scheduled_stops_scored: a.sd_n,
       days: a.days,
+      scheduled_runs: a.scheduled_runs,
       scheduled_runs_per_day: scheduledRunsPerDay,
       limited: isLimitedRoute({
         route_id: a.route_id,
@@ -246,6 +250,177 @@ function renderGradeLegend() {
   el.innerHTML = chips.join("");
 }
 
+function historyEndpointIndexes(dates) {
+  if (!dates.length) return [];
+  const latest = new Date(`${dates[0]}T00:00:00Z`);
+  const cutoff = new Date(latest);
+  cutoff.setUTCMonth(cutoff.getUTCMonth() - HISTORY_MONTHS);
+
+  const indexes = [];
+  for (let i = 0; i + WINDOW_DAYS <= dates.length; i += HISTORY_STEP_DAYS) {
+    const endpoint = new Date(`${dates[i]}T00:00:00Z`);
+    if (endpoint < cutoff) break;
+    indexes.push(i);
+  }
+  return indexes;
+}
+
+async function fetchDailyHistory(dates, dailyByDate) {
+  const missing = dates.filter((date) => !dailyByDate.has(date));
+  for (let i = 0; i < missing.length; i += HISTORY_FETCH_BATCH) {
+    const batch = missing.slice(i, i + HISTORY_FETCH_BATCH);
+    const payloads = await Promise.all(batch.map(async (date) => {
+      const daily = await fetchJSON(`${GCS_BASE}/stats/${date}.json`).catch(() => null);
+      return [date, daily];
+    }));
+    for (const [date, daily] of payloads) {
+      if (daily) dailyByDate.set(date, daily);
+    }
+  }
+}
+
+function historyDateLabel(date) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${date}T00:00:00Z`));
+}
+
+function historyChartOptions(scores) {
+  const valid = scores.filter((score) => score != null && Number.isFinite(score));
+  let min = valid.length ? Math.max(0, Math.floor(Math.min(...valid) / 10) * 10) : 0;
+  let max = valid.length ? Math.min(100, Math.ceil(Math.max(...valid) / 10) * 10) : 100;
+  if (max - min < 20) {
+    const missingRange = 20 - (max - min);
+    const addAbove = Math.min(missingRange, 100 - max);
+    max += addAbove;
+    min = Math.max(0, min - (missingRange - addAbove));
+  }
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: "index", intersect: false },
+    scales: {
+      x: {
+        grid: { display: false },
+        ticks: { maxRotation: 0, autoSkipPadding: 18 },
+      },
+      y: {
+        min,
+        max,
+        ticks: { stepSize: 10 },
+        title: { display: true, text: "Score / 100" },
+      },
+    },
+    plugins: {
+      legend: {
+        position: "bottom",
+        labels: { usePointStyle: true, boxWidth: 8, padding: 12 },
+      },
+      tooltip: {
+        callbacks: {
+          label: (ctx) => `${ctx.dataset.label}: ${fmt(ctx.parsed.y)} (${letterGrade(ctx.parsed.y)})`,
+        },
+      },
+    },
+  };
+}
+
+function renderGradeHistory(points, topRoutes) {
+  const agencyMeta = document.getElementById("agency-history-meta");
+  const routeMeta = document.getElementById("route-history-meta");
+  if (!points.length) {
+    agencyMeta.textContent = "Not enough daily data for a complete four-week historical point yet.";
+    routeMeta.textContent = "Not enough daily data for a complete four-week historical point yet.";
+    return;
+  }
+
+  const labels = points.map((point) => historyDateLabel(point.endDate));
+  const first = historyDateLabel(points[0].endDate);
+  const last = historyDateLabel(points[points.length - 1].endDate);
+  agencyMeta.textContent = `${points.length} weekly points · ${first}–${last}`;
+  routeMeta.textContent = `Top 10 by scheduled trips in the current four-week window · ${first}–${last}`;
+  const agencyScores = points.map((point) => point.agencyScore);
+
+  new Chart(document.getElementById("agency-grade-history"), {
+    type: "line",
+    data: {
+      labels,
+      datasets: [{
+        label: "Agency",
+        data: agencyScores,
+        borderColor: "#1971c2",
+        backgroundColor: "rgba(25, 113, 194, 0.12)",
+        fill: true,
+        tension: 0.2,
+        pointRadius: 3,
+        pointHoverRadius: 5,
+      }],
+    },
+    options: historyChartOptions(agencyScores),
+  });
+
+  const colors = [
+    "#1971c2", "#e8590c", "#2b8a3e", "#9c36b5", "#d6336c",
+    "#0b7285", "#f08c00", "#5f3dc4", "#495057", "#74b816",
+  ];
+  const routeDatasets = topRoutes.map((route, i) => ({
+    label: `Route ${route.route_id}`,
+    data: points.map((point) => point.routeScores.get(route.route_id) ?? null),
+    borderColor: colors[i],
+    backgroundColor: colors[i],
+    borderWidth: 2,
+    tension: 0.2,
+    pointRadius: 2,
+    pointHoverRadius: 5,
+    spanGaps: false,
+  }));
+  new Chart(document.getElementById("route-grade-history"), {
+    type: "line",
+    data: {
+      labels,
+      datasets: routeDatasets,
+    },
+    options: historyChartOptions(routeDatasets.flatMap((dataset) => dataset.data)),
+  });
+}
+
+async function loadGradeHistory(dates, currentDailies, currentRoutes) {
+  const endpointIndexes = historyEndpointIndexes(dates);
+  if (!endpointIndexes.length) {
+    renderGradeHistory([], []);
+    return;
+  }
+
+  const lastEndpoint = endpointIndexes[endpointIndexes.length - 1];
+  const neededDates = dates.slice(0, lastEndpoint + WINDOW_DAYS);
+  const dailyByDate = new Map(
+    currentDailies.filter((daily) => daily && daily.service_date)
+      .map((daily) => [daily.service_date, daily])
+  );
+  await fetchDailyHistory(neededDates, dailyByDate);
+
+  const topRoutes = [...currentRoutes]
+    .filter((route) => route.score != null)
+    .sort((a, b) => b.scheduled_runs - a.scheduled_runs)
+    .slice(0, 10);
+  const points = endpointIndexes.map((endpointIndex) => {
+    const windowDates = dates.slice(endpointIndex, endpointIndex + WINDOW_DAYS);
+    const dailies = windowDates.map((date) => dailyByDate.get(date)).filter(Boolean);
+    if (dailies.length !== WINDOW_DAYS) return null;
+    const routes = aggregateRoutes(dailies).filter((route) => route.score != null);
+    const agencyRoutes = routes.filter((route) => !isLimitedRoute(route));
+    return {
+      endDate: dates[endpointIndex],
+      agencyScore: aggregateAgency(agencyRoutes).score,
+      routeScores: new Map(routes.map((route) => [route.route_id, route.score])),
+    };
+  }).filter((point) => point && point.agencyScore != null).reverse();
+
+  renderGradeHistory(points, topRoutes);
+}
+
 async function load() {
   const yearEl = document.getElementById("footer-year");
   if (yearEl) yearEl.textContent = new Date().getFullYear();
@@ -288,6 +463,7 @@ async function load() {
       : "");
 
   render(routes, weekEnd);
+  await loadGradeHistory(dates, dailies, routes);
 }
 
 function render(routes, weekEnd) {
