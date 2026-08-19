@@ -665,6 +665,42 @@ footer a:hover {
 }
 .report-action:hover { background: #145a9e; }
 
+.grade-history-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 14px;
+}
+.grade-history-card {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 5px 20px rgba(20, 50, 90, 0.07);
+}
+.grade-history-card h3 {
+  margin: 0;
+  font-size: 16px;
+}
+.grade-history-meta {
+  min-height: 40px;
+  margin: 4px 0 10px;
+}
+.grade-history-canvas {
+  position: relative;
+  height: 330px;
+}
+
+@media (max-width: 800px) {
+  .grade-history-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 480px) {
+  .grade-history-card { padding: 14px 10px; }
+  .grade-history-canvas { height: 310px; }
+}
+
 .grade-legend {
   display: flex;
   flex-wrap: wrap;
