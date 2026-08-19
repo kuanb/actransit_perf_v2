@@ -92,6 +92,17 @@ Two custom Cloud Monitoring metrics emitted from `/track-performance`:
 - Don't add abstractions for hypothetical future requirements. Three similar
   lines beats a premature helper.
 
+### Static site analytics
+
+- Every new user-facing HTML content page under `site/` must include this
+  Cloudflare Web Analytics snippet immediately before `</body>`:
+  ```html
+  <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "0e36b12e46b04a69b5e9ff6883f6d23d"}'></script><!-- End Cloudflare Web Analytics -->
+  ```
+- Include the snippet exactly once per content page. Do not add it to a page
+  whose only purpose is to redirect to another tracked page, because that can
+  count one visit twice.
+
 ### Commits
 
 - **No Claude attribution.** Strip the `Co-Authored-By: Claude ...` trailer
