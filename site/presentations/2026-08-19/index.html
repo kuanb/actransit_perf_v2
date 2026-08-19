@@ -57,7 +57,7 @@
       <a href="#school">School service</a>
       <a href="#routes">Routes</a>
       <a href="#data-quality">Data quality</a>
-      <a href="#accountability">Accountability</a>
+      <a href="#reliability-standard">Call to action</a>
       <a href="#methods">Methods</a>
     </div>
   </nav>
@@ -269,11 +269,37 @@
       </div>
     </section>
 
-    <section class="section" id="accountability">
+    <section class="section" id="reliability-standard">
       <div class="shell">
-        <p class="eyebrow">A public reliability scorecard</p>
-        <h2>What I would publish</h2>
-        <p class="section-lede">Trip delivery is a useful starting point, but it should never stand on its own. A public scorecard should also show whether trips reached their scheduled stops, how early or late they were, whether they completed most of the route, and how uneven spacing changed the wait.</p>
+        <p class="eyebrow">Conclusion and call to action</p>
+        <h2>A reliability standard built for riders</h2>
+        <p class="section-lede">AC Transit describes its on-time performance KPI as: <a href="https://kpitest.actransit.org/#performance">“The percentage of buses that depart time points no more than one minute early and no more than five minutes later than scheduled.”</a> Its public chart sets the target at 75%.</p>
+        <a class="permalink" href="#reliability-standard">Link directly to this conclusion</a>
+        <figure class="plot kpi-figure">
+          <a href="https://kpitest.actransit.org/#performance"><img src="images/ac-transit-on-time-performance-kpi.png" alt="Screenshot of AC Transit’s On Time Performance KPI chart showing monthly results near a 75 percent target and the agency’s definition of on-time performance."></a>
+          <figcaption>AC Transit’s published On Time Performance chart and 75% target. Select the image to open the source KPI.</figcaption>
+        </figure>
+        <p class="narrow">That KPI and mine are not identical: AC Transit measures departures at designated time points, while I measure arrivals at every scheduled stop. This report also shows a strict 0/+3-minute measure, but its main stop-delivery window is −1/+7—two minutes more forgiving on the late side than AC Transit’s own window.</p>
+        <div class="callout">
+          <h3>Seventy-five percent is a floor, not a complete standard</h3>
+          <p>At the target, one in four measured timepoint departures can fall outside AC Transit’s own window. A single percentage does not tell us whether those misses were six minutes late, thirty minutes late, or trips that never ran. That is exactly the failure range this analysis is trying to make visible.</p>
+        </div>
+        <h3>A two-tier standard</h3>
+        <p class="narrow">Keep a simple on-time percentage as the headline if it is useful, but pair it with a service-delivery target and limits on the worst outcomes. I would start with the following public commitments:</p>
+        <div class="standard-grid" aria-label="Proposed rider reliability standards">
+          <div><strong>100%</strong><span><b>Scheduled trips operated.</b> Every planned trip should run.</span></div>
+          <div><strong>75%</strong><span><b>Headline floor.</b> At least this share of timepoint departures inside AC Transit’s −1/+5 minute window.</span></div>
+          <div><strong>≤7 min</strong><span><b>95th-percentile lateness.</b> At least 95% of scheduled timepoints should be no more than seven minutes late.</span></div>
+          <div><strong>≤10 min</strong><span><b>99th-percentile lateness.</b> At least 99% of scheduled timepoints should be no more than ten minutes late.</span></div>
+        </div>
+        <div class="definition">
+          <strong>No-shows must count as failures</strong>
+          <p>A dropped trip or timepoint cannot disappear from the on-time calculation just because there is no departure to measure. Every scheduled trip should remain in the denominator, fail the headline on-time KPI, fail the 100% service-delivery target, and count as a catastrophic tail failure. If no-shows are excluded from the p95 and p99 calculations, those percentiles should be published alongside a separate no-show rate that automatically fails the standard.</p>
+        </div>
+        <p class="stakes">This matters because AC Transit is not starting from a high-frequency network with abundant backup options. Much of the planned service is already skeletal. When the next bus may be twenty, thirty, or sixty minutes away, a trip that does not run is not a small scheduling miss—it can break the rider’s entire journey. In that context, 100% service delivery is the right target, and a p99 worse than ten minutes late should be treated as a serious failure.</p>
+
+        <h3>What the public scorecard should show</h3>
+        <p class="narrow">Trip delivery is a useful starting point, but it should never stand on its own. The scorecard should also show whether trips reached their scheduled stops, how early or late they were, whether they completed most of the route, and how uneven spacing changed the wait.</p>
         <div class="accountability-list" aria-label="Recommended public reliability measures">
           <div><strong>Scheduled-trip delivery</strong><span>Did the service in the timetable appear?</span></div>
           <div><strong>Stop-level delivery</strong><span>Did the trip reach each stop inside a rider-useful window?</span></div>
@@ -344,6 +370,7 @@
         <h3>Sources</h3>
         <ul class="source-list">
           <li>AC Transit public GTFS static schedules and GTFS-Realtime vehicle positions, archived by the <a href="https://kuanbutts.com/actransit_perf_v2/report-card/">AC Transit performance tracker</a>.</li>
+          <li><a href="https://kpitest.actransit.org/#performance">AC Transit Key Performance Indicators</a>, including the published on-time definition and 75% target.</li>
           <li>Archived GTFS versions <a href="https://storage.googleapis.com/transit-203605-actransit-cache/gtfs/20260615T050002Z.zip">S1000252</a> and <a href="https://storage.googleapis.com/transit-203605-actransit-cache/gtfs/20260810T050003Z.zip">S1000256</a>, including their <code>feed_info.txt</code> coverage dates.</li>
           <li><a href="https://www.actransit.org/article/service-changes-june-2026">AC Transit service changes effective June 14, 2026</a>, including the summer suspension of lines 600–699.</li>
           <li><a href="https://www.actransit.org/article/service-changes-aug-2026">AC Transit service changes effective August 9, 2026</a>, including the resumption of school service.</li>
