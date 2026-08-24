@@ -36,8 +36,8 @@ func TestComputeDailyBunching(t *testing.T) {
 	if route == nil {
 		t.Fatal("route bunching missing")
 	}
-	if route.Status != "available" || route.HeadwayCV == nil || *route.HeadwayCV != 0.42 {
-		t.Fatalf("unexpected route CV: status=%s cv=%v", route.Status, route.HeadwayCV)
+	if route.Status != "insufficient_data" || route.HeadwayCV != nil || route.Eligibility.Reason != "not_enough_comparable_headways" {
+		t.Fatalf("unexpected route eligibility: status=%s cv=%v eligibility=%+v", route.Status, route.HeadwayCV, route.Eligibility)
 	}
 	if route.HeadwayN != 4 || route.ComparisonN != 4 {
 		t.Fatalf("headways=%d comparisons=%d, want 4 each", route.HeadwayN, route.ComparisonN)
@@ -57,21 +57,27 @@ func TestComputeDailyBunching(t *testing.T) {
 	if route.SpacingPenaltyMin == nil || *route.SpacingPenaltyMin != 0.9 {
 		t.Fatalf("spacing penalty=%v, want 0.9", route.SpacingPenaltyMin)
 	}
-	if len(route.ByHour) != 1 || route.ByHour[0].Hour != 8 {
-		t.Fatalf("by_hour=%+v, want one 08:00 cell", route.ByHour)
+	if route.EvenSpacingWaitMin == nil || *route.EvenSpacingWaitMin != 5 {
+		t.Fatalf("even-spacing wait=%v, want 5.0", route.EvenSpacingWaitMin)
+	}
+	if len(route.ByHour) != 0 {
+		t.Fatalf("route by_hour=%+v, want compact route payload", route.ByHour)
+	}
+	if len(system.ByHour) != 1 || system.ByHour[0].Hour != 8 || system.ByHour[0].HeadwayCV == nil || *system.ByHour[0].HeadwayCV != 0.42 {
+		t.Fatalf("system by_hour=%+v, want one 08:00 cell with CV 0.42", system.ByHour)
 	}
 	if len(route.ByProgress) != 1 || route.ByProgress[0].ProgressPct != 55 {
 		t.Fatalf("by_progress=%+v, want one 55%% cell", route.ByProgress)
 	}
-	if system.HeadwayN != route.HeadwayN || system.HeadwayCV == nil || *system.HeadwayCV != *route.HeadwayCV {
+	if system.HeadwayN != route.HeadwayN || system.Status != route.Status {
 		t.Fatalf("one-route system should equal route: system=%+v route=%+v", system.bunchingMetrics, route.bunchingMetrics)
 	}
 }
 
-func TestBunchingCVRequiresThreeHeadwaysInCell(t *testing.T) {
+func TestBunchingCVRequiresTwoHeadwaysInCell(t *testing.T) {
 	acc := bunchingAccumulator{}
-	acc.addObservedCell([]bunchingGap{{Seconds: 300}, {Seconds: 900}})
-	metrics := acc.metrics()
+	acc.addObservedCell([]bunchingGap{{Seconds: 600}})
+	metrics := acc.metrics(bunchingMinCellHeadways, 0)
 	if metrics.Status != "insufficient_data" || metrics.HeadwayCV != nil {
 		t.Fatalf("status=%s cv=%v, want insufficient with nil CV", metrics.Status, metrics.HeadwayCV)
 	}
@@ -82,7 +88,12 @@ func TestBunchingCVRequiresThreeHeadwaysInCell(t *testing.T) {
 
 func TestAggregateBunchingStatsMarksPartialCoverage(t *testing.T) {
 	acc := bunchingAccumulator{}
-	acc.addObservedCell([]bunchingGap{{Seconds: 300}, {Seconds: 600}, {Seconds: 900}})
+	gaps := make([]bunchingGap, 60)
+	for i := range gaps {
+		gaps[i] = bunchingGap{Seconds: 300 + float64(i%3)*300, ScheduledSeconds: 600}
+		acc.addScheduledHeadway(600)
+	}
+	acc.addObservedCell(gaps)
 	one := finalizeBunchingStats(acc, nil, nil, time.Unix(1, 0), 1, 1)
 	two := finalizeBunchingStats(acc, nil, nil, time.Unix(2, 0), 1, 1)
 
@@ -93,8 +104,61 @@ func TestAggregateBunchingStatsMarksPartialCoverage(t *testing.T) {
 	if weekly.Status != "partial" || weekly.DaysAvailable != 2 || weekly.MissingDays != 5 {
 		t.Fatalf("status=%s available=%d missing=%d", weekly.Status, weekly.DaysAvailable, weekly.MissingDays)
 	}
-	if weekly.HeadwayN != 6 || weekly.Aggregation.CVWeight != 6 {
-		t.Fatalf("headways=%d cv_weight=%d, want 6", weekly.HeadwayN, weekly.Aggregation.CVWeight)
+	if weekly.HeadwayN != 120 || weekly.Aggregation.CVWeight != 120 {
+		t.Fatalf("headways=%d cv_weight=%d, want 120", weekly.HeadwayN, weekly.Aggregation.CVWeight)
+	}
+}
+
+func TestBunchingTooLowFrequency(t *testing.T) {
+	acc := bunchingAccumulator{}
+	acc.addScheduledHeadway(41 * 60)
+	stats := finalizeBunchingStats(acc, nil, nil, time.Unix(1, 0), 1, 1)
+	if stats.Status != "too_low_frequency" || stats.HeadwayCV != nil {
+		t.Fatalf("status=%s cv=%v", stats.Status, stats.HeadwayCV)
+	}
+	if stats.Eligibility.Eligible || stats.Eligibility.Reason != "too_low_frequency" {
+		t.Fatalf("eligibility=%+v", stats.Eligibility)
+	}
+	boundary := bunchingAccumulator{}
+	boundary.addScheduledHeadway(40 * 60)
+	if boundary.scheduledHeadwayN != 1 {
+		t.Fatalf("40-minute scheduled window should remain frequency eligible")
+	}
+}
+
+func TestSpacingPenaltyUsesSameRealizedFrequency(t *testing.T) {
+	acc := bunchingAccumulator{}
+	acc.addObservedCell([]bunchingGap{
+		{Seconds: 240, ScheduledSeconds: 180},
+		{Seconds: 960, ScheduledSeconds: 180},
+		{Seconds: 600, ScheduledSeconds: 180},
+		{Seconds: 600, ScheduledSeconds: 180},
+	})
+	for i := 0; i < 4; i++ {
+		acc.addScheduledHeadway(180)
+	}
+	metrics := acc.metrics(bunchingMinCellHeadways, 0)
+	if metrics.ExpectedWaitMin == nil || *metrics.ExpectedWaitMin != 5.9 || metrics.EvenSpacingWaitMin == nil || *metrics.EvenSpacingWaitMin != 5 {
+		t.Fatalf("observed=%v even=%v", metrics.ExpectedWaitMin, metrics.EvenSpacingWaitMin)
+	}
+	if metrics.ScheduledExpectedWaitMin == nil || *metrics.ScheduledExpectedWaitMin != 1.5 {
+		t.Fatalf("scheduled wait=%v, want 1.5", metrics.ScheduledExpectedWaitMin)
+	}
+	if metrics.SpacingPenaltyMin == nil || *metrics.SpacingPenaltyMin != 0.9 {
+		t.Fatalf("spacing penalty=%v, want 0.9", metrics.SpacingPenaltyMin)
+	}
+}
+
+func TestBunchingRejectsWeakCoverage(t *testing.T) {
+	acc := bunchingAccumulator{
+		headwayN:             2000,
+		scheduledHeadwayN:    2000,
+		allScheduledHeadwayN: 2000,
+		aggregation:          bunchingAggregation{CVWeight: 100, CVWeightedSum: 30},
+	}
+	stats := finalizeBunchingStats(acc, nil, nil, time.Unix(1, 0), 1, 1)
+	if stats.Status != "insufficient_data" || stats.Eligibility.Reason != "low_comparable_headway_coverage" {
+		t.Fatalf("status=%s eligibility=%+v", stats.Status, stats.Eligibility)
 	}
 }
 

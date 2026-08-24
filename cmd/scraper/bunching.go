@@ -15,21 +15,28 @@ import (
 )
 
 const (
-	bunchingMethodologyVersion = 1
-	bunchingMinHeadwaySeconds  = 30
-	bunchingMaxHeadwaySeconds  = 90 * 60
-	bunchingMinCellHeadways    = 3
+	bunchingMethodologyVersion  = 2
+	bunchingMinHeadwaySeconds   = 30
+	bunchingMaxHeadwaySeconds   = 90 * 60
+	bunchingMaxFrequencySeconds = 40 * 60
+	bunchingMinCellHeadways     = 2
+	bunchingMinCVHeadways       = 100
+	bunchingMinCVCoveragePct    = 10.0
 )
 
 var bunchingProgressPoints = [...]int{10, 25, 40, 55, 70, 85}
 
 type bunchingAggregation struct {
-	CVWeightedSum                  float64 `json:"cv_weighted_sum"`
-	CVWeight                       int64   `json:"cv_weight"`
-	ObservedHeadwaySeconds         float64 `json:"observed_headway_seconds"`
-	ObservedHeadwaySquaredSeconds  float64 `json:"observed_headway_squared_seconds"`
-	ScheduledHeadwaySeconds        float64 `json:"scheduled_headway_seconds"`
-	ScheduledHeadwaySquaredSeconds float64 `json:"scheduled_headway_squared_seconds"`
+	CVWeightedSum                     float64 `json:"cv_weighted_sum"`
+	CVWeight                          int64   `json:"cv_weight"`
+	ObservedHeadwaySeconds            float64 `json:"observed_headway_seconds"`
+	ObservedHeadwaySquaredSeconds     float64 `json:"observed_headway_squared_seconds"`
+	ComparableHeadwaySeconds          float64 `json:"comparable_headway_seconds"`
+	ComparableHeadwaySquaredSeconds   float64 `json:"comparable_headway_squared_seconds"`
+	EvenSpacingWaitAreaSecondsSquared float64 `json:"even_spacing_wait_area_seconds_squared"`
+	ScheduledHeadwaySeconds           float64 `json:"scheduled_headway_seconds"`
+	ScheduledHeadwaySquaredSeconds    float64 `json:"scheduled_headway_squared_seconds"`
+	AllScheduledHeadwaySeconds        float64 `json:"all_scheduled_headway_seconds"`
 }
 
 type bunchingMetrics struct {
@@ -40,12 +47,14 @@ type bunchingMetrics struct {
 	BunchedHeadwayN          int64               `json:"bunched_headway_n"`
 	LongGapN                 int64               `json:"long_gap_n"`
 	ScheduledHeadwayN        int64               `json:"scheduled_headway_n"`
+	AllScheduledHeadwayN     int64               `json:"all_scheduled_headway_n"`
 	HeadwayCV                *float64            `json:"headway_cv,omitempty"`
 	BunchedHeadwayPct        *float64            `json:"bunched_headway_pct,omitempty"`
 	LongGapPct               *float64            `json:"long_gap_pct,omitempty"`
 	MeanHeadwayMin           *float64            `json:"mean_headway_min,omitempty"`
 	ExpectedWaitMin          *float64            `json:"expected_wait_min,omitempty"`
 	ScheduledExpectedWaitMin *float64            `json:"scheduled_expected_wait_min,omitempty"`
+	EvenSpacingWaitMin       *float64            `json:"even_spacing_wait_min,omitempty"`
 	SpacingPenaltyMin        *float64            `json:"spacing_penalty_min,omitempty"`
 	Aggregation              bunchingAggregation `json:"aggregation"`
 }
@@ -56,29 +65,45 @@ type bunchingHourStats struct {
 }
 
 type bunchingProgressStats struct {
-	ProgressPct int `json:"progress_pct"`
-	bunchingMetrics
+	ProgressPct   int      `json:"progress_pct"`
+	Status        string   `json:"status"`
+	HeadwayN      int64    `json:"headway_n"`
+	HeadwayCV     *float64 `json:"headway_cv,omitempty"`
+	CVWeightedSum float64  `json:"cv_weighted_sum"`
+	CVWeight      int64    `json:"cv_weight"`
 }
 
 type bunchingStats struct {
-	MethodologyVersion int       `json:"methodology_version"`
-	GeneratedAt        time.Time `json:"generated_at"`
-	DaysExpected       int       `json:"days_expected"`
-	DaysAvailable      int       `json:"days_available"`
-	MissingDays        int       `json:"missing_days"`
+	MethodologyVersion int                 `json:"methodology_version"`
+	GeneratedAt        time.Time           `json:"generated_at"`
+	DaysExpected       int                 `json:"days_expected"`
+	DaysAvailable      int                 `json:"days_available"`
+	MissingDays        int                 `json:"missing_days"`
+	Eligibility        bunchingEligibility `json:"eligibility"`
 	bunchingMetrics
 	ByHour     []bunchingHourStats     `json:"by_hour"`
 	ByProgress []bunchingProgressStats `json:"by_progress"`
 }
 
+type bunchingEligibility struct {
+	Eligible            bool    `json:"eligible"`
+	Reason              string  `json:"reason,omitempty"`
+	CVHeadwayN          int64   `json:"cv_headway_n"`
+	CVCoveragePct       float64 `json:"cv_coverage_pct"`
+	MinimumCVHeadwayN   int64   `json:"minimum_cv_headway_n"`
+	MinimumCoveragePct  float64 `json:"minimum_coverage_pct"`
+	MaximumFrequencyMin float64 `json:"maximum_frequency_min"`
+}
+
 type bunchingAccumulator struct {
-	headwayN          int64
-	cellN             int64
-	comparisonN       int64
-	bunchedN          int64
-	longN             int64
-	scheduledHeadwayN int64
-	aggregation       bunchingAggregation
+	headwayN             int64
+	cellN                int64
+	comparisonN          int64
+	bunchedN             int64
+	longN                int64
+	scheduledHeadwayN    int64
+	allScheduledHeadwayN int64
+	aggregation          bunchingAggregation
 }
 
 func (a *bunchingAccumulator) add(other bunchingAccumulator) {
@@ -88,12 +113,17 @@ func (a *bunchingAccumulator) add(other bunchingAccumulator) {
 	a.bunchedN += other.bunchedN
 	a.longN += other.longN
 	a.scheduledHeadwayN += other.scheduledHeadwayN
+	a.allScheduledHeadwayN += other.allScheduledHeadwayN
 	a.aggregation.CVWeightedSum += other.aggregation.CVWeightedSum
 	a.aggregation.CVWeight += other.aggregation.CVWeight
 	a.aggregation.ObservedHeadwaySeconds += other.aggregation.ObservedHeadwaySeconds
 	a.aggregation.ObservedHeadwaySquaredSeconds += other.aggregation.ObservedHeadwaySquaredSeconds
+	a.aggregation.ComparableHeadwaySeconds += other.aggregation.ComparableHeadwaySeconds
+	a.aggregation.ComparableHeadwaySquaredSeconds += other.aggregation.ComparableHeadwaySquaredSeconds
+	a.aggregation.EvenSpacingWaitAreaSecondsSquared += other.aggregation.EvenSpacingWaitAreaSecondsSquared
 	a.aggregation.ScheduledHeadwaySeconds += other.aggregation.ScheduledHeadwaySeconds
 	a.aggregation.ScheduledHeadwaySquaredSeconds += other.aggregation.ScheduledHeadwaySquaredSeconds
+	a.aggregation.AllScheduledHeadwaySeconds += other.aggregation.AllScheduledHeadwaySeconds
 }
 
 func (a *bunchingAccumulator) addObservedCell(gaps []bunchingGap) {
@@ -130,27 +160,42 @@ func (a *bunchingAccumulator) addObservedCell(gaps []bunchingGap) {
 		cv := math.Sqrt(variance) / mean
 		a.aggregation.CVWeightedSum += cv * n
 		a.aggregation.CVWeight += int64(len(gaps))
+		a.aggregation.ComparableHeadwaySeconds += sum
+		a.aggregation.ComparableHeadwaySquaredSeconds += sumSquares
+		a.aggregation.EvenSpacingWaitAreaSecondsSquared += sum * sum / (2 * n)
 	}
 }
 
 func (a *bunchingAccumulator) addScheduledHeadway(seconds float64) {
+	a.allScheduledHeadwayN++
+	a.aggregation.AllScheduledHeadwaySeconds += seconds
+	if seconds > bunchingMaxFrequencySeconds {
+		return
+	}
 	a.scheduledHeadwayN++
 	a.aggregation.ScheduledHeadwaySeconds += seconds
 	a.aggregation.ScheduledHeadwaySquaredSeconds += seconds * seconds
 }
 
-func (a bunchingAccumulator) metrics() bunchingMetrics {
+func (a bunchingAccumulator) metrics(minCVHeadways int64, minCoveragePct float64) bunchingMetrics {
 	m := bunchingMetrics{
-		Status:            "insufficient_data",
-		HeadwayN:          a.headwayN,
-		CellN:             a.cellN,
-		ComparisonN:       a.comparisonN,
-		BunchedHeadwayN:   a.bunchedN,
-		LongGapN:          a.longN,
-		ScheduledHeadwayN: a.scheduledHeadwayN,
-		Aggregation:       a.aggregation,
+		Status:               "insufficient_data",
+		HeadwayN:             a.headwayN,
+		CellN:                a.cellN,
+		ComparisonN:          a.comparisonN,
+		BunchedHeadwayN:      a.bunchedN,
+		LongGapN:             a.longN,
+		ScheduledHeadwayN:    a.scheduledHeadwayN,
+		AllScheduledHeadwayN: a.allScheduledHeadwayN,
+		Aggregation:          a.aggregation,
 	}
-	if a.aggregation.CVWeight > 0 {
+	coveragePct := 0.0
+	if a.headwayN > 0 {
+		coveragePct = 100 * float64(a.aggregation.CVWeight) / float64(a.headwayN)
+	}
+	if a.scheduledHeadwayN == 0 && a.allScheduledHeadwayN > 0 {
+		m.Status = "too_low_frequency"
+	} else if a.aggregation.CVWeight >= minCVHeadways && coveragePct >= minCoveragePct {
 		v := roundTo(a.aggregation.CVWeightedSum/float64(a.aggregation.CVWeight), 2)
 		m.HeadwayCV = &v
 		m.Status = "available"
@@ -165,17 +210,17 @@ func (a bunchingAccumulator) metrics() bunchingMetrics {
 		mean := round1(a.aggregation.ObservedHeadwaySeconds / float64(a.headwayN) / 60)
 		m.MeanHeadwayMin = &mean
 	}
-	if a.aggregation.ObservedHeadwaySeconds > 0 {
-		wait := round1(a.aggregation.ObservedHeadwaySquaredSeconds / (2 * a.aggregation.ObservedHeadwaySeconds) / 60)
+	if a.aggregation.ComparableHeadwaySeconds > 0 {
+		wait := round1(a.aggregation.ComparableHeadwaySquaredSeconds / (2 * a.aggregation.ComparableHeadwaySeconds) / 60)
 		m.ExpectedWaitMin = &wait
+		even := round1(a.aggregation.EvenSpacingWaitAreaSecondsSquared / a.aggregation.ComparableHeadwaySeconds / 60)
+		m.EvenSpacingWaitMin = &even
+		penalty := round1(math.Max(0, wait-even))
+		m.SpacingPenaltyMin = &penalty
 	}
 	if a.aggregation.ScheduledHeadwaySeconds > 0 {
 		wait := round1(a.aggregation.ScheduledHeadwaySquaredSeconds / (2 * a.aggregation.ScheduledHeadwaySeconds) / 60)
 		m.ScheduledExpectedWaitMin = &wait
-	}
-	if m.ExpectedWaitMin != nil && m.ScheduledExpectedWaitMin != nil {
-		penalty := round1(math.Max(0, *m.ExpectedWaitMin-*m.ScheduledExpectedWaitMin))
-		m.SpacingPenaltyMin = &penalty
 	}
 	return m
 }
@@ -419,6 +464,9 @@ func computeDailyBunching(observations []bunchingObservation, schedule *bunching
 				continue
 			}
 			scheduledSeconds := scheduledHeadwayBefore(schedule.ByStop[stopKey], current.ScheduledArrival)
+			if scheduledSeconds <= 0 || scheduledSeconds > bunchingMaxFrequencySeconds {
+				continue
+			}
 			progress := schedule.TripProgress[bunchingTripStopKey{TripID: current.TripID, StopSequence: current.StopSequence}]
 			key := bunchingCellKey{
 				RouteID: stopKey.RouteID, DirectionID: stopKey.DirectionID, StopID: stopKey.StopID,
@@ -459,7 +507,7 @@ func computeDailyBunching(observations []bunchingObservation, schedule *bunching
 		getRouteAcc(key.RouteID)
 		for i := 1; i < len(arrivals); i++ {
 			seconds := arrivals[i].Arrival.Sub(arrivals[i-1].Arrival).Seconds()
-			if seconds < bunchingMinHeadwaySeconds || seconds > bunchingMaxHeadwaySeconds {
+			if seconds < bunchingMinHeadwaySeconds {
 				continue
 			}
 			hour := arrivals[i-1].Arrival.In(loc).Hour()
@@ -478,6 +526,7 @@ func computeDailyBunching(observations []bunchingObservation, schedule *bunching
 	routes := make(map[string]*bunchingStats, len(routeAcc))
 	for routeID, acc := range routeAcc {
 		routes[routeID] = finalizeBunchingStats(*acc, routeHours[routeID], routeProgress[routeID], generatedAt, 1, 1)
+		routes[routeID].ByHour = nil
 	}
 	return system, routes
 }
@@ -536,7 +585,8 @@ func finalizeBunchingStats(acc bunchingAccumulator, hours, progress map[int]*bun
 		DaysExpected:       daysExpected,
 		DaysAvailable:      daysAvailable,
 		MissingDays:        daysExpected - daysAvailable,
-		bunchingMetrics:    acc.metrics(),
+		Eligibility:        bunchingEligibilityFor(acc),
+		bunchingMetrics:    acc.metrics(bunchingMinCVHeadways, bunchingMinCVCoveragePct),
 	}
 	if out.MissingDays > 0 && out.Status == "available" {
 		out.Status = "partial"
@@ -545,26 +595,61 @@ func finalizeBunchingStats(acc bunchingAccumulator, hours, progress map[int]*bun
 		if hours[hour] == nil {
 			continue
 		}
-		out.ByHour = append(out.ByHour, bunchingHourStats{Hour: hour, bunchingMetrics: hours[hour].metrics()})
+		out.ByHour = append(out.ByHour, bunchingHourStats{Hour: hour, bunchingMetrics: hours[hour].metrics(bunchingMinCellHeadways, 0)})
 	}
 	for _, point := range bunchingProgressPoints {
 		if progress[point] == nil {
 			continue
 		}
-		out.ByProgress = append(out.ByProgress, bunchingProgressStats{ProgressPct: point, bunchingMetrics: progress[point].metrics()})
+		metrics := progress[point].metrics(bunchingMinCellHeadways, 0)
+		out.ByProgress = append(out.ByProgress, bunchingProgressStats{
+			ProgressPct:   point,
+			Status:        metrics.Status,
+			HeadwayN:      metrics.HeadwayN,
+			HeadwayCV:     metrics.HeadwayCV,
+			CVWeightedSum: metrics.Aggregation.CVWeightedSum,
+			CVWeight:      metrics.Aggregation.CVWeight,
+		})
+	}
+	return out
+}
+
+func bunchingEligibilityFor(acc bunchingAccumulator) bunchingEligibility {
+	coveragePct := 0.0
+	if acc.headwayN > 0 {
+		coveragePct = 100 * float64(acc.aggregation.CVWeight) / float64(acc.headwayN)
+	}
+	out := bunchingEligibility{
+		Eligible:            true,
+		CVHeadwayN:          acc.aggregation.CVWeight,
+		CVCoveragePct:       round1(coveragePct),
+		MinimumCVHeadwayN:   bunchingMinCVHeadways,
+		MinimumCoveragePct:  bunchingMinCVCoveragePct,
+		MaximumFrequencyMin: bunchingMaxFrequencySeconds / 60,
+	}
+	if acc.scheduledHeadwayN == 0 && acc.allScheduledHeadwayN > 0 {
+		out.Eligible = false
+		out.Reason = "too_low_frequency"
+	} else if acc.aggregation.CVWeight < bunchingMinCVHeadways {
+		out.Eligible = false
+		out.Reason = "not_enough_comparable_headways"
+	} else if coveragePct < bunchingMinCVCoveragePct {
+		out.Eligible = false
+		out.Reason = "low_comparable_headway_coverage"
 	}
 	return out
 }
 
 func accumulatorFromMetrics(m bunchingMetrics) bunchingAccumulator {
 	return bunchingAccumulator{
-		headwayN:          m.HeadwayN,
-		cellN:             m.CellN,
-		comparisonN:       m.ComparisonN,
-		bunchedN:          m.BunchedHeadwayN,
-		longN:             m.LongGapN,
-		scheduledHeadwayN: m.ScheduledHeadwayN,
-		aggregation:       m.Aggregation,
+		headwayN:             m.HeadwayN,
+		cellN:                m.CellN,
+		comparisonN:          m.ComparisonN,
+		bunchedN:             m.BunchedHeadwayN,
+		longN:                m.LongGapN,
+		scheduledHeadwayN:    m.ScheduledHeadwayN,
+		allScheduledHeadwayN: m.AllScheduledHeadwayN,
+		aggregation:          m.Aggregation,
 	}
 }
 
@@ -583,7 +668,10 @@ func aggregateBunchingStats(values []*bunchingStats, daysExpected int) *bunching
 			getAccumulator(hours, hour.Hour).add(accumulatorFromMetrics(hour.bunchingMetrics))
 		}
 		for _, point := range value.ByProgress {
-			getAccumulator(progress, point.ProgressPct).add(accumulatorFromMetrics(point.bunchingMetrics))
+			getAccumulator(progress, point.ProgressPct).add(bunchingAccumulator{
+				headwayN:    point.HeadwayN,
+				aggregation: bunchingAggregation{CVWeightedSum: point.CVWeightedSum, CVWeight: point.CVWeight},
+			})
 		}
 	}
 	if daysAvailable == 0 {
