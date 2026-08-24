@@ -119,7 +119,7 @@ func backfillDailyBunching(ctx context.Context, serviceDate civil.Date, force bo
 			stats.Routes[i].Bunching = finalizeBunchingStats(bunchingAccumulator{}, nil, nil, generatedAt, 1, 1)
 		}
 	}
-	payload, err := json.MarshalIndent(&stats, "", "  ")
+	payload, err := json.Marshal(&stats)
 	if err != nil {
 		return false, true, fmt.Errorf("marshal: %w", err)
 	}
@@ -208,7 +208,7 @@ func backfillWeeklyBunching(ctx context.Context, weekEnd civil.Date) (bool, bool
 		}
 		stats.RouteDailyServiceDelivered[i].Bunching = aggregateBunchingStats(values, activeDays)
 	}
-	payload, err := json.MarshalIndent(&stats, "", "  ")
+	payload, err := json.Marshal(&stats)
 	if err != nil {
 		return false, true, fmt.Errorf("marshal: %w", err)
 	}

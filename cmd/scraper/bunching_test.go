@@ -81,8 +81,8 @@ func TestBunchingCVRequiresTwoHeadwaysInCell(t *testing.T) {
 	if metrics.Status != "insufficient_data" || metrics.HeadwayCV != nil {
 		t.Fatalf("status=%s cv=%v, want insufficient with nil CV", metrics.Status, metrics.HeadwayCV)
 	}
-	if metrics.MeanHeadwayMin == nil || *metrics.MeanHeadwayMin != 10 {
-		t.Fatalf("mean=%v, want 10", metrics.MeanHeadwayMin)
+	if metrics.MeanHeadwayMin != nil {
+		t.Fatalf("mean=%v, want nil without a comparable cell", metrics.MeanHeadwayMin)
 	}
 }
 

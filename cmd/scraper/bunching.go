@@ -81,8 +81,8 @@ type bunchingStats struct {
 	MissingDays        int                 `json:"missing_days"`
 	Eligibility        bunchingEligibility `json:"eligibility"`
 	bunchingMetrics
-	ByHour     []bunchingHourStats     `json:"by_hour"`
-	ByProgress []bunchingProgressStats `json:"by_progress"`
+	ByHour     []bunchingHourStats     `json:"by_hour,omitempty"`
+	ByProgress []bunchingProgressStats `json:"by_progress,omitempty"`
 }
 
 type bunchingEligibility struct {
@@ -206,8 +206,8 @@ func (a bunchingAccumulator) metrics(minCVHeadways int64, minCoveragePct float64
 		m.BunchedHeadwayPct = &bunched
 		m.LongGapPct = &long
 	}
-	if a.headwayN > 0 {
-		mean := round1(a.aggregation.ObservedHeadwaySeconds / float64(a.headwayN) / 60)
+	if a.aggregation.CVWeight > 0 {
+		mean := round1(a.aggregation.ComparableHeadwaySeconds / float64(a.aggregation.CVWeight) / 60)
 		m.MeanHeadwayMin = &mean
 	}
 	if a.aggregation.ComparableHeadwaySeconds > 0 {

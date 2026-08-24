@@ -169,7 +169,7 @@ func processWeeklyStats(ctx context.Context, weekEndSat civil.Date) (*weeklyStat
 	}
 	out.RouteDailyServiceDelivered = aggregateRouteDailySD(dailies, weekStart, routeOverall)
 
-	payload, err := json.MarshalIndent(out, "", "  ")
+	payload, err := json.Marshal(out)
 	if err != nil {
 		return nil, fmt.Errorf("marshal: %w", err)
 	}
