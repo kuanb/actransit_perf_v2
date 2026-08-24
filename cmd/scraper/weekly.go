@@ -81,6 +81,7 @@ type routeDailySD struct {
 	ScheduledRunsPerDay float64             `json:"scheduled_runs_per_day"`
 	Limited             bool                `json:"limited"`
 	TwoBusGapWindows    *int                `json:"two_bus_gap_windows,omitempty"`
+	Bunching            *bunchingStats      `json:"bunching,omitempty"`
 }
 
 type routeDailySDByDay struct {
@@ -111,7 +112,7 @@ func processWeeklyStats(ctx context.Context, weekEndSat civil.Date) (*weeklyStat
 	weekStart := weekEndSat.AddDays(-6)
 
 	out := &weeklyStats{
-		MethodologyVersion: 2,
+		MethodologyVersion: 3,
 		WeekStart:          weekStart.String(),
 		WeekEnd:            weekEndSat.String(),
 		GeneratedAt:        time.Now().UTC(),
@@ -134,6 +135,13 @@ func processWeeklyStats(ctx context.Context, weekEndSat civil.Date) (*weeklyStat
 	// for parity with the daily JSON shape.
 	if sys != nil {
 		sys.TotalTrips = int64(out.ScheduleComplianceTotal.RanTrips)
+		systemBunching := make([]*bunchingStats, len(dailies))
+		for i, daily := range dailies {
+			if daily != nil {
+				systemBunching[i] = daily.System.Bunching
+			}
+		}
+		sys.Bunching = aggregateBunchingStats(systemBunching, 7)
 	}
 	out.System = sys
 
@@ -284,6 +292,8 @@ func aggregateRouteDailySD(dailies []*dailyStats, weekStart civil.Date, routeOve
 		scheduled      [7]int
 		gapWindows     int
 		gapDays        int
+		bunching       [7]*bunchingStats
+		activeDays     int
 	}
 	byRoute := make(map[string]*accum)
 
@@ -315,6 +325,8 @@ func aggregateRouteDailySD(dailies []*dailyStats, weekStart civil.Date, routeOve
 			a.stopNByDay[i] = r.StopSDN
 			a.deliveredByDay[i] = r.StopSDDeliveredN
 			a.scheduled[i] = r.ScheduledTrips
+			a.bunching[i] = r.Bunching
+			a.activeDays++
 			if r.TwoBusGapWindows != nil {
 				a.gapWindows += *r.TwoBusGapWindows
 				a.gapDays++
@@ -398,6 +410,7 @@ func aggregateRouteDailySD(dailies []*dailyStats, weekStart civil.Date, routeOve
 			ScheduledRunsPerDay: scheduledRunsPerDay,
 			Limited:             isLimitedRoute(it.a.rid, scheduledRunsPerDay),
 			TwoBusGapWindows:    twoBusGapWindows,
+			Bunching:            aggregateBunchingStats(it.a.bunching[:], it.a.activeDays),
 		})
 	}
 	return out

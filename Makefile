@@ -13,7 +13,7 @@ GIT_SHA  := $(shell git rev-parse --short HEAD 2>/dev/null)
 DIRTY    := $(shell git diff-index --quiet HEAD -- 2>/dev/null || echo "-dirty")
 AUTO_TAG := $(GIT_SHA)$(DIRTY)
 
-.PHONY: tf-init tf-plan tf-apply tf-fmt build deploy release logs invoke run-local test smoke hooks-install backfill
+.PHONY: tf-init tf-plan tf-apply tf-fmt build deploy release logs invoke run-local test smoke hooks-install backfill backfill-bunching
 
 tf-init:
 	cd infra && terraform init
@@ -83,6 +83,16 @@ backfill:
 	echo "==> POST $$URL/backfill-day?$$QS"; \
 	curl --fail --max-time 1800 -X POST -H "Authorization: Bearer $$TOKEN" \
 		"$$URL/backfill-day?$$QS"
+
+backfill-bunching:
+	@test -n "$(START)" -a -n "$(END)" || (echo "usage: make backfill-bunching START=YYYY-MM-DD END=YYYY-MM-DD [FORCE=true]" && exit 1)
+	@URL="$$(cd infra && terraform output -raw scraper_url)"; \
+	TOKEN="$$(gcloud auth print-identity-token)"; \
+	QS="start_date=$(START)&end_date=$(END)"; \
+	if [ "$(FORCE)" = "true" ]; then QS="$$QS&force=true"; fi; \
+	echo "==> POST $$URL/backfill-bunching?$$QS"; \
+	curl --fail --max-time 1800 -X POST -H "Authorization: Bearer $$TOKEN" \
+		"$$URL/backfill-bunching?$$QS"
 
 run-local:
 	go run ./cmd/scraper

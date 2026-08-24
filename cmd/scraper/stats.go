@@ -66,17 +66,18 @@ type minuteBucket struct {
 }
 
 type systemStats struct {
-	TotalTrips        int64   `json:"total_trips"`
-	TotalObservations int64   `json:"total_observations"`
-	VehiclesObserved  int64   `json:"vehicles_observed"`
-	OnTimePct         float64 `json:"on_time_pct"`
-	Within5MinPct     float64 `json:"within_5min_pct"`
-	Within7MinPct     float64 `json:"within_7min_pct"`
-	LatePct           float64 `json:"late_pct"`
-	EarlyPct          float64 `json:"early_pct"`
-	P50DelayMinutes   float64 `json:"p50_delay_minutes"`
-	P95DelayMinutes   float64 `json:"p95_delay_minutes"`
-	AvgSpeedMph       float64 `json:"avg_speed_mph"`
+	TotalTrips        int64          `json:"total_trips"`
+	TotalObservations int64          `json:"total_observations"`
+	VehiclesObserved  int64          `json:"vehicles_observed"`
+	OnTimePct         float64        `json:"on_time_pct"`
+	Within5MinPct     float64        `json:"within_5min_pct"`
+	Within7MinPct     float64        `json:"within_7min_pct"`
+	LatePct           float64        `json:"late_pct"`
+	EarlyPct          float64        `json:"early_pct"`
+	P50DelayMinutes   float64        `json:"p50_delay_minutes"`
+	P95DelayMinutes   float64        `json:"p95_delay_minutes"`
+	AvgSpeedMph       float64        `json:"avg_speed_mph"`
+	Bunching          *bunchingStats `json:"bunching,omitempty"`
 }
 
 type scheduleCompliance struct {
@@ -106,32 +107,33 @@ type notCompletedDistribution struct {
 }
 
 type routeStats struct {
-	RouteID          string   `json:"route_id"`
-	TripsObserved    int64    `json:"trips_observed"`
-	Observations     int64    `json:"observations"`
-	OnTimePct        float64  `json:"on_time_pct"`
-	Within5MinPct    float64  `json:"within_5min_pct"`
-	Within7MinPct    float64  `json:"within_7min_pct"`
-	LatePct          float64  `json:"late_pct"`
-	EarlyPct         float64  `json:"early_pct"`
-	P5DelayMinutes   *float64 `json:"p5_delay_minutes"`
-	P25DelayMinutes  *float64 `json:"p25_delay_minutes"`
-	P50DelayMinutes  *float64 `json:"p50_delay_minutes"`
-	P75DelayMinutes  *float64 `json:"p75_delay_minutes"`
-	P95DelayMinutes  *float64 `json:"p95_delay_minutes"`
-	P50DistortionPct *float64 `json:"p50_distortion_pct"`
-	P95DistortionPct *float64 `json:"p95_distortion_pct"`
-	AvgSpeedMph      float64  `json:"avg_speed_mph"`
-	Color            string   `json:"color"`
-	TextColor        string   `json:"text_color"`
-	ScheduledTrips   int      `json:"scheduled_trips"`
-	RanTrips         int      `json:"ran_trips"`
-	Limited          bool     `json:"limited"`
-	TripDeliveryPct  *float64 `json:"trip_delivery_pct"`
-	StopSDPct        *float64 `json:"stop_sd_pct,omitempty"`
-	StopSDN          int64    `json:"stop_sd_n,omitempty"`
-	StopSDDeliveredN int64    `json:"stop_sd_delivered_n,omitempty"`
-	TwoBusGapWindows *int     `json:"two_bus_gap_windows,omitempty"`
+	RouteID          string         `json:"route_id"`
+	TripsObserved    int64          `json:"trips_observed"`
+	Observations     int64          `json:"observations"`
+	OnTimePct        float64        `json:"on_time_pct"`
+	Within5MinPct    float64        `json:"within_5min_pct"`
+	Within7MinPct    float64        `json:"within_7min_pct"`
+	LatePct          float64        `json:"late_pct"`
+	EarlyPct         float64        `json:"early_pct"`
+	P5DelayMinutes   *float64       `json:"p5_delay_minutes"`
+	P25DelayMinutes  *float64       `json:"p25_delay_minutes"`
+	P50DelayMinutes  *float64       `json:"p50_delay_minutes"`
+	P75DelayMinutes  *float64       `json:"p75_delay_minutes"`
+	P95DelayMinutes  *float64       `json:"p95_delay_minutes"`
+	P50DistortionPct *float64       `json:"p50_distortion_pct"`
+	P95DistortionPct *float64       `json:"p95_distortion_pct"`
+	AvgSpeedMph      float64        `json:"avg_speed_mph"`
+	Color            string         `json:"color"`
+	TextColor        string         `json:"text_color"`
+	ScheduledTrips   int            `json:"scheduled_trips"`
+	RanTrips         int            `json:"ran_trips"`
+	Limited          bool           `json:"limited"`
+	TripDeliveryPct  *float64       `json:"trip_delivery_pct"`
+	StopSDPct        *float64       `json:"stop_sd_pct,omitempty"`
+	StopSDN          int64          `json:"stop_sd_n,omitempty"`
+	StopSDDeliveredN int64          `json:"stop_sd_delivered_n,omitempty"`
+	TwoBusGapWindows *int           `json:"two_bus_gap_windows,omitempty"`
+	Bunching         *bunchingStats `json:"bunching,omitempty"`
 }
 
 type bqStatsStats struct {
@@ -233,6 +235,11 @@ func generateDailyStats(ctx context.Context, serviceDate civil.Date) (*dailyStat
 		return nil, fmt.Errorf("query observations: %w", err)
 	}
 	distHist, distByRoute := computeDistortion(observations, scheduleByStop)
+	systemBunching, routeBunching, err := calculateDailyBunching(ctx, zr, serviceDate, activeServices)
+	if err != nil {
+		return nil, fmt.Errorf("calculate bunching: %w", err)
+	}
+	sys.Bunching = systemBunching
 
 	// queryStatsPerRoute only returns routes that had ≥1 observation row in
 	// BigQuery for the day, so routes that were 100% dropped (or whose
@@ -255,6 +262,10 @@ func generateDailyStats(ctx context.Context, serviceDate civil.Date) (*dailyStat
 	var sysStopTotalN, sysStopDeliveredN int64
 	for i := range routes {
 		rid := routes[i].RouteID
+		routes[i].Bunching = routeBunching[rid]
+		if routes[i].Bunching == nil {
+			routes[i].Bunching = finalizeBunchingStats(bunchingAccumulator{}, nil, nil, time.Now().UTC(), 1, 1)
+		}
 		if c, ok := colors[rid]; ok {
 			routes[i].Color = c.color
 			routes[i].TextColor = c.text
@@ -325,7 +336,7 @@ func generateDailyStats(ctx context.Context, serviceDate civil.Date) (*dailyStat
 	}
 
 	out := &dailyStats{
-		MethodologyVersion:   2,
+		MethodologyVersion:   3,
 		ServiceDate:          serviceDate.String(),
 		GeneratedAt:          time.Now().UTC(),
 		System:               *sys,

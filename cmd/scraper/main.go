@@ -127,6 +127,7 @@ func main() {
 	http.HandleFunc("/generate-daily-stats", handleGenerateDailyStats)
 	http.HandleFunc("/generate-weekly-stats", handleGenerateWeeklyStats)
 	http.HandleFunc("/backfill-day", handleBackfillDay)
+	http.HandleFunc("/backfill-bunching", handleBackfillBunching)
 	http.HandleFunc("/", handleHealth)
 
 	slog.Info("listening", "port", port)
@@ -268,6 +269,37 @@ func handleBackfillDay(w http.ResponseWriter, r *http.Request) {
 	)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(stats)
+}
+
+func handleBackfillBunching(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	startDate, err := civil.ParseDate(r.URL.Query().Get("start_date"))
+	if err != nil {
+		http.Error(w, "invalid start_date: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	endDate, err := civil.ParseDate(r.URL.Query().Get("end_date"))
+	if err != nil {
+		http.Error(w, "invalid end_date: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	result, err := processBunchingBackfill(r.Context(), startDate, endDate, r.URL.Query().Get("force") == "true")
+	if err != nil {
+		slog.Error("backfill-bunching failed", "start_date", startDate.String(), "end_date", endDate.String(), "err", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	slog.Info("backfill-bunching ok",
+		"duration_ms", time.Since(start).Milliseconds(),
+		"start_date", result.StartDate,
+		"end_date", result.EndDate,
+		"daily_updated", result.DailyUpdated,
+		"daily_skipped", result.DailySkipped,
+		"daily_missing", result.DailyMissing,
+		"weekly_updated", result.WeeklyUpdated,
+	)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(result)
 }
 
 func handleGenerateWeeklyStats(w http.ResponseWriter, r *http.Request) {
