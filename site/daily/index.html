@@ -54,6 +54,24 @@
     </div>
   </section>
 
+  <section id="daily-bunching-section" class="bunching-section bunching-dashboard-section">
+    <div class="bunching-heading">
+      <div>
+        <p class="bunching-kicker">Service regularity</p>
+        <h2>Bus spacing and bunching</h2>
+        <p class="muted"><strong>Headway CV</strong> means coefficient of variation (<code>standard deviation ÷ mean</code>); lower values mean buses were more evenly spaced.</p>
+      </div>
+    </div>
+    <div id="daily-bunching-warning" class="bunching-data-warning" role="status" hidden></div>
+    <div id="daily-bunching-cards" class="cards bunching-cards"></div>
+    <div id="daily-bunching-hour-card" class="bunching-chart-card">
+      <h3>Headway CV by hour</h3>
+      <p class="muted">CV is the coefficient of variation (<code>standard deviation ÷ mean</code>) for each Pacific hour. Lower is more even.</p>
+      <div class="bunching-chart-canvas"><canvas id="daily-bunching-hour-chart"></canvas></div>
+    </div>
+    <div id="daily-bunching-methodology"></div>
+  </section>
+
   <section id="volume-section" hidden>
     <h2>Observed arrivals by time of day</h2>
     <p class="muted defn">Each bar = total stop arrivals we recorded in a 15-minute window, from PT midnight to midnight, stacked by route. Top-10 routes (by total arrivals for the day) are colored individually; everything else is grouped into <strong>Other</strong>. Limited non-Transbay routes are excluded.</p>
@@ -73,7 +91,7 @@
 
   <section>
     <h2>Per-route</h2>
-    <p class="muted">Click a column header to sort. Click any row to expand it for the full per-route metric list.</p>
+    <p class="muted">Click a column header to sort. Click any row to expand it for the full per-route metric list. Headway CV is the coefficient of variation (<code>standard deviation ÷ mean</code>).</p>
     <p class="muted defn">Limited routes have fewer than 10 scheduled runs that day. Lettered Transbay routes are always included.</p>
     <div class="route-controls">
       <input type="text" id="route-filter" placeholder="Filter routes…" autocomplete="off">
@@ -91,6 +109,8 @@
             <th data-key="stop_sd_pct">On Time Service Delivered %</th>
             <th data-key="on_time_pct">On time % (≤3 min)</th>
             <th data-key="p50_delay_minutes">p50 delay (min)</th>
+            <th data-key="bunching_cv">Headway CV</th>
+            <th data-key="bunching_status">Bunching status</th>
             <th class="expand-th"></th>
           </tr>
         </thead>
@@ -105,8 +125,8 @@
     </a>
   </footer>
 
-  <script src="../lib.js"></script>
-  <script src="app.js"></script>
+  <script src="../lib.js?v=bunching-v3"></script>
+  <script src="app.js?v=bunching-v3"></script>
   <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "0e36b12e46b04a69b5e9ff6883f6d23d"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
 </html>

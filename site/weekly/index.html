@@ -43,6 +43,47 @@
     <div id="schedule-cards" class="cards"></div>
   </section>
 
+  <section id="weekly-bunching-section" class="bunching-section bunching-dashboard-section">
+    <div class="bunching-heading">
+      <div>
+        <p class="bunching-kicker">Seven-day service regularity</p>
+        <h2>Bus spacing and bunching</h2>
+        <p class="muted"><strong>Headway CV</strong> means coefficient of variation (<code>standard deviation ÷ mean</code>); lower values mean more even spacing. Weekly results are recomputed from additive daily headway totals rather than averaged daily percentages.</p>
+      </div>
+    </div>
+    <div id="weekly-bunching-warning" class="bunching-data-warning" role="status" hidden></div>
+    <div id="weekly-bunching-cards" class="cards bunching-cards"></div>
+    <div id="weekly-bunching-hour-card" class="bunching-chart-card">
+      <h3>Headway CV by hour</h3>
+      <p class="muted">CV is the coefficient of variation (<code>standard deviation ÷ mean</code>) for each Pacific hour. Lower is more even.</p>
+      <div class="bunching-chart-canvas"><canvas id="weekly-bunching-hour-chart"></canvas></div>
+    </div>
+    <h3 class="sub-h">Per-route weekly spacing</h3>
+    <div class="route-controls">
+      <input type="text" id="weekly-bunching-filter" placeholder="Filter routes…" autocomplete="off">
+      <button id="weekly-bunching-limited-toggle" type="button" aria-pressed="false">Show Limited Routes</button>
+      <label class="route-checkbox"><input id="weekly-bunching-low-frequency-toggle" type="checkbox"> Show too-low-frequency routes</label>
+      <span id="weekly-bunching-status" class="muted limited-route-status"></span>
+    </div>
+    <div class="table-wrap bounded-table-wrap">
+      <table id="weekly-bunching-table" class="bunching-metric-table">
+        <thead>
+          <tr>
+            <th data-key="route_id">Route</th>
+            <th data-key="bunching_status">Status</th>
+            <th data-key="bunching_cv">Headway CV</th>
+            <th data-key="bunched_headway_pct">Bunched arrivals</th>
+            <th data-key="long_gap_pct">Long gaps</th>
+            <th data-key="spacing_penalty_min">Spacing penalty</th>
+            <th data-key="cv_headway_n">Comparable headways</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div id="weekly-bunching-methodology"></div>
+  </section>
+
   <section>
     <h2>Trip delivery by day</h2>
     <p class="muted defn">Trips observed running ÷ trips scheduled, per day. Click a bar to drill into that day.</p>
@@ -99,8 +140,8 @@
     </a>
   </footer>
 
-  <script src="../lib.js"></script>
-  <script src="app.js"></script>
+  <script src="../lib.js?v=bunching-v3"></script>
+  <script src="app.js?v=bunching-v3"></script>
   <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "0e36b12e46b04a69b5e9ff6883f6d23d"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
 </html>

@@ -8,14 +8,20 @@ const IDEAL_SPEED_MPH = 13;
 const HISTORY_MONTHS = 6;
 const HISTORY_STEP_DAYS = 7;
 const HISTORY_FETCH_BATCH = 24;
+const BUNCHING_PROGRESS_POINTS = [10, 25, 40, 55, 70, 85];
+const BUNCHING_METHODOLOGY_VERSION = 2;
+const BUNCHING_MAX_FREQUENCY_MIN = 40;
+const BUNCHING_MIN_CV_WEIGHT = 100;
+const BUNCHING_MIN_CV_COVERAGE = 0.10;
+const BUNCHING_GRADE_WEIGHT = 35;
 
 // Composite weights. Components with no data for a route are dropped and
 // the remaining weights renormalized at score time.
 const WEIGHTS = {
-  stop_sd: 60,
-  on_time: 15,
+  stop_sd: 40,
+  on_time: 10,
   speed: 15,
-  headway: 10,
+  bunching: BUNCHING_GRADE_WEIGHT,
 };
 
 // Letter-grade bands keyed by inclusive lower bound. Standard US scale:
@@ -69,6 +75,197 @@ async function latestWeekEnd() {
   }
 }
 
+function emptyBunchingAccumulator() {
+  return {
+    headway_n: 0,
+    cell_n: 0,
+    comparison_n: 0,
+    bunched_headway_n: 0,
+    long_gap_n: 0,
+    scheduled_headway_n: 0,
+    all_scheduled_headway_n: 0,
+    cv_weighted_sum: 0,
+    cv_weight: 0,
+    observed_headway_seconds: 0,
+    observed_headway_squared_seconds: 0,
+    comparable_headway_seconds: 0,
+    comparable_headway_squared_seconds: 0,
+    even_spacing_wait_area_seconds_squared: 0,
+    scheduled_headway_seconds: 0,
+    scheduled_headway_squared_seconds: 0,
+    all_scheduled_headway_seconds: 0,
+  };
+}
+
+function addBunchingMetrics(acc, metrics) {
+  if (!metrics) return;
+  const aggregation = metrics.aggregation || {};
+  for (const key of [
+    "headway_n", "cell_n", "comparison_n", "bunched_headway_n",
+    "long_gap_n", "scheduled_headway_n", "all_scheduled_headway_n",
+  ]) {
+    acc[key] += Number(metrics[key]) || 0;
+  }
+  for (const key of [
+    "cv_weighted_sum", "cv_weight", "observed_headway_seconds",
+    "observed_headway_squared_seconds", "comparable_headway_seconds",
+    "comparable_headway_squared_seconds", "even_spacing_wait_area_seconds_squared",
+    "scheduled_headway_seconds", "scheduled_headway_squared_seconds",
+    "all_scheduled_headway_seconds",
+  ]) {
+    acc[key] += Number(aggregation[key]) || 0;
+  }
+}
+
+function metricsFromBunchingAccumulator(acc) {
+  const expectedWait = acc.comparable_headway_seconds > 0
+    ? acc.comparable_headway_squared_seconds / (2 * acc.comparable_headway_seconds) / 60
+    : null;
+  const evenSpacingWait = acc.comparable_headway_seconds > 0
+    ? acc.even_spacing_wait_area_seconds_squared / acc.comparable_headway_seconds / 60
+    : null;
+  const scheduledWait = acc.scheduled_headway_seconds > 0
+    ? acc.scheduled_headway_squared_seconds / (2 * acc.scheduled_headway_seconds) / 60
+    : null;
+  return {
+    headway_n: acc.headway_n,
+    cell_n: acc.cell_n,
+    comparison_n: acc.comparison_n,
+    bunched_headway_n: acc.bunched_headway_n,
+    long_gap_n: acc.long_gap_n,
+    scheduled_headway_n: acc.scheduled_headway_n,
+    all_scheduled_headway_n: acc.all_scheduled_headway_n,
+    headway_cv: acc.cv_weight > 0 ? acc.cv_weighted_sum / acc.cv_weight : null,
+    bunched_headway_pct: acc.comparison_n > 0
+      ? 100 * acc.bunched_headway_n / acc.comparison_n
+      : null,
+    long_gap_pct: acc.comparison_n > 0
+      ? 100 * acc.long_gap_n / acc.comparison_n
+      : null,
+    mean_headway_min: acc.headway_n > 0
+      ? acc.observed_headway_seconds / acc.headway_n / 60
+      : null,
+    expected_wait_min: expectedWait,
+    scheduled_expected_wait_min: scheduledWait,
+    even_spacing_wait_min: evenSpacingWait,
+    spacing_penalty_min: expectedWait != null && evenSpacingWait != null
+      ? Math.max(0, expectedWait - evenSpacingWait)
+      : null,
+    aggregation: {
+      cv_weighted_sum: acc.cv_weighted_sum,
+      cv_weight: acc.cv_weight,
+      observed_headway_seconds: acc.observed_headway_seconds,
+      observed_headway_squared_seconds: acc.observed_headway_squared_seconds,
+      comparable_headway_seconds: acc.comparable_headway_seconds,
+      comparable_headway_squared_seconds: acc.comparable_headway_squared_seconds,
+      even_spacing_wait_area_seconds_squared: acc.even_spacing_wait_area_seconds_squared,
+      scheduled_headway_seconds: acc.scheduled_headway_seconds,
+      scheduled_headway_squared_seconds: acc.scheduled_headway_squared_seconds,
+      all_scheduled_headway_seconds: acc.all_scheduled_headway_seconds,
+    },
+  };
+}
+
+function bunchingEligibility(bunching) {
+  const cvWeight = Number(bunching.aggregation && bunching.aggregation.cv_weight) || 0;
+  const headways = Number(bunching.headway_n) || 0;
+  const coveragePct = headways > 0 ? 100 * cvWeight / headways : 0;
+  const shared = {
+    cv_headway_n: cvWeight,
+    cv_coverage_pct: coveragePct,
+    minimum_cv_headway_n: BUNCHING_MIN_CV_WEIGHT,
+    minimum_coverage_pct: 100 * BUNCHING_MIN_CV_COVERAGE,
+    maximum_frequency_min: BUNCHING_MAX_FREQUENCY_MIN,
+  };
+  if ((Number(bunching.scheduled_headway_n) || 0) === 0 &&
+      (Number(bunching.all_scheduled_headway_n) || 0) > 0) {
+    return { eligible: false, reason: "too_low_frequency", ...shared };
+  }
+  if (cvWeight < BUNCHING_MIN_CV_WEIGHT) {
+    return { eligible: false, reason: "not_enough_comparable_headways", ...shared };
+  }
+  if (coveragePct < 100 * BUNCHING_MIN_CV_COVERAGE) {
+    return { eligible: false, reason: "low_comparable_headway_coverage", ...shared };
+  }
+  return { eligible: true, ...shared };
+}
+
+function aggregateBunchingPayloads(payloads, expectedDays) {
+  const values = Array.isArray(payloads) ? payloads : [];
+  const expected = expectedDays == null
+    ? values.reduce((sum, value) => sum + (Number(value && value.days_expected) || 1), 0)
+    : expectedDays;
+  const total = emptyBunchingAccumulator();
+  const progress = new Map();
+  let available = 0;
+
+  for (const value of values) {
+    if (!value || value.methodology_version !== BUNCHING_METHODOLOGY_VERSION || !value.aggregation) continue;
+    available += Number(value.days_available) || 0;
+    addBunchingMetrics(total, value);
+    for (const point of value.by_progress || []) {
+      let acc = progress.get(point.progress_pct);
+      if (!acc) {
+        acc = emptyBunchingAccumulator();
+        progress.set(point.progress_pct, acc);
+      }
+      addBunchingMetrics(acc, point);
+    }
+  }
+
+  available = Math.min(available, expected);
+  const metrics = metricsFromBunchingAccumulator(total);
+  const eligibility = bunchingEligibility(metrics);
+  let status = "available";
+  if (available === 0) status = "missing";
+  else if (available < expected) status = "partial";
+  else if (!eligibility.eligible) status = eligibility.reason;
+
+  return {
+    methodology_version: BUNCHING_METHODOLOGY_VERSION,
+    days_expected: expected,
+    days_available: available,
+    missing_days: Math.max(0, expected - available),
+    status,
+    eligibility,
+    ...metrics,
+    by_progress: BUNCHING_PROGRESS_POINTS.map((progressPct) => {
+      const acc = progress.get(progressPct);
+      if (!acc) return { progress_pct: progressPct, status: "insufficient_data", headway_cv: null };
+      const point = metricsFromBunchingAccumulator(acc);
+      return {
+        progress_pct: progressPct,
+        status: point.headway_cv == null ? "insufficient_data" : "available",
+        ...point,
+      };
+    }),
+  };
+}
+
+function bunchingViewMetrics(bunching) {
+  if (!bunching) return {
+    bunching: null,
+    bunching_grade_eligible: false,
+    headway_cv: null,
+    headway_n: 0,
+    progress_cv: BUNCHING_PROGRESS_POINTS.map(() => null),
+  };
+  return {
+    bunching,
+    bunching_grade_eligible: bunching.status === "available" && Boolean(bunching.eligibility && bunching.eligibility.eligible),
+    headway_cv: bunching.headway_cv,
+    headway_n: bunching.headway_n,
+    bunched_headway_pct: bunching.bunched_headway_pct,
+    long_gap_pct: bunching.long_gap_pct,
+    mean_headway_min: bunching.mean_headway_min,
+    expected_wait_min: bunching.expected_wait_min,
+    scheduled_expected_wait_min: bunching.scheduled_expected_wait_min,
+    even_spacing_wait_min: bunching.even_spacing_wait_min,
+    spacing_penalty_min: bunching.spacing_penalty_min,
+    progress_cv: (bunching.by_progress || []).map((point) => point.headway_cv),
+  };
+}
+
 // Aggregate every route across the fetched daily payloads. On Time Service Delivered
 // uses exact qualifying/scheduled counts; observed-only metrics are weighted
 // by that day's observation count.
@@ -94,7 +291,7 @@ function aggregateRoutes(dailies) {
           ot_sum: 0, ot_w: 0,
           sp_sum: 0, sp_w: 0,
           p95_sum: 0, p95_w: 0,
-          dist_sum: 0, dist_w: 0,
+          bunching: [],
         };
         acc.set(r.route_id, a);
       }
@@ -103,6 +300,7 @@ function aggregateRoutes(dailies) {
         a.scheduled_runs += scheduled;
         a.scheduled_days += 1;
       }
+      if (scheduled > 0 || w > 0) a.bunching.push(r.bunching || null);
       const stopN = Number(r.stop_sd_n) || 0;
       if (stopN > 0) {
         a.sd_n += stopN;
@@ -118,7 +316,6 @@ function aggregateRoutes(dailies) {
       if (r.on_time_pct != null) { a.ot_sum += r.on_time_pct * w; a.ot_w += w; }
       if (r.avg_speed_mph != null) { a.sp_sum += r.avg_speed_mph * w; a.sp_w += w; }
       if (r.p95_delay_minutes != null) { a.p95_sum += r.p95_delay_minutes * w; a.p95_w += w; }
-      if (r.p50_distortion_pct != null) { a.dist_sum += r.p50_distortion_pct * w; a.dist_w += w; }
     }
   }
 
@@ -132,8 +329,9 @@ function aggregateRoutes(dailies) {
       on_time_pct: a.ot_w ? a.ot_sum / a.ot_w : null,
       avg_speed_mph: a.sp_w ? a.sp_sum / a.sp_w : null,
       p95_delay_minutes: a.p95_w ? a.p95_sum / a.p95_w : null,
-      p50_distortion_pct: a.dist_w ? a.dist_sum / a.dist_w : null,
     };
+    const bunching = aggregateBunchingPayloads(a.bunching, a.bunching.length);
+    Object.assign(metrics, bunchingViewMetrics(bunching));
 
     out.push({
       route_id: a.route_id,
@@ -160,13 +358,19 @@ function clamp(v) {
   return Math.max(0, Math.min(100, v));
 }
 
-// Composite of the four sub-scores from already-0-100 metric values.
-function compositeScore({ stop_sd_pct, on_time_pct, avg_speed_mph, p50_distortion_pct }) {
+function bunchingScore(cv) {
+  return clamp(100 * (1 - Number(cv)));
+}
+
+function compositeScore(metrics) {
+  const { stop_sd_pct, on_time_pct, avg_speed_mph, headway_cv } = metrics;
   const parts = [];
   if (stop_sd_pct != null) parts.push([WEIGHTS.stop_sd, clamp(stop_sd_pct)]);
   if (on_time_pct != null) parts.push([WEIGHTS.on_time, clamp(on_time_pct)]);
   if (avg_speed_mph != null) parts.push([WEIGHTS.speed, clamp((avg_speed_mph / IDEAL_SPEED_MPH) * 100)]);
-  if (p50_distortion_pct != null) parts.push([WEIGHTS.headway, clamp(100 - Math.min(100, Math.abs(p50_distortion_pct)))]);
+  if (metrics.bunching_grade_eligible && headway_cv != null) {
+    parts.push([WEIGHTS.bunching, bunchingScore(headway_cv)]);
+  }
   const wsum = parts.reduce((s, [w]) => s + w, 0);
   return wsum ? parts.reduce((s, [w, v]) => s + w * v, 0) / wsum : null;
 }
@@ -178,7 +382,7 @@ function compositeScore({ stop_sd_pct, on_time_pct, avg_speed_mph, p50_distortio
 // formula applied to those agency-wide metric values.
 function aggregateAgency(routes) {
   const acc = { obs: 0, trips: 0 };
-  const m = { stop_sd_pct: [0, 0], on_time_pct: [0, 0], avg_speed_mph: [0, 0], p95_delay_minutes: [0, 0], p50_distortion_pct: [0, 0] };
+  const m = { stop_sd_pct: [0, 0], on_time_pct: [0, 0], avg_speed_mph: [0, 0], p95_delay_minutes: [0, 0] };
   for (const r of routes) {
     const w = r.observations || 0;
     if (w <= 0) continue;
@@ -189,18 +393,51 @@ function aggregateAgency(routes) {
     }
   }
   const mean = (k) => (m[k][1] ? m[k][0] / m[k][1] : null);
+  const expectedBunchingDays = routes.reduce(
+    (sum, route) => sum + (Number(route.bunching && route.bunching.days_expected) || 0),
+    0
+  );
+  const bunching = aggregateBunchingPayloads(
+    routes.map((route) => route.bunching),
+    expectedBunchingDays
+  );
   const agency = {
     stop_sd_pct: mean("stop_sd_pct"),
     on_time_pct: mean("on_time_pct"),
     avg_speed_mph: mean("avg_speed_mph"),
     p95_delay_minutes: mean("p95_delay_minutes"),
-    p50_distortion_pct: mean("p50_distortion_pct"),
     trips: acc.trips,
     observations: acc.obs,
     routes: routes.length,
+    ...bunchingViewMetrics(bunching),
   };
   agency.score = compositeScore(agency);
   return agency;
+}
+
+function bunchingGradeWarning(bunching, unit = "service days") {
+  if (!bunching) {
+    return `Bunching data is missing for this four-week window. Its ${BUNCHING_GRADE_WEIGHT}% grade component is not used; the other available components are renormalized.`;
+  }
+  const suffix = `Its ${BUNCHING_GRADE_WEIGHT}% grade component is not used; the other available components are renormalized.`;
+  if (bunching.status === "partial") {
+    return `Bunching data is partial (${intFmt(bunching.days_available)} of ${intFmt(bunching.days_expected)} ${unit}). ${suffix}`;
+  }
+  if (bunching.status === "missing") {
+    return `Bunching data is missing or uses an earlier methodology for this four-week window. ${suffix}`;
+  }
+  const eligibility = bunching.eligibility || {};
+  if (eligibility.eligible) return "";
+  if (eligibility.reason === "too_low_frequency") {
+    return `This route has no scheduled headways of ${fmt(eligibility.maximum_frequency_min || BUNCHING_MAX_FREQUENCY_MIN, 0)} minutes or less. Low-frequency routes are ungraded on bunching. ${suffix}`;
+  }
+  if (eligibility.reason === "not_enough_comparable_headways") {
+    return `Only ${intFmt(eligibility.cv_headway_n)} comparable headways qualify for the CV; at least ${intFmt(eligibility.minimum_cv_headway_n || BUNCHING_MIN_CV_WEIGHT)} are required. ${suffix}`;
+  }
+  if (eligibility.reason === "low_comparable_headway_coverage") {
+    return `Only ${fmt(eligibility.cv_coverage_pct)}% of measured headways qualify for the CV; at least ${fmt(eligibility.minimum_coverage_pct || 100 * BUNCHING_MIN_CV_COVERAGE, 0)}% coverage is required. ${suffix}`;
+  }
+  return `Bunching is not eligible for grading in this window. ${suffix}`;
 }
 
 function renderAgencyHero(a) {
@@ -209,6 +446,8 @@ function renderAgencyHero(a) {
   if (a.score == null) { el.hidden = true; return; }
   const g = scoreColor(a.score);
   const grade = letterGrade(a.score);
+  const hasBunching = a.headway_cv != null;
+  const bunchingWarning = bunchingGradeWarning(a.bunching, "route-days");
   const speedPct = a.avg_speed_mph == null ? null : Math.min(100, (a.avg_speed_mph / IDEAL_SPEED_MPH) * 100);
   const stat = (label, val, sub = "") =>
     `<div class="agency-stat"><span class="as-val">${val}</span><span class="as-label">${label}</span>${sub ? `<span class="as-sub">${sub}</span>` : ""}</div>`;
@@ -220,13 +459,20 @@ function renderAgencyHero(a) {
       </div>
       <div class="agency-body">
         <div class="agency-title">Agency-wide grade</div>
-        <div class="agency-sub">Non-limited routes over the last four weeks, weighted by each route's share of measured trip-stops. Lettered Transbay routes remain included.</div>
+        <div class="agency-sub">Non-limited routes over the last four weeks, weighted by each route's share of measured trip-stops. Lettered Transbay routes remain included.${a.bunching_grade_eligible ? ` Bus spacing contributes ${BUNCHING_GRADE_WEIGHT}% of the score.` : ""}</div>
+        ${bunchingWarning ? `<div class="grade-data-warning" role="status"><strong>Bunching excluded from this grade.</strong> ${bunchingWarning}</div>` : ""}
         <div class="agency-stats">
           ${stat("On Time Service Delivered", a.stop_sd_pct == null ? "—" : fmt(a.stop_sd_pct) + "%")}
           ${stat("On time (≤3 min)", a.on_time_pct == null ? "—" : fmt(a.on_time_pct) + "%")}
           ${stat("p95 delay", a.p95_delay_minutes == null ? "—" : fmt(a.p95_delay_minutes) + " min")}
           ${stat("Avg speed", fmt(a.avg_speed_mph) + " mph", speedPct == null ? "" : `${fmt(speedPct, 0)}% of ideal`)}
-          ${stat("Headway p50 Δ", a.p50_distortion_pct == null ? "—" : fmt(a.p50_distortion_pct) + "%")}
+          ${hasBunching
+            ? stat("Headway CV", fmt(a.headway_cv, 2), a.bunching_grade_eligible
+              ? `${fmt(bunchingScore(a.headway_cv), 0)} / 100 sub-score`
+              : "not used in this grade")
+            : stat("Headway CV", "—", "not used in this grade")}
+          ${hasBunching ? stat("Bunched arrivals", `${fmt(a.bunched_headway_pct)}%`) : ""}
+          ${hasBunching ? stat("Spacing penalty", `+${fmt(a.spacing_penalty_min)} min`) : ""}
           ${stat("Routes graded", intFmt(a.routes))}
           ${stat("Unique trips", intFmt(a.trips))}
           ${stat("Stops measured", intFmt(a.observations))}
@@ -421,6 +667,167 @@ async function loadGradeHistory(dates, currentDailies, currentRoutes) {
   renderGradeHistory(points, topRoutes);
 }
 
+function renderBunchingMethodology() {
+  const el = document.getElementById("score-methodology");
+  el.innerHTML = `
+    <p class="muted defn">The composite score blends four rider-performance components over the trailing four-week window:</p>
+    <p class="muted defn"><strong>On Time Service Delivered — 40%.</strong> Percent of scheduled intermediate passenger-pickup stops reached between <strong>1 min early</strong> and <strong>7 min late</strong> (<code>−60&nbsp;s&nbsp;≤&nbsp;delay&nbsp;≤&nbsp;420&nbsp;s</code>).</p>
+    <p class="muted defn"><strong>On time — 10%.</strong> Percent of observed arrivals within <code>0&nbsp;≤&nbsp;delay&nbsp;≤&nbsp;3&nbsp;min</code> of schedule.</p>
+    <p class="muted defn"><strong>Speed vs. ideal — 15%.</strong> Average per-leg bus speed as a fraction of a <strong>13 mph</strong> ideal, capped at 100%.</p>
+    <p class="muted defn"><strong>Bus spacing and bunching — ${BUNCHING_GRADE_WEIGHT}%.</strong> Headway CV means <strong>coefficient of variation</strong>: <code>standard deviation ÷ mean</code>, calculated within comparable route, direction, stop, and hour cells and then weighted by contributing headways. A CV of 0 means perfectly even spacing; higher values mean increasingly uneven gaps. Only scheduled windows with headways of <strong>${BUNCHING_MAX_FREQUENCY_MIN} minutes or less</strong> are eligible; realized gaps below 30 seconds or above 90 minutes are excluded as duplicate and overnight/outlier guards. The sub-score is <code>100 × (1 − CV)</code>, clamped to 0–100. Bunched-arrival values are already percentages: <strong>0.1 means 0.1%</strong> (about one in 1,000 comparable headways), not 10%. Method inspired by <a href="https://sal-khan.com/bus-bunching.html" target="_blank" rel="noopener">Salman Khan’s bus-bunching project</a> and adapted to AC Transit arrivals and schedules.</p>
+    <p class="muted defn"><strong>Eligibility and missing-data behavior.</strong> Bunching is used only when the complete evaluation window has at least ${BUNCHING_MIN_CV_WEIGHT} comparable headways covering at least ${fmt(100 * BUNCHING_MIN_CV_COVERAGE, 0)}% of measured eligible headways. Routes without any scheduled headways of ${BUNCHING_MAX_FREQUENCY_MIN} minutes or less are considered too low-frequency and are ungraded on bunching. Missing, partial, and ineligible bunching data drops the ${BUNCHING_GRADE_WEIGHT}% component, renormalizes the other available components, and produces a grade warning.</p>
+  `;
+}
+
+function renderBunchingSection(routes, agency) {
+  const section = document.getElementById("bunching-section");
+  if (!section) return;
+  section.hidden = false;
+
+  renderCards("#bunching-cards", [
+    {
+      label: "Headway CV",
+      val: fmt(agency.headway_cv, 2),
+      grade: agency.headway_cv == null ? null : gradeColor(1 - agency.headway_cv),
+    },
+    {
+      label: "Bunched arrivals",
+      val: agency.bunched_headway_pct == null ? "—" : `${fmt(agency.bunched_headway_pct)}%`,
+      grade: agency.bunched_headway_pct == null ? null : gradeColor(1 - agency.bunched_headway_pct / 25),
+    },
+    {
+      label: "Long gaps",
+      val: agency.long_gap_pct == null ? "—" : `${fmt(agency.long_gap_pct)}%`,
+      grade: agency.long_gap_pct == null ? null : gradeColor(1 - agency.long_gap_pct / 30),
+    },
+    {
+      label: "Headways measured",
+      val: intFmt(agency.headway_n),
+    },
+  ]);
+
+  document.getElementById("bunching-even-wait").textContent = agency.even_spacing_wait_min == null
+    ? "—"
+    : `${fmt(agency.even_spacing_wait_min)} min`;
+  document.getElementById("bunching-observed-wait").textContent = agency.expected_wait_min == null
+    ? "—"
+    : `${fmt(agency.expected_wait_min)} min`;
+  document.getElementById("bunching-wait-tax").textContent = agency.spacing_penalty_min == null
+    ? "—"
+    : `+${fmt(agency.spacing_penalty_min)} min`;
+  document.getElementById("bunching-scheduled-wait").textContent = agency.scheduled_expected_wait_min == null
+    ? "—"
+    : `${fmt(agency.scheduled_expected_wait_min)} min`;
+
+  const ordered = [...routes].filter((route) => route.headway_cv != null)
+    .sort((a, b) => a.headway_cv - b.headway_cv);
+  const chartRoutes = [...ordered]
+    .sort((a, b) => b.scheduled_runs - a.scheduled_runs)
+    .slice(0, 20)
+    .sort((a, b) => a.headway_cv - b.headway_cv);
+  document.querySelector(".bunching-cv-canvas").style.height = `${Math.max(330, chartRoutes.length * 27)}px`;
+  const benchmarkPlugin = {
+    id: "cvBenchmark",
+    afterDraw(chart) {
+      const x = chart.scales.x.getPixelForValue(0.3);
+      const { top, bottom } = chart.chartArea;
+      chart.ctx.save();
+      chart.ctx.strokeStyle = "#2f8f46";
+      chart.ctx.lineWidth = 2;
+      chart.ctx.setLineDash([5, 4]);
+      chart.ctx.beginPath();
+      chart.ctx.moveTo(x, top);
+      chart.ctx.lineTo(x, bottom);
+      chart.ctx.stroke();
+      chart.ctx.restore();
+    },
+  };
+  new Chart(document.getElementById("bunching-route-chart"), {
+    type: "bar",
+    data: {
+      labels: chartRoutes.map((route) => `Route ${route.route_id}`),
+      datasets: [{
+        label: "Headway CV",
+        data: chartRoutes.map((route) => route.headway_cv),
+        backgroundColor: chartRoutes.map((route) => gradeColor(1 - route.headway_cv).bg),
+        borderRadius: 4,
+        borderSkipped: false,
+      }],
+    },
+    plugins: [benchmarkPlugin],
+    options: {
+      indexAxis: "y",
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const route = chartRoutes[ctx.dataIndex];
+              return `CV ${fmt(route.headway_cv, 2)} · ${fmt(route.bunched_headway_pct)}% bunched · +${fmt(route.spacing_penalty_min)} min wait`;
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          beginAtZero: true,
+          max: 0.8,
+          title: { display: true, text: "headway coefficient of variation" },
+          ticks: { callback: (value) => Number(value).toFixed(1) },
+        },
+        y: { grid: { display: false } },
+      },
+    },
+  });
+
+  const progressCandidates = ordered.filter((route) => route.progress_cv.some((value) => value != null));
+  const progressRoutes = [progressCandidates[0], progressCandidates[2], progressCandidates[Math.max(0, progressCandidates.length - 3)], progressCandidates[progressCandidates.length - 1]]
+    .filter((route, index, all) => route && all.indexOf(route) === index);
+  const lineColors = ["#2b8a3e", "#1971c2", "#e8590c", "#c92a2a"];
+  new Chart(document.getElementById("bunching-progress-chart"), {
+    type: "line",
+    data: {
+      labels: BUNCHING_PROGRESS_POINTS.map((point) => `${point}%`),
+      datasets: progressRoutes.map((route, index) => ({
+        label: `Route ${route.route_id}`,
+        data: route.progress_cv,
+        borderColor: lineColors[index],
+        backgroundColor: lineColors[index],
+        borderWidth: 2.5,
+        pointRadius: 3,
+        tension: 0.22,
+      })),
+    },
+    options: {
+      maintainAspectRatio: false,
+      plugins: { legend: { position: "bottom", labels: { usePointStyle: true, boxWidth: 8 } } },
+      scales: {
+        x: { title: { display: true, text: "progress along route" }, grid: { display: false } },
+        y: { beginAtZero: true, max: 0.9, title: { display: true, text: "headway CV" } },
+      },
+    },
+  });
+
+  document.querySelector("#bunching-table tbody").innerHTML = ordered.map((route) => {
+    const progress = route.progress_cv || [];
+    const availableProgress = progress.filter((value) => value != null);
+    const first = availableProgress.length ? availableProgress[0] : null;
+    const last = availableProgress.length ? availableProgress[availableProgress.length - 1] : null;
+    const cvGrade = gradeColor(1 - route.headway_cv);
+    return `
+      <tr>
+        <td>${routeBadge(route)}</td>
+        <td><span class="metric-pill" style="background:${cvGrade.bg};color:${cvGrade.fg}">${fmt(route.headway_cv, 2)}</span></td>
+        <td>${fmt(route.bunched_headway_pct)}%</td>
+        <td>${fmt(route.long_gap_pct)}%</td>
+        <td>+${fmt(route.spacing_penalty_min)} min</td>
+        <td>${first == null ? "—" : `${fmt(first, 2)} → ${fmt(last, 2)}`}</td>
+        <td>${intFmt(route.headway_n)}</td>
+      </tr>`;
+  }).join("");
+}
+
 async function load() {
   const yearEl = document.getElementById("footer-year");
   if (yearEl) yearEl.textContent = new Date().getFullYear();
@@ -446,7 +853,10 @@ async function load() {
   const routes = aggregateRoutes(dailies).filter((r) => r.score != null);
   const includedRoutes = routes.filter((r) => !isLimitedRoute(r));
 
-  renderAgencyHero(aggregateAgency(includedRoutes));
+  const agency = aggregateAgency(includedRoutes);
+  renderAgencyHero(agency);
+  renderBunchingSection(routes, agency);
+  renderBunchingMethodology();
 
   const observed = dailies
     .map((d) => d.service_date)
@@ -513,9 +923,27 @@ function render(routes, weekEnd) {
         const grade = letterGrade(r.score);
         const isOpen = expanded.has(r.route_id);
         const detailHidden = isOpen ? "" : "hidden";
+        const routeBunchingWarning = bunchingGradeWarning(r.bunching);
+        const gradeWarningFlag = routeBunchingWarning
+          ? `<span class="grade-data-flag" title="Bunching is excluded from this grade; expand the route for details" aria-label="Bunching excluded from this grade">!</span>`
+          : "";
+        const bunchingDetail = `${routeBunchingWarning ? `<div class="route-grade-warning"><dt>Grade warning</dt><dd><strong>Bunching excluded.</strong> ${routeBunchingWarning}</dd></div>` : ""}
+            <div><dt>Headway CV</dt><dd>${r.headway_cv == null
+              ? "—"
+              : `${fmt(r.headway_cv, 2)} (${r.bunching_grade_eligible
+                ? `bunching sub-score ${fmt(bunchingScore(r.headway_cv), 0)} / 100`
+                : "not used in this grade"})`}</dd></div>
+            <div><dt>Bunched arrivals</dt><dd>${r.bunched_headway_pct == null ? "—" : `${fmt(r.bunched_headway_pct)}%`}</dd></div>
+            <div><dt>Long gaps</dt><dd>${r.long_gap_pct == null ? "—" : `${fmt(r.long_gap_pct)}%`}</dd></div>
+            <div><dt>Observed vs evenly spaced wait</dt><dd>${r.expected_wait_min == null
+              ? "—"
+              : `${fmt(r.expected_wait_min)} min observed vs ${fmt(r.even_spacing_wait_min)} min at the same realized frequency`}</dd></div>
+            <div><dt>Published schedule wait</dt><dd>${r.scheduled_expected_wait_min == null ? "—" : `${fmt(r.scheduled_expected_wait_min)} min for eligible scheduled headways`}</dd></div>
+            <div><dt>Spacing penalty</dt><dd>${r.spacing_penalty_min == null ? "—" : `+${fmt(r.spacing_penalty_min)} min per random-arrival rider`}</dd></div>
+            <div><dt>Headways measured</dt><dd>${intFmt(r.headway_n)}</dd></div>`;
         return `
       <tr class="route-row ${isOpen ? "is-open" : ""}" data-rid="${r.route_id}">
-        <td><span class="grade-badge" style="background:${g.bg};color:${g.fg}" title="composite score ${fmt(r.score)} / 100">${grade}</span></td>
+        <td><span class="grade-badge" style="background:${g.bg};color:${g.fg}" title="composite score ${fmt(r.score)} / 100">${grade}</span>${gradeWarningFlag}</td>
         <td>${routeBadge(r)}${limitedRouteTag(r)}</td>
         <td title="composite score / 100">${fmt(r.score)}</td>
         <td>${intFmt(r.trips_observed)}</td>
@@ -531,7 +959,7 @@ function render(routes, weekEnd) {
             <div><dt>On time (≤3 min)</dt><dd>${pill(r.on_time_pct, gradeOnTime)}</dd></div>
             <div><dt>p95 delay</dt><dd>${r.p95_delay_minutes == null ? "—" : fmt(r.p95_delay_minutes) + " min"}</dd></div>
             <div><dt>Avg speed</dt><dd>${fmt(r.avg_speed_mph)} mph (speed sub-score ${fmt(Math.min(100, (r.avg_speed_mph || 0) / IDEAL_SPEED_MPH * 100), 0)} / 100, capped at the ${IDEAL_SPEED_MPH} mph ideal)</dd></div>
-            <div><dt>p50 headway distortion</dt><dd>${r.p50_distortion_pct == null ? "—" : fmt(r.p50_distortion_pct) + "%"}</dd></div>
+            ${bunchingDetail}
             <div><dt>Unique trips observed</dt><dd>${intFmt(r.trips_observed)}</dd></div>
             <div><dt>Stops measured</dt><dd>${intFmt(r.observations)}</dd></div>
             <div><dt>Scheduled stops scored</dt><dd>${intFmt(r.scheduled_stops_scored)}</dd></div>

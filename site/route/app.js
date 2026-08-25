@@ -261,7 +261,15 @@ async function loadData() {
         routeDelayByHour = weekly.route_delay_by_hour[routeID] || null;
       }
     }
-    return { gtfs, stopStats, waitStats, speedStats, routeDailySD, routeDelayByHour };
+    return {
+      gtfs,
+      stopStats,
+      waitStats,
+      speedStats,
+      routeDailySD,
+      routeDelayByHour,
+      routeBunching: routeDailySD && routeDailySD.bunching,
+    };
   } catch (e) {
     document.getElementById("loading").textContent = `Failed to load data: ${e.message}`;
     return null;
@@ -895,6 +903,7 @@ async function boot() {
   }
 
   renderServiceDelivered(data.routeDailySD, data.routeDelayByHour);
+  renderRouteBusSpacing(data.routeBunching);
   renderWaitCallout(data.waitStats);
   renderWaitTime(data.waitStats);
   renderSpeed(data.speedStats);
@@ -926,6 +935,58 @@ async function boot() {
 // stop-level SD definition (−60 s … +420 s).
 const SD_WINDOW_LO_MIN = -1;
 const SD_WINDOW_HI_MIN = 7;
+
+function renderRouteBusSpacing(bunching) {
+  renderCards("#route-bunching-cards", busSpacingCardItems(bunching));
+  document.getElementById("route-bunching-methodology").innerHTML =
+    busSpacingMethodologyHTML(false);
+
+  const available = busSpacingAvailable(bunching);
+  const warning = document.getElementById("route-bunching-warning");
+  warning.hidden = available;
+  warning.textContent = available ? "" : busSpacingWarningText(bunching);
+  document.getElementById("route-bunching-sub").textContent = available
+    ? `Past week · CV ${fmt(bunching.headway_cv, 2)} · ${intFmt(bunching.eligibility.cv_headway_n)} comparable headways`
+    : `Past week · ${busSpacingStatusLabel(bunching)}`;
+
+  const progressCard = document.getElementById("route-bunching-progress-card");
+  const progress = bunching && Array.isArray(bunching.by_progress)
+    ? bunching.by_progress.filter((point) => point.headway_cv !== null && point.headway_cv !== undefined)
+    : [];
+  progressCard.hidden = progress.length === 0;
+  if (!progress.length) return;
+
+  new Chart(document.getElementById("route-bunching-progress-chart").getContext("2d"), {
+    type: "line",
+    data: {
+      labels: progress.map((point) => `${point.progress_pct}%`),
+      datasets: [{
+        label: "Headway CV",
+        data: progress.map((point) => point.headway_cv),
+        borderColor: "#1971c2",
+        backgroundColor: "rgba(25, 113, 194, 0.12)",
+        fill: true,
+        tension: 0.25,
+        pointRadius: 4,
+      }],
+    },
+    options: {
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            title: (ctx) => `${progress[ctx[0].dataIndex].progress_pct}% along route`,
+            label: (ctx) => `CV ${fmt(ctx.raw, 2)} · ${intFmt(progress[ctx.dataIndex].cv_weight)} comparable headways`,
+          },
+        },
+      },
+      scales: {
+        x: { grid: { display: false }, title: { display: true, text: "progress from route start" } },
+        y: { beginAtZero: true, title: { display: true, text: "headway CV (lower is better)" } },
+      },
+    },
+  });
+}
 
 // weekStopSD collapses a route's by_day[] into a single week SD% the same
 // way the backend aggregates it: delivered stops ÷ scheduled stops, i.e.

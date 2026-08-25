@@ -293,6 +293,54 @@ async function renderVolumeChart(vh, serviceDate, indexDates) {
   });
 }
 
+function renderDailyBusSpacing(bunching) {
+  renderCards("#daily-bunching-cards", busSpacingCardItems(bunching));
+  document.getElementById("daily-bunching-methodology").innerHTML =
+    busSpacingMethodologyHTML(false);
+
+  const warning = document.getElementById("daily-bunching-warning");
+  const available = busSpacingAvailable(bunching);
+  warning.hidden = available;
+  warning.textContent = available ? "" : busSpacingWarningText(bunching);
+
+  const hourCard = document.getElementById("daily-bunching-hour-card");
+  const hourly = bunching && Array.isArray(bunching.by_hour)
+    ? bunching.by_hour.filter((hour) => hour.headway_cv !== null && hour.headway_cv !== undefined)
+    : [];
+  hourCard.hidden = hourly.length === 0;
+  if (!hourly.length) return;
+
+  new Chart(document.getElementById("daily-bunching-hour-chart").getContext("2d"), {
+    type: "line",
+    data: {
+      labels: hourly.map((hour) => `${String(hour.hour).padStart(2, "0")}:00`),
+      datasets: [{
+        label: "Headway CV",
+        data: hourly.map((hour) => hour.headway_cv),
+        borderColor: "#1971c2",
+        backgroundColor: "rgba(25, 113, 194, 0.12)",
+        fill: true,
+        tension: 0.25,
+        pointRadius: 3,
+      }],
+    },
+    options: {
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => `CV ${fmt(ctx.raw, 2)} · ${intFmt(hourly[ctx.dataIndex].aggregation && hourly[ctx.dataIndex].aggregation.cv_weight)} comparable headways`,
+          },
+        },
+      },
+      scales: {
+        x: { grid: { display: false }, title: { display: true, text: "Pacific hour" } },
+        y: { beginAtZero: true, title: { display: true, text: "headway CV (lower is better)" } },
+      },
+    },
+  });
+}
+
 async function load() {
   const yearEl = document.getElementById("footer-year");
   if (yearEl) yearEl.textContent = new Date().getFullYear();
@@ -361,6 +409,8 @@ function render(data, indexDates = [], weeklyWeeks = []) {
     { label: "Within 5 min", val: `${fmt(s.within_5min_pct)}%`, grade: gradeOnTime(s.within_5min_pct) },
     { label: "Within 7 min", val: `${fmt(s.within_7min_pct)}%`, grade: gradeOnTime(s.within_7min_pct) },
   ]);
+
+  renderDailyBusSpacing(s.bunching);
 
   // ---- 1-min delay histogram ----
   renderDelayMinuteHistogram("delay-minute-chart", data.delay_minute_histogram || []);
@@ -509,6 +559,12 @@ function render(data, indexDates = [], weeklyWeeks = []) {
 
   // ---- routes table ----
   const tbody = document.querySelector("#routes-table tbody");
+  for (const route of data.routes) {
+    route.bunching_cv = busSpacingAvailable(route.bunching)
+      ? route.bunching.headway_cv
+      : null;
+    route.bunching_status = busSpacingStatusLabel(route.bunching);
+  }
   let sortKey = "stop_sd_pct";
   let sortDir = -1; // descending
   let filterQ = "";
@@ -555,6 +611,26 @@ function render(data, indexDates = [], weeklyWeeks = []) {
         const isOpen = expanded.has(r.route_id);
         const detailHidden = isOpen ? "" : "hidden";
         const weekHref = `../route/?week_end=${encodeURIComponent(weekEnd)}&route_id=${encodeURIComponent(r.route_id)}`;
+        const bunching = r.bunching;
+        const bunchingAvailable = busSpacingAvailable(bunching);
+        const bunchingStatus = busSpacingStatusLabel(bunching);
+        const bunchingWarning = bunchingAvailable ? "" : busSpacingWarningText(bunching);
+        const cvStyle = bunchingAvailable
+          ? (() => {
+              const grade = gradeColor(1 - bunching.headway_cv);
+              return `style="background:${grade.bg};color:${grade.fg};"`;
+            })()
+          : "";
+        const bunchingDetails = bunchingAvailable
+          ? `
+            <div><dt>Headway CV</dt><dd>${fmt(bunching.headway_cv, 2)}</dd></div>
+            <div><dt>Bunched arrivals</dt><dd>${fmt(bunching.bunched_headway_pct)}%</dd></div>
+            <div><dt>Long gaps</dt><dd>${fmt(bunching.long_gap_pct)}%</dd></div>
+            <div><dt>Expected wait</dt><dd>${fmt(bunching.expected_wait_min)} min</dd></div>
+            <div><dt>Even-spacing wait</dt><dd>${fmt(bunching.even_spacing_wait_min)} min</dd></div>
+            <div><dt>Spacing penalty</dt><dd>+${fmt(bunching.spacing_penalty_min)} min</dd></div>
+            <div><dt>Comparable headways</dt><dd>${intFmt(bunching.eligibility.cv_headway_n)} (${fmt(bunching.eligibility.cv_coverage_pct)}% coverage)</dd></div>`
+          : `<div class="route-grade-warning"><dt>Bus spacing unavailable</dt><dd>${bunchingWarning}</dd></div>`;
         return `
       <tr class="route-row ${isOpen ? "is-open" : ""}" data-rid="${r.route_id}">
         <td>${routeBadge(r)}${limitedRouteTag(r)}</td>
@@ -562,10 +638,12 @@ function render(data, indexDates = [], weeklyWeeks = []) {
         <td ${cellGrade(sd, sdGrade)} title="${sdTitle}">${sd === null ? "—" : fmt(sd)}</td>
         <td ${cellGrade(r.on_time_pct, gradeOnTime)}>${fmt(r.on_time_pct)}</td>
         <td>${fmt(r.p50_delay_minutes)}</td>
+        <td ${cvStyle}>${bunchingAvailable ? fmt(bunching.headway_cv, 2) : "—"}</td>
+        <td><span class="bunching-inline-status ${bunchingAvailable ? "is-available" : "is-unavailable"}" title="${bunchingWarning}">${bunchingStatus}</span></td>
         <td class="expand-cell" aria-hidden="true">${isOpen ? "▾" : "▸"}</td>
       </tr>
       <tr class="route-detail" data-rid="${r.route_id}" ${detailHidden}>
-        <td colspan="6">
+        <td colspan="8">
           <a class="route-week-btn" href="${weekHref}" title="Week-of analysis for route ${r.route_id} (week ending ${weekEnd})">Week ending ${weekEnd} →</a>
           <dl class="route-detail-list">
             <div><dt>Trips observed</dt><dd>${intFmt(r.trips_observed)}${r.scheduled_trips ? ` (of ${intFmt(r.scheduled_trips)} scheduled)` : ""}</dd></div>
@@ -584,6 +662,7 @@ function render(data, indexDates = [], weeklyWeeks = []) {
             <div><dt>p50 headway distortion</dt><dd>${r.p50_distortion_pct === null ? "—" : `${fmt(r.p50_distortion_pct)}%`}</dd></div>
             <div><dt>p95 headway distortion</dt><dd>${r.p95_distortion_pct === null ? "—" : `${fmt(r.p95_distortion_pct)}%`}</dd></div>
             <div><dt>Avg speed</dt><dd>${fmt(r.avg_speed_mph)} mph</dd></div>
+            ${bunchingDetails}
           </dl>
         </td>
       </tr>`;

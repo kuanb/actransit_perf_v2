@@ -112,6 +112,7 @@ function render(data) {
 
   renderSystemSummary(data);
   renderScheduleCompliance(data);
+  renderWeeklyBusSpacing(data);
   renderDailySD(data);
   renderDelayHeatmap(data);
   renderRouteLineChart(data);
@@ -163,6 +164,160 @@ function renderScheduleCompliance(data) {
     { label: "Trips truncated",        val: `${intFmt(sc.trips_not_completed)} (${fmt(notCompletedPct)}%)`,
       grade: gradeNC(notCompletedPct) },
   ]);
+}
+
+function renderWeeklyBusSpacing(data) {
+  const bunching = data.system && data.system.bunching;
+  renderCards("#weekly-bunching-cards", busSpacingCardItems(bunching));
+  document.getElementById("weekly-bunching-methodology").innerHTML =
+    busSpacingMethodologyHTML(false);
+
+  const warning = document.getElementById("weekly-bunching-warning");
+  const available = busSpacingAvailable(bunching);
+  warning.hidden = available;
+  warning.textContent = available ? "" : busSpacingWarningText(bunching);
+
+  const hourCard = document.getElementById("weekly-bunching-hour-card");
+  const hourly = bunching && Array.isArray(bunching.by_hour)
+    ? bunching.by_hour.filter((hour) => hour.headway_cv !== null && hour.headway_cv !== undefined)
+    : [];
+  hourCard.hidden = hourly.length === 0;
+  if (hourly.length) {
+    new Chart(document.getElementById("weekly-bunching-hour-chart").getContext("2d"), {
+      type: "line",
+      data: {
+        labels: hourly.map((hour) => `${String(hour.hour).padStart(2, "0")}:00`),
+        datasets: [{
+          label: "Headway CV",
+          data: hourly.map((hour) => hour.headway_cv),
+          borderColor: "#1971c2",
+          backgroundColor: "rgba(25, 113, 194, 0.12)",
+          fill: true,
+          tension: 0.25,
+          pointRadius: 3,
+        }],
+      },
+      options: {
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => `CV ${fmt(ctx.raw, 2)} · ${intFmt(hourly[ctx.dataIndex].aggregation && hourly[ctx.dataIndex].aggregation.cv_weight)} comparable headways`,
+            },
+          },
+        },
+        scales: {
+          x: { grid: { display: false }, title: { display: true, text: "Pacific hour" } },
+          y: { beginAtZero: true, title: { display: true, text: "headway CV (lower is better)" } },
+        },
+      },
+    });
+  }
+
+  const routes = (data.route_daily_service_delivered || []).map((route) => {
+    const routeBunching = route.bunching;
+    return {
+      ...route,
+      bunching_status: busSpacingStatusLabel(routeBunching),
+      bunching_cv: busSpacingAvailable(routeBunching) ? routeBunching.headway_cv : null,
+      bunched_headway_pct: busSpacingAvailable(routeBunching) ? routeBunching.bunched_headway_pct : null,
+      long_gap_pct: busSpacingAvailable(routeBunching) ? routeBunching.long_gap_pct : null,
+      spacing_penalty_min: busSpacingAvailable(routeBunching) ? routeBunching.spacing_penalty_min : null,
+      cv_headway_n: routeBunching && routeBunching.eligibility
+        ? routeBunching.eligibility.cv_headway_n
+        : null,
+    };
+  });
+  const tbody = document.querySelector("#weekly-bunching-table tbody");
+  const filter = document.getElementById("weekly-bunching-filter");
+  const limitedToggle = document.getElementById("weekly-bunching-limited-toggle");
+  const lowFrequencyToggle = document.getElementById("weekly-bunching-low-frequency-toggle");
+  const status = document.getElementById("weekly-bunching-status");
+  let filterQ = "";
+  let showLimited = false;
+  let showLowFrequency = false;
+  let sortKey = "bunching_cv";
+  let sortDir = 1;
+
+  const drawRoutes = () => {
+    const visible = routes.filter((route) =>
+      (showLimited || !isLimitedRoute(route)) &&
+      (showLowFrequency || !busSpacingTooLowFrequency(route.bunching)) &&
+      (!filterQ || String(route.route_id).toLowerCase().includes(filterQ))
+    ).sort((a, b) => {
+      const av = a[sortKey];
+      const bv = b[sortKey];
+      if (av === null || av === undefined) return bv === null || bv === undefined
+        ? String(a.route_id).localeCompare(String(b.route_id), undefined, { numeric: true })
+        : 1;
+      if (bv === null || bv === undefined) return -1;
+      if (typeof av === "string") return sortDir * av.localeCompare(bv, undefined, { numeric: true });
+      return sortDir * (av - bv);
+    });
+
+    tbody.innerHTML = visible.map((route) => {
+      const routeBunching = route.bunching;
+      const routeAvailable = busSpacingAvailable(routeBunching);
+      const warningText = routeAvailable ? "" : busSpacingWarningText(routeBunching);
+      const cvGrade = routeAvailable ? gradeColor(1 - routeBunching.headway_cv) : null;
+      const cvStyle = cvGrade
+        ? `style="background:${cvGrade.bg};color:${cvGrade.fg};"`
+        : "";
+      const href = `../route/?week_end=${encodeURIComponent(data.week_end)}&route_id=${encodeURIComponent(route.route_id)}`;
+      return `<tr>
+        <td><a class="route-metric-link" href="${href}">${routeBadge(route)}</a>${limitedRouteTag(route)}</td>
+        <td><span class="bunching-inline-status ${routeAvailable ? "is-available" : "is-unavailable"}" title="${warningText}">${route.bunching_status}</span></td>
+        <td ${cvStyle}>${routeAvailable ? fmt(route.bunching_cv, 2) : "—"}</td>
+        <td>${routeAvailable ? `${fmt(route.bunched_headway_pct)}%` : "—"}</td>
+        <td>${routeAvailable ? `${fmt(route.long_gap_pct)}%` : "—"}</td>
+        <td>${routeAvailable ? `+${fmt(route.spacing_penalty_min)} min` : "—"}</td>
+        <td>${routeAvailable ? intFmt(route.cv_headway_n) : "—"}</td>
+      </tr>`;
+    }).join("");
+
+    const limitedCount = routes.filter(isLimitedRoute).length;
+    const availableCount = visible.filter((route) => busSpacingAvailable(route.bunching)).length;
+    const lowFrequencyHidden = routes.filter((route) =>
+      (showLimited || !isLimitedRoute(route)) &&
+      busSpacingTooLowFrequency(route.bunching) &&
+      (!filterQ || String(route.route_id).toLowerCase().includes(filterQ))
+    ).length;
+    status.textContent = `${visible.length} routes shown · ${availableCount} with spacing metrics` +
+      (!showLowFrequency && lowFrequencyHidden
+        ? ` · ${lowFrequencyHidden} too-low-frequency hidden`
+        : "");
+    limitedToggle.textContent = showLimited ? "Hide Limited Routes" : "Show Limited Routes";
+    limitedToggle.setAttribute("aria-pressed", String(showLimited));
+    limitedToggle.title = `${limitedCount} limited routes in this week`;
+    document.querySelectorAll("#weekly-bunching-table th[data-key]").forEach((th) => {
+      th.classList.remove("sorted-asc", "sorted-desc");
+      if (th.dataset.key === sortKey) th.classList.add(sortDir > 0 ? "sorted-asc" : "sorted-desc");
+    });
+  };
+
+  filter.addEventListener("input", (event) => {
+    filterQ = event.target.value.toLowerCase().trim();
+    drawRoutes();
+  });
+  limitedToggle.addEventListener("click", () => {
+    showLimited = !showLimited;
+    drawRoutes();
+  });
+  lowFrequencyToggle.addEventListener("change", () => {
+    showLowFrequency = lowFrequencyToggle.checked;
+    drawRoutes();
+  });
+  document.querySelectorAll("#weekly-bunching-table th[data-key]").forEach((th) => {
+    th.addEventListener("click", () => {
+      if (sortKey === th.dataset.key) sortDir = -sortDir;
+      else {
+        sortKey = th.dataset.key;
+        sortDir = sortKey === "route_id" || sortKey === "bunching_status" ? 1 : -1;
+      }
+      drawRoutes();
+    });
+  });
+  drawRoutes();
 }
 
 // ---- chart 1: SD% by day-of-week (bar) ----

@@ -160,6 +160,122 @@ function renderCards(selector, items) {
     .join("");
 }
 
+function busSpacingAvailable(bunching) {
+  return Boolean(
+    bunching &&
+    bunching.methodology_version === 2 &&
+    bunching.status === "available" &&
+    bunching.eligibility &&
+    bunching.eligibility.eligible === true &&
+    bunching.headway_cv !== null &&
+    bunching.headway_cv !== undefined
+  );
+}
+
+function busSpacingScore(cv) {
+  if (cv === null || cv === undefined) return null;
+  return Math.max(0, Math.min(100, 100 * (1 - Number(cv))));
+}
+
+function busSpacingStatusLabel(bunching) {
+  if (busSpacingAvailable(bunching)) return "Available";
+  if (!bunching || bunching.methodology_version !== 2 || bunching.status === "missing") {
+    return "Missing";
+  }
+  if (bunching.status === "partial") return "Partial window";
+  const reason = bunching.eligibility && bunching.eligibility.reason;
+  if (reason === "too_low_frequency" || bunching.status === "too_low_frequency") {
+    return "Too low-frequency";
+  }
+  if (reason === "not_enough_comparable_headways") return "Not enough headways";
+  if (reason === "low_comparable_headway_coverage") return "Low coverage";
+  return "Insufficient data";
+}
+
+function busSpacingTooLowFrequency(bunching) {
+  return Boolean(
+    bunching &&
+    (bunching.status === "too_low_frequency" ||
+      (bunching.eligibility && bunching.eligibility.reason === "too_low_frequency"))
+  );
+}
+
+function busSpacingWarningText(bunching, gradeWeight = null) {
+  const suffix = gradeWeight === null
+    ? "No CV or bunching metric is reported for this window."
+    : `The ${gradeWeight}% bus-spacing component is skipped and the other available grade components are renormalized.`;
+  if (!bunching || bunching.methodology_version !== 2 || bunching.status === "missing") {
+    return `Bus-spacing data is missing for this window. ${suffix}`;
+  }
+  if (bunching.status === "partial") {
+    return `Bus-spacing data covers ${intFmt(bunching.days_available)} of ${intFmt(bunching.days_expected)} expected service days. ${suffix}`;
+  }
+  const eligibility = bunching.eligibility || {};
+  if (eligibility.reason === "too_low_frequency" || bunching.status === "too_low_frequency") {
+    return `This route has no scheduled service window with buses every ${fmt(eligibility.maximum_frequency_min || 40, 0)} minutes or better, so it is too low-frequency for a meaningful bunching calculation. ${suffix}`;
+  }
+  if (eligibility.reason === "not_enough_comparable_headways") {
+    return `Only ${intFmt(eligibility.cv_headway_n)} comparable headways qualify; at least ${intFmt(eligibility.minimum_cv_headway_n || 100)} are required. ${suffix}`;
+  }
+  if (eligibility.reason === "low_comparable_headway_coverage") {
+    return `Only ${fmt(eligibility.cv_coverage_pct)}% of measured eligible headways are comparable; at least ${fmt(eligibility.minimum_coverage_pct || 10, 0)}% coverage is required. ${suffix}`;
+  }
+  return `Bus-spacing data is not sufficient for this window. ${suffix}`;
+}
+
+function busSpacingCardItems(bunching, includeScore = false) {
+  if (!busSpacingAvailable(bunching)) {
+    return [{ label: "Bus spacing status", val: busSpacingStatusLabel(bunching) }];
+  }
+  const items = [
+    { label: "Headway CV", val: fmt(bunching.headway_cv, 2), grade: gradeColor(1 - bunching.headway_cv) },
+    { label: "Bunched arrivals", val: `${fmt(bunching.bunched_headway_pct)}%` },
+    { label: "Long gaps", val: `${fmt(bunching.long_gap_pct)}%` },
+    { label: "Comparable headways", val: intFmt(bunching.eligibility.cv_headway_n) },
+    { label: "Comparable coverage", val: `${fmt(bunching.eligibility.cv_coverage_pct)}%` },
+    { label: "Mean headway", val: `${fmt(bunching.mean_headway_min)} min` },
+    { label: "Expected wait", val: `${fmt(bunching.expected_wait_min)} min` },
+    { label: "Even-spacing wait", val: `${fmt(bunching.even_spacing_wait_min)} min` },
+    { label: "Spacing penalty", val: `+${fmt(bunching.spacing_penalty_min)} min` },
+  ];
+  if (includeScore) {
+    items.splice(1, 0, {
+      label: "Bus-spacing sub-score",
+      val: `${fmt(busSpacingScore(bunching.headway_cv), 0)} / 100`,
+      grade: gradeColor(1 - bunching.headway_cv),
+    });
+  }
+  return items;
+}
+
+function busSpacingMethodologyHTML(includeScore = false) {
+  const scoreCopy = includeScore
+    ? " For report-card scoring, the bus-spacing sub-score is <code>100 × (1 − CV)</code>, clamped to 0–100."
+    : "";
+  return `
+    <p class="muted bunching-methodology">
+      <strong>How to read CV.</strong> The headway coefficient of variation is
+      <code>standard deviation ÷ mean</code>, calculated within comparable route,
+      direction, stop, and Pacific-hour cells and then weighted by contributing
+      headways. A CV of 0 means perfectly even spacing; higher values mean increasingly
+      uneven gaps between buses.${scoreCopy}
+    </p>
+    <p class="muted bunching-methodology">
+      A bus is marked <strong>bunched</strong> when its realized gap is below half
+      the scheduled gap; a <strong>long gap</strong> exceeds 1.5 times the scheduled
+      gap. Bunched-arrival values are already percentages: <strong>0.1 means 0.1%</strong>
+      (about one in 1,000 comparable headways), not 10%. Only schedule windows with
+      service every 40 minutes or better qualify.
+      At least 100 comparable headways and 10% comparable coverage are required;
+      realized gaps below 30 seconds or above 90 minutes are excluded as duplicate
+      and overnight/outlier guards. Expected wait assumes riders arrive at random,
+      while spacing penalty compares it with evenly spaced service at the same
+      realized frequency. Method inspired by
+      <a href="https://sal-khan.com/bus-bunching.html" target="_blank" rel="noopener">Salman Khan’s bus-bunching project</a>,
+      adapted to AC Transit GTFS-Realtime arrivals and published GTFS schedules.
+    </p>`;
+}
+
 // renderDelayMinuteHistogram draws a 1-minute-bucket bar chart of stop
 // delays into the canvas with id `canvasId`. Bars colored by lateness
 // band (early=blue, on-time=green, mildly-late=orange, late=red).

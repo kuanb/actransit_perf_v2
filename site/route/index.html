@@ -411,6 +411,40 @@
       font-size: 12px;
     }
 
+    /* ── route bus-spacing section ─────────────────────── */
+    #route-bunching-section {
+      margin: 0;
+      padding: 14px 20px 18px;
+      border: 0;
+      border-bottom: 1px solid #d8e4ee;
+      border-radius: 0;
+    }
+    #route-bunching-details > summary {
+      cursor: pointer;
+      list-style: none;
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      padding: 4px 0;
+      user-select: none;
+    }
+    #route-bunching-details > summary::-webkit-details-marker { display: none; }
+    #route-bunching-details > summary::before {
+      content: "▸";
+      display: inline-block;
+      width: 0.9em;
+      color: #888;
+      transition: transform 0.15s ease;
+    }
+    #route-bunching-details[open] > summary::before { transform: rotate(90deg); }
+    .route-bunching-title { font-weight: 600; font-size: 16px; }
+    .route-bunching-sub { font-size: 12px; }
+    .route-bunching-body { margin-top: 10px; }
+    #route-bunching-cards { margin-top: 10px; }
+    #route-bunching-cards.cards { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+    #route-bunching-cards .card .val { font-size: 20px; }
+    #route-bunching-progress-card { margin-top: 16px; }
+
     /* ── map overlay controls ───────────────────────────── */
     .map-ctrl {
       position: absolute;
@@ -677,6 +711,26 @@
     </details>
   </section>
 
+  <section id="route-bunching-section" class="bunching-section">
+    <details id="route-bunching-details" open>
+      <summary>
+        <span class="route-bunching-title">Bus spacing and bunching</span>
+        <span class="muted route-bunching-sub" id="route-bunching-sub">Past week · eligible frequent-service windows</span>
+      </summary>
+      <div class="route-bunching-body">
+        <p class="muted bunching-cv-definition"><strong>Headway CV</strong> means coefficient of variation (<code>standard deviation ÷ mean</code>); lower values mean more even spacing.</p>
+        <div id="route-bunching-warning" class="bunching-data-warning" role="status" hidden></div>
+        <div id="route-bunching-cards" class="cards bunching-cards"></div>
+        <div id="route-bunching-progress-card" class="bunching-chart-card">
+          <h3>Headway CV along the route</h3>
+          <p class="muted">CV is the coefficient of variation (<code>standard deviation ÷ mean</code>) near six points from the start to the end of the route. Lower is more even.</p>
+          <div class="bunching-chart-canvas"><canvas id="route-bunching-progress-chart"></canvas></div>
+        </div>
+        <div id="route-bunching-methodology"></div>
+      </div>
+    </details>
+  </section>
+
   <section id="wait-time-section">
     <details id="wait-details" open>
       <summary>
@@ -885,8 +939,8 @@
     <div id="loading">Loading route data…</div>
   </div>
 
-  <script src="../lib.js"></script>
-  <script src="app.js"></script>
+  <script src="../lib.js?v=bunching-v3"></script>
+  <script src="app.js?v=bunching-v3"></script>
   <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "0e36b12e46b04a69b5e9ff6883f6d23d"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
 </html>

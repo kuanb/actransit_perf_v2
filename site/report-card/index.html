@@ -59,14 +59,109 @@
     </div>
   </section>
 
-  <section>
+  <section id="bunching-section" class="bunching-section" aria-labelledby="bunching-title" hidden>
+    <div class="bunching-heading">
+      <div>
+        <p class="bunching-kicker">New report-card component · 35% of grade</p>
+        <h2 id="bunching-title">Bus spacing and bunching</h2>
+        <p class="muted defn">
+          A route can run the promised number of buses and still make riders wait longer
+          when those buses arrive in clumps. These metrics compare consecutive arrivals
+          within the same route, direction, stop, and hour so normal schedule changes do
+          not look like unreliability. <strong>Headway CV</strong> means coefficient of
+          variation (<code>standard deviation ÷ mean</code>); lower values mean more even spacing.
+        </p>
+      </div>
+      <div class="bunching-benchmark" aria-label="Headway coefficient of variation benchmark">
+        <span>Reference line</span>
+        <strong>CV 0.30</strong>
+        <small>lower is more even</small>
+      </div>
+    </div>
+
+    <div id="bunching-cards" class="cards bunching-cards"></div>
+
+    <div class="bunching-wait-callout">
+      <div>
+        <span class="bunching-callout-label">Same service frequency</span>
+        <strong id="bunching-even-wait">—</strong>
+        <small>wait if the realized service were evenly spaced</small>
+      </div>
+      <span class="bunching-callout-arrow" aria-hidden="true">→</span>
+      <div>
+        <span class="bunching-callout-label">With observed spacing</span>
+        <strong id="bunching-observed-wait">—</strong>
+        <small>modeled average wait</small>
+      </div>
+      <div class="bunching-callout-tax">
+        <span>Spacing penalty</span>
+        <strong id="bunching-wait-tax">—</strong>
+        <small>extra wait caused by uneven gaps</small>
+      </div>
+      <div class="bunching-scheduled-wait">
+        <span>Published schedule baseline</span>
+        <strong id="bunching-scheduled-wait">—</strong>
+        <small>expected wait from scheduled headways of 40 minutes or less</small>
+      </div>
+    </div>
+
+    <div class="bunching-chart-grid">
+      <article class="bunching-chart-card">
+        <h3>Headway variation by route</h3>
+        <p class="muted">Coefficient of variation; lower means buses are more evenly spaced.</p>
+        <div class="bunching-chart-canvas bunching-cv-canvas">
+          <canvas id="bunching-route-chart" role="img" aria-label="Headway coefficient of variation by route"></canvas>
+        </div>
+      </article>
+      <article class="bunching-chart-card">
+        <h3>How spacing changes along the run</h3>
+        <p class="muted">CV means coefficient of variation (<code>standard deviation ÷ mean</code>). Rising lines indicate en-route bunching.</p>
+        <div class="bunching-chart-canvas">
+          <canvas id="bunching-progress-chart" role="img" aria-label="Headway variation by route progress"></canvas>
+        </div>
+      </article>
+    </div>
+
+    <h3 class="sub-h">Route spacing detail</h3>
+    <div class="table-wrap bounded-table-wrap">
+      <table id="bunching-table">
+        <thead>
+          <tr>
+            <th>Route</th>
+            <th>Headway CV</th>
+            <th>Bunched arrivals</th>
+            <th>Long gaps</th>
+            <th>Spacing penalty</th>
+            <th>Start → end CV</th>
+            <th>Headways</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="muted bunching-methodology">
+      Bunched arrivals have a realized headway below half the scheduled headway;
+      long gaps exceed 1.5 times the scheduled headway. Only scheduled headways of
+      40 minutes or less are eligible. Values are percentage points, so <strong>0.1 means
+      0.1%</strong> (about one in 1,000 comparable headways), not 10%. Expected wait assumes riders arrive at random
+      moments; spacing penalty compares observed wait with evenly spaced service at
+      the same realized frequency. Realized gaps below 30 seconds or above 90 minutes
+      are excluded as duplicate and overnight/outlier guards. Method inspired by
+      <a href="https://sal-khan.com/bus-bunching.html" target="_blank" rel="noopener">Salman Khan’s Chicago bus-bunching project</a>,
+      adapted to AC Transit GTFS-Realtime stop arrivals and published GTFS schedules.
+    </p>
+  </section>
+
+  <section id="score-methodology-section">
     <h2>How the score is computed</h2>
-    <p class="muted defn">The composite score blends four metrics, observation-weighted across every finalized stop arrival in the window:</p>
-    <p class="muted defn"><strong>On Time Service Delivered — 60%.</strong> Percent of scheduled intermediate passenger-pickup stops reached in the rider window: no more than <strong>1 min early</strong> and <strong>7 min late</strong> (<code>−60&nbsp;s&nbsp;≤&nbsp;delay&nbsp;≤&nbsp;420&nbsp;s</code>). Wholly unobserved trips count against the route; origins, final terminals, and no-pickup stops are excluded. This is the same metric shown on the daily page.</p>
-    <p class="muted defn"><strong>On time — 15%.</strong> Percent of arrivals within <code>0&nbsp;≤&nbsp;delay&nbsp;≤&nbsp;3&nbsp;min</code> of schedule.</p>
-    <p class="muted defn"><strong>Speed vs. ideal — 15%.</strong> Average per-leg bus speed as a fraction of a <strong>13&nbsp;mph</strong> ideal, capped at 100%. Slower routes score lower; <code>avg_speed&nbsp;/&nbsp;13&nbsp;×&nbsp;100</code>.</p>
-    <p class="muted defn"><strong>Headway regularity — 10%.</strong> How little the typical bus distorts the scheduled gap to its neighbor (<code>100&nbsp;−&nbsp;|p50&nbsp;headway&nbsp;distortion|</code>). Bunching and gapping pull this down.</p>
-    <p class="muted defn">Components with no data for a route are dropped and the remaining weights are renormalized. On Time Service Delivered and p95 delay are observation-weighted aggregates across the days in the window (an approximation of the exact 4-week 95th percentile).</p>
+    <div id="score-methodology">
+      <p class="muted defn">The composite score blends four metrics over the trailing four-week window:</p>
+      <p class="muted defn"><strong>On Time Service Delivered — 40%.</strong> Percent of scheduled intermediate passenger-pickup stops reached in the rider window: no more than <strong>1 min early</strong> and <strong>7 min late</strong> (<code>−60&nbsp;s&nbsp;≤&nbsp;delay&nbsp;≤&nbsp;420&nbsp;s</code>).</p>
+      <p class="muted defn"><strong>On time — 10%.</strong> Percent of arrivals within <code>0&nbsp;≤&nbsp;delay&nbsp;≤&nbsp;3&nbsp;min</code> of schedule.</p>
+      <p class="muted defn"><strong>Speed vs. ideal — 15%.</strong> Average per-leg bus speed as a fraction of a <strong>13&nbsp;mph</strong> ideal, capped at 100%. Slower routes score lower; <code>avg_speed&nbsp;/&nbsp;13&nbsp;×&nbsp;100</code>.</p>
+      <p class="muted defn"><strong>Bus spacing and bunching — 35%.</strong> The sub-score is <code>100 × (1 − headway CV)</code>. Headway CV means coefficient of variation: <code>standard deviation ÷ mean</code>. A CV of 0 is perfectly even spacing; higher values mean increasingly uneven gaps. Method inspired by <a href="https://sal-khan.com/bus-bunching.html" target="_blank" rel="noopener">Salman Khan’s bus-bunching project</a>.</p>
+      <p class="muted defn">If bunching data is missing, partial, too low-frequency, or statistically insufficient, its component is omitted with a warning and the remaining available weights are renormalized.</p>
+    </div>
 
     <h3 class="sub-h">Grade scale</h3>
     <div id="grade-legend" class="grade-legend"></div>
@@ -81,7 +176,7 @@
       <button id="routes-limited-toggle" type="button" aria-pressed="false">Show Limited Routes</button>
       <span id="routes-limited-status" class="muted limited-route-status"></span>
     </div>
-    <div class="table-wrap">
+    <div class="table-wrap bounded-table-wrap">
       <table id="report-table">
         <thead>
           <tr>
@@ -105,8 +200,8 @@
     </a>
   </footer>
 
-  <script src="../lib.js"></script>
-  <script src="app.js"></script>
+  <script src="../lib.js?v=bunching-v3"></script>
+  <script src="app.js?v=bunching-v3"></script>
   <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "0e36b12e46b04a69b5e9ff6883f6d23d"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
 </html>
