@@ -823,7 +823,7 @@ function renderBunchingSection(routes, agency) {
     : `${fmt(agency.scheduled_expected_wait_min)} min`;
 
   const ordered = [...routes].filter((route) => route.headway_cv != null)
-    .sort((a, b) => a.headway_cv - b.headway_cv);
+    .sort((a, b) => b.headway_cv - a.headway_cv);
   const chartRoutes = [...ordered]
     .sort((a, b) => b.scheduled_runs - a.scheduled_runs)
     .slice(0, 20)
