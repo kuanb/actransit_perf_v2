@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AC Transit route map</title>
-  <link rel="stylesheet" href="../styles.css">
+  <link rel="stylesheet" href="../styles.css?v=dashboard-frame-v2">
   <script src="../independence-notice.js" defer></script>
   <link href="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css" rel="stylesheet">
   <script src="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.js"></script>
@@ -20,7 +20,9 @@
       min-height: 100vh;
     }
     header {
-      padding: 10px 20px;
+      padding-top: 0;
+      padding-bottom: 12px;
+      margin-top: var(--dashboard-gutter);
       margin-bottom: 0;
       flex-shrink: 0;
       z-index: 10;
@@ -59,7 +61,7 @@
     #route-callout[hidden] { display: none; }
     .route-callout-copy {
       position: relative;
-      max-width: 1100px;
+      max-width: var(--dashboard-content-width);
       margin: 0 auto;
       color: #3f3026;
       font-family: Georgia, "Times New Roman", serif;
@@ -81,7 +83,7 @@
     }
     .route-callout-note {
       position: relative;
-      max-width: 1100px;
+      max-width: var(--dashboard-content-width);
       margin: 12px auto 0;
       color: #786a5f;
       font-size: 11px;
@@ -90,9 +92,10 @@
 
     /* ── wait-time section (above the map) ───────────────── */
     #wait-time-section {
-      padding: 14px 20px 18px;
+      padding-top: 14px;
+      padding-bottom: 18px;
       border-bottom: 1px solid #e5e5e5;
-      margin: 0;
+      margin-block: 0;
     }
     #wait-details > summary {
       cursor: pointer;
@@ -264,9 +267,10 @@
 
     /* ── speed section (same shell as wait-time) ────────────── */
     #speed-section {
-      padding: 14px 20px 18px;
+      padding-top: 14px;
+      padding-bottom: 18px;
       border-bottom: 1px solid #e5e5e5;
-      margin: 0;
+      margin-block: 0;
     }
     #speed-details > summary {
       cursor: pointer;
@@ -331,9 +335,10 @@
 
     /* ── service-delivered section (same shell as wait/speed) ─ */
     #sd-section {
-      padding: 14px 20px 18px;
+      padding-top: 14px;
+      padding-bottom: 18px;
       border-bottom: 1px solid #e5e5e5;
-      margin: 0;
+      margin-block: 0;
     }
     #sd-details > summary {
       cursor: pointer;
@@ -414,8 +419,9 @@
 
     /* ── route bus-spacing section ─────────────────────── */
     #route-bunching-section {
-      margin: 0;
-      padding: 14px 20px 18px;
+      margin-block: 0;
+      padding-top: 14px;
+      padding-bottom: 18px;
       border: 0;
       border-bottom: 1px solid #d8e4ee;
       border-radius: 0;
@@ -637,7 +643,7 @@
   </style>
 </head>
 <body>
-  <header>
+  <header class="dashboard-frame">
     <div class="header-body">
       <h1 id="page-title">AC Transit — route map</h1>
       <div id="meta" class="muted"></div>
@@ -657,7 +663,7 @@
     </p>
   </section>
 
-  <section id="sd-section">
+  <section id="sd-section" class="dashboard-frame">
     <details id="sd-details" open>
       <summary>
         <span class="sd-title">On Time Service Delivered</span>
@@ -712,7 +718,7 @@
     </details>
   </section>
 
-  <section id="route-bunching-section" class="bunching-section">
+  <section id="route-bunching-section" class="bunching-section dashboard-frame">
     <details id="route-bunching-details" open>
       <summary>
         <span class="route-bunching-title">Bus spacing and bunching</span>
@@ -732,7 +738,7 @@
     </details>
   </section>
 
-  <section id="wait-time-section">
+  <section id="wait-time-section" class="dashboard-frame">
     <details id="wait-details" open>
       <summary>
         <span class="wt-title">Passenger wait-time distribution</span>
@@ -815,7 +821,7 @@
     </details>
   </section>
 
-  <section id="speed-section">
+  <section id="speed-section" class="dashboard-frame">
     <details id="speed-details" open>
       <summary>
         <span class="sp-title">Speed by hour of day</span>
