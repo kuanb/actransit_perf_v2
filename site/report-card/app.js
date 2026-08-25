@@ -845,6 +845,32 @@ function renderBunchingSection(routes, agency) {
       chart.ctx.restore();
     },
   };
+  const progressStatus = document.getElementById("bunching-progress-highlight");
+  const defaultProgressStatus = "Hover over or select a route bar at left to highlight the same route here.";
+  const mutedProgressColor = "rgba(100, 116, 139, 0.18)";
+  let progressChart = null;
+  let lockedProgressRouteID = null;
+  const setProgressHighlight = (routeID) => {
+    if (!progressChart) return;
+    const route = chartRoutes.find((candidate) => candidate.route_id === routeID);
+    for (const dataset of progressChart.data.datasets) {
+      const active = dataset.routeID === routeID;
+      dataset.borderColor = active ? dataset.highlightColor : mutedProgressColor;
+      dataset.backgroundColor = active ? dataset.highlightColor : mutedProgressColor;
+      dataset.borderWidth = active ? 3.5 : 1.25;
+      dataset.pointRadius = active ? 4 : 0;
+      dataset.pointHoverRadius = active ? 6 : 3;
+      dataset.order = active ? 0 : 1;
+    }
+    if (!route) {
+      progressStatus.textContent = defaultProgressStatus;
+    } else if (route.progress_cv.filter((value) => value != null).length < 2) {
+      progressStatus.textContent = `Route ${route.route_id} does not have enough along-run progress points for a line.`;
+    } else {
+      progressStatus.textContent = `Route ${route.route_id} highlighted · overall headway CV ${fmt(route.headway_cv, 2)}.`;
+    }
+    progressChart.update("none");
+  };
   new Chart(document.getElementById("bunching-route-chart"), {
     type: "bar",
     data: {
@@ -861,6 +887,24 @@ function renderBunchingSection(routes, agency) {
     options: {
       indexAxis: "y",
       maintainAspectRatio: false,
+      onHover: (event, elements) => {
+        if (event.native && event.native.target) {
+          event.native.target.style.cursor = elements.length ? "pointer" : "default";
+        }
+        const hoveredRouteID = elements.length
+          ? chartRoutes[elements[0].index].route_id
+          : lockedProgressRouteID;
+        setProgressHighlight(hoveredRouteID);
+      },
+      onClick: (_event, elements) => {
+        const selectedRouteID = elements.length
+          ? chartRoutes[elements[0].index].route_id
+          : null;
+        lockedProgressRouteID = selectedRouteID === lockedProgressRouteID
+          ? null
+          : selectedRouteID;
+        setProgressHighlight(lockedProgressRouteID);
+      },
       plugins: {
         legend: { display: false },
         tooltip: {
@@ -884,32 +928,47 @@ function renderBunchingSection(routes, agency) {
     },
   });
 
-  const progressCandidates = ordered.filter((route) =>
-    route.progress_cv.filter((value) => value != null).length >= 2
+  const progressValues = chartRoutes.flatMap((route) =>
+    route.progress_cv.filter((value) => value != null)
   );
-  const progressRoutes = [progressCandidates[0], progressCandidates[2], progressCandidates[Math.max(0, progressCandidates.length - 3)], progressCandidates[progressCandidates.length - 1]]
-    .filter((route, index, all) => route && all.indexOf(route) === index);
-  const lineColors = ["#2b8a3e", "#1971c2", "#e8590c", "#c92a2a"];
-  new Chart(document.getElementById("bunching-progress-chart"), {
+  const progressYMax = Math.max(
+    0.8,
+    Math.ceil((Math.max(...progressValues, 0) + 0.1) * 10) / 10
+  );
+  progressChart = new Chart(document.getElementById("bunching-progress-chart"), {
     type: "line",
     data: {
       labels: BUNCHING_PROGRESS_POINTS.map((point) => `${point}%`),
-      datasets: progressRoutes.map((route, index) => ({
+      datasets: chartRoutes.map((route) => ({
         label: `Route ${route.route_id}`,
+        routeID: route.route_id,
+        highlightColor: gradeColor(1 - route.headway_cv).bg,
         data: route.progress_cv,
-        borderColor: lineColors[index],
-        backgroundColor: lineColors[index],
-        borderWidth: 2.5,
-        pointRadius: 3,
+        borderColor: mutedProgressColor,
+        backgroundColor: mutedProgressColor,
+        borderWidth: 1.25,
+        pointRadius: 0,
+        pointHoverRadius: 3,
+        pointHitRadius: 8,
         tension: 0.22,
+        spanGaps: false,
+        order: 1,
       })),
     },
     options: {
       maintainAspectRatio: false,
-      plugins: { legend: { position: "bottom", labels: { usePointStyle: true, boxWidth: 8 } } },
+      interaction: { mode: "nearest", intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => `${ctx.dataset.label}: CV ${fmt(ctx.parsed.y, 2)} at ${ctx.label} progress`,
+          },
+        },
+      },
       scales: {
         x: { title: { display: true, text: "progress along route" }, grid: { display: false } },
-        y: { beginAtZero: true, max: 0.9, title: { display: true, text: "headway CV" } },
+        y: { beginAtZero: true, max: progressYMax, title: { display: true, text: "headway CV" } },
       },
     },
   });

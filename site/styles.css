@@ -807,6 +807,12 @@ footer a:hover {
 }
 .bunching-chart-card h3 { margin: 0; font-size: 16px; }
 .bunching-chart-card p { min-height: 36px; margin: 4px 0 10px; }
+.bunching-progress-highlight {
+  display: block;
+  margin-top: 3px;
+  color: #1971c2;
+  font-weight: 700;
+}
 .bunching-chart-canvas { position: relative; height: 300px; }
 .bunching-cv-canvas { height: 330px; }
 .bunching-methodology { margin: 14px 0 0; line-height: 1.55; }
