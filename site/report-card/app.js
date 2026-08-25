@@ -782,6 +782,12 @@ function renderBunchingMethodology() {
   `;
 }
 
+function tailFrequencyText(pct) {
+  if (pct == null) return "—";
+  if (pct <= 0) return "None measured";
+  return `About 1 in ${intFmt(Math.max(1, Math.round(100 / pct)))}`;
+}
+
 function renderBunchingSection(routes, agency) {
   const section = document.getElementById("bunching-section");
   if (!section) return;
@@ -809,15 +815,52 @@ function renderBunchingSection(routes, agency) {
     },
   ]);
 
+  const comparisonN = Number(agency.bunching && agency.bunching.comparison_n) || 0;
+  const bunchedN = Number(agency.bunching && agency.bunching.bunched_headway_n) || 0;
+  const longGapN = Number(agency.bunching && agency.bunching.long_gap_n) || 0;
+  const eitherTailPct = comparisonN > 0 ? 100 * (bunchedN + longGapN) / comparisonN : null;
+  const tailItems = [
+    {
+      valueID: "bunching-tail-short",
+      detailID: "bunching-tail-short-detail",
+      pct: agency.bunched_headway_pct,
+      detail: "comparable arrivals; gap below half the scheduled gap",
+    },
+    {
+      valueID: "bunching-tail-long",
+      detailID: "bunching-tail-long-detail",
+      pct: agency.long_gap_pct,
+      detail: "comparable arrivals; gap above 1.5 times the scheduled gap",
+    },
+    {
+      valueID: "bunching-tail-either",
+      detailID: "bunching-tail-either-detail",
+      pct: eitherTailPct,
+      detail: "comparable arrivals fell into either measured tail",
+    },
+  ];
+  for (const item of tailItems) {
+    document.getElementById(item.valueID).textContent = tailFrequencyText(item.pct);
+    document.getElementById(item.detailID).textContent = item.pct == null
+      ? item.detail
+      : `${fmt(item.pct)}% of ${intFmt(comparisonN)} ${item.detail}`;
+  }
+
   document.getElementById("bunching-even-wait").textContent = agency.even_spacing_wait_min == null
     ? "—"
     : `${fmt(agency.even_spacing_wait_min)} min`;
   document.getElementById("bunching-observed-wait").textContent = agency.expected_wait_min == null
     ? "—"
     : `${fmt(agency.expected_wait_min)} min`;
-  document.getElementById("bunching-wait-tax").textContent = agency.spacing_penalty_min == null
+  const spacingPenaltyPct = agency.spacing_penalty_min != null && agency.even_spacing_wait_min > 0
+    ? 100 * agency.spacing_penalty_min / agency.even_spacing_wait_min
+    : null;
+  document.getElementById("bunching-wait-tax").textContent = spacingPenaltyPct == null
     ? "—"
-    : `+${fmt(agency.spacing_penalty_min)} min`;
+    : `+${fmt(spacingPenaltyPct)}%`;
+  document.getElementById("bunching-wait-tax-detail").textContent = spacingPenaltyPct == null
+    ? "increase over the evenly spaced average wait"
+    : `${fmt(agency.spacing_penalty_min)} min more than the ${fmt(agency.even_spacing_wait_min)}-min evenly spaced average`;
   document.getElementById("bunching-scheduled-wait").textContent = agency.scheduled_expected_wait_min == null
     ? "—"
     : `${fmt(agency.scheduled_expected_wait_min)} min`;

@@ -741,6 +741,66 @@ footer a:hover {
 .bunching-benchmark strong { margin: 3px 0; font-size: 22px; }
 .bunching-cards { margin-top: 4px; }
 .bunching-cards .card { background: #fff; }
+.bunching-tail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 12px 0 18px;
+}
+.bunching-tail-grid article {
+  display: flex;
+  flex-direction: column;
+  padding: 13px 15px;
+  border: 1px solid #dbe5ed;
+  border-radius: 9px;
+  background: #f7fafc;
+}
+.bunching-tail-grid span {
+  color: #627385;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.bunching-tail-visual {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  margin: 8px 0 3px;
+  color: #607b91;
+}
+.bunching-tail-visual svg {
+  width: 27px;
+  height: 27px;
+  flex: 0 0 auto;
+}
+.bunching-tail-visual b {
+  color: #263f56;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.bunching-tail-visual-short { gap: 4px; }
+.bunching-tail-visual-long { gap: 17px; }
+.bunching-tail-formula b { font-size: 18px; }
+.bunching-tail-formula i {
+  display: inline-block;
+  margin: 0 7px;
+  color: #1971c2;
+  font-size: 22px;
+  font-style: normal;
+}
+.bunching-tail-grid strong {
+  margin: 4px 0 2px;
+  color: #263f56;
+  font-size: 21px;
+}
+.bunching-tail-grid small {
+  color: #788897;
+  font-size: 11px;
+  line-height: 1.35;
+}
 .bunching-wait-callout {
   display: grid;
   grid-template-columns: minmax(150px, 1fr) auto minmax(150px, 1fr) minmax(190px, 1.2fr);
@@ -865,6 +925,7 @@ footer a:hover {
 
 @media (max-width: 800px) {
   .bunching-chart-grid { grid-template-columns: 1fr; }
+  .bunching-tail-grid { grid-template-columns: 1fr; }
   .bunching-wait-callout { grid-template-columns: 1fr 1fr; }
   .bunching-callout-arrow { display: none; }
   .bunching-callout-tax { grid-column: 1 / -1; }

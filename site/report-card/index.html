@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AC Transit route report card</title>
-  <link rel="stylesheet" href="../styles.css?v=report-trends-v3">
+  <link rel="stylesheet" href="../styles.css?v=report-trends-v4">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 </head>
 <body>
@@ -89,9 +89,11 @@
   <section id="bunching-section" class="bunching-section" aria-labelledby="bunching-title" hidden>
     <div class="bunching-heading">
       <div>
-        <p class="bunching-kicker">New report-card component · 35% of grade</p>
-        <h2 id="bunching-title">Bus spacing and bunching</h2>
+        <p class="bunching-kicker">AC Transit-wide · all routes · 35% of grade</p>
+        <h2 id="bunching-title">Bus spacing and bunching across all routes</h2>
         <p class="muted defn">
+          <strong>This summary pools comparable arrivals systemwide across all routes.</strong>
+          Low-frequency windows with scheduled headways over 40 minutes are excluded.
           A route can run the promised number of buses and still make riders wait longer
           when those buses arrive in clumps. These metrics compare consecutive arrivals
           within the same route, direction, stop, and hour so normal schedule changes do
@@ -108,6 +110,65 @@
 
     <div id="bunching-cards" class="cards bunching-cards"></div>
 
+    <div class="bunching-tail-grid" aria-label="Systemwide spacing tail rates">
+      <article>
+        <span>Bunched-arrival tail</span>
+        <div class="bunching-tail-visual bunching-tail-visual-short" role="img" aria-label="Two buses separated by less than half the scheduled gap">
+          <svg viewBox="0 0 32 32" aria-hidden="true">
+            <rect x="5" y="2" width="22" height="25" rx="4" fill="currentColor"/>
+            <rect x="8" y="6" width="16" height="9" rx="1" fill="#fff"/>
+            <circle cx="10" cy="21" r="2" fill="#fff"/>
+            <circle cx="22" cy="21" r="2" fill="#fff"/>
+            <rect x="7" y="25" width="6" height="5" rx="2" fill="currentColor"/>
+            <rect x="19" y="25" width="6" height="5" rx="2" fill="currentColor"/>
+          </svg>
+          <b>&lt; 0.5×</b>
+          <svg viewBox="0 0 32 32" aria-hidden="true">
+            <rect x="5" y="2" width="22" height="25" rx="4" fill="currentColor"/>
+            <rect x="8" y="6" width="16" height="9" rx="1" fill="#fff"/>
+            <circle cx="10" cy="21" r="2" fill="#fff"/>
+            <circle cx="22" cy="21" r="2" fill="#fff"/>
+            <rect x="7" y="25" width="6" height="5" rx="2" fill="currentColor"/>
+            <rect x="19" y="25" width="6" height="5" rx="2" fill="currentColor"/>
+          </svg>
+        </div>
+        <strong id="bunching-tail-short">—</strong>
+        <small id="bunching-tail-short-detail">realized gap below half the scheduled gap</small>
+      </article>
+      <article>
+        <span>Long-gap tail</span>
+        <div class="bunching-tail-visual bunching-tail-visual-long" role="img" aria-label="Two buses separated by more than one and a half times the scheduled gap">
+          <svg viewBox="0 0 32 32" aria-hidden="true">
+            <rect x="5" y="2" width="22" height="25" rx="4" fill="currentColor"/>
+            <rect x="8" y="6" width="16" height="9" rx="1" fill="#fff"/>
+            <circle cx="10" cy="21" r="2" fill="#fff"/>
+            <circle cx="22" cy="21" r="2" fill="#fff"/>
+            <rect x="7" y="25" width="6" height="5" rx="2" fill="currentColor"/>
+            <rect x="19" y="25" width="6" height="5" rx="2" fill="currentColor"/>
+          </svg>
+          <b>&gt; 1.5×</b>
+          <svg viewBox="0 0 32 32" aria-hidden="true">
+            <rect x="5" y="2" width="22" height="25" rx="4" fill="currentColor"/>
+            <rect x="8" y="6" width="16" height="9" rx="1" fill="#fff"/>
+            <circle cx="10" cy="21" r="2" fill="#fff"/>
+            <circle cx="22" cy="21" r="2" fill="#fff"/>
+            <rect x="7" y="25" width="6" height="5" rx="2" fill="currentColor"/>
+            <rect x="19" y="25" width="6" height="5" rx="2" fill="currentColor"/>
+          </svg>
+        </div>
+        <strong id="bunching-tail-long">—</strong>
+        <small id="bunching-tail-long-detail">realized gap above 1.5 times the scheduled gap</small>
+      </article>
+      <article>
+        <span>Either spacing extreme</span>
+        <div class="bunching-tail-visual bunching-tail-formula" role="img" aria-label="Less than half or more than one and a half times the scheduled gap">
+          <b>&lt; 0.5× <i aria-label="or">∪</i> &gt; 1.5×</b>
+        </div>
+        <strong id="bunching-tail-either">—</strong>
+        <small id="bunching-tail-either-detail">arrival fell into either measured tail</small>
+      </article>
+    </div>
+
     <div class="bunching-wait-callout">
       <div>
         <span class="bunching-callout-label">Same service frequency</span>
@@ -121,9 +182,9 @@
         <small>modeled average wait</small>
       </div>
       <div class="bunching-callout-tax">
-        <span>Spacing penalty</span>
+        <span>Average spacing penalty</span>
         <strong id="bunching-wait-tax">—</strong>
-        <small>extra wait caused by uneven gaps</small>
+        <small id="bunching-wait-tax-detail">increase over the evenly spaced average wait</small>
       </div>
       <div class="bunching-scheduled-wait">
         <span>Published schedule baseline</span>
@@ -170,9 +231,11 @@
       Bunched arrivals have a realized headway below half the scheduled headway;
       long gaps exceed 1.5 times the scheduled headway. Only scheduled headways of
       40 minutes or less are eligible. Values are percentage points, so <strong>0.1 means
-      0.1%</strong> (about one in 1,000 comparable headways), not 10%. Expected wait assumes riders arrive at random
+      0.1%</strong> (about one in 1,000 comparable headways), not 10%. The “1 in N”
+      tail cards report these exact thresholds; they are not p95 or p99 estimates. Expected wait assumes riders arrive at random
       moments; spacing penalty compares observed wait with evenly spaced service at
-      the same realized frequency. Realized gaps below 30 seconds or above 90 minutes
+      the same realized frequency. The percentage is <code>(observed average wait − evenly
+      spaced average wait) ÷ evenly spaced average wait</code>. Realized gaps below 30 seconds or above 90 minutes
       are excluded as duplicate and overnight/outlier guards. Method inspired by
       <a href="https://sal-khan.com/bus-bunching.html" target="_blank" rel="noopener">Salman Khan’s Chicago bus-bunching project</a>,
       adapted to AC Transit GTFS-Realtime stop arrivals and published GTFS schedules.
@@ -228,7 +291,7 @@
   </footer>
 
   <script src="../lib.js?v=bunching-v3"></script>
-  <script src="app.js?v=report-trends-v3"></script>
+  <script src="app.js?v=report-trends-v4"></script>
   <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "0e36b12e46b04a69b5e9ff6883f6d23d"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
 </html>
