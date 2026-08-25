@@ -795,8 +795,8 @@ footer a:hover {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.bunching-tail-visual-short { gap: 4px; }
-.bunching-tail-visual-long { gap: 17px; }
+.bunching-tail-visual-short,
+.bunching-tail-visual-long { gap: 8px; }
 .bunching-tail-formula b { font-size: 18px; }
 .bunching-tail-formula i {
   display: inline-block;
