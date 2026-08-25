@@ -878,7 +878,7 @@ function renderBunchingSection(routes, agency) {
       const x = chart.scales.x.getPixelForValue(0.3);
       const { top, bottom } = chart.chartArea;
       chart.ctx.save();
-      chart.ctx.strokeStyle = "#2f8f46";
+      chart.ctx.strokeStyle = "#6b7e8f";
       chart.ctx.lineWidth = 2;
       chart.ctx.setLineDash([5, 4]);
       chart.ctx.beginPath();

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AC Transit route report card</title>
-  <link rel="stylesheet" href="../styles.css?v=report-trends-v4">
+  <link rel="stylesheet" href="../styles.css?v=report-trends-v5">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 </head>
 <body>
@@ -99,12 +99,18 @@
           within the same route, direction, stop, and hour so normal schedule changes do
           not look like unreliability. <strong>Headway CV</strong> means coefficient of
           variation (<code>standard deviation ÷ mean</code>); lower values mean more even spacing.
+          The CV 0.30 reference comes from
+          <a href="https://sal-khan.com/bus-bunching.html" target="_blank" rel="noopener">Salman Khan’s bus-bunching post</a>,
+          which cites the Transit Capacity and Quality of Service Manual.
         </p>
       </div>
       <div class="bunching-benchmark" aria-label="Headway coefficient of variation benchmark">
-        <span>Reference line</span>
+        <span>TCQSM high-frequency reference</span>
         <strong>CV 0.30</strong>
-        <small>lower is more even</small>
+        <small>
+          Guideline for service every 10 minutes or better; not a grading cutoff.
+          <a href="https://onlinepubs.trb.org/Onlinepubs/tcrp/tcrp_webdoc_6-e.pdf" target="_blank" rel="noopener">Official TCQSM table</a>
+        </small>
       </div>
     </div>
 
@@ -196,7 +202,7 @@
     <div class="bunching-chart-grid">
       <article class="bunching-chart-card">
         <h3>Headway variation by route</h3>
-        <p class="muted">Coefficient of variation; lower means buses are more evenly spaced.</p>
+        <p class="muted">Coefficient of variation; lower means buses are more evenly spaced. Both charts show the same 20 routes: those with a calculable headway CV and the most scheduled trips in the current four-week window. After selection, this chart orders them from lower to higher CV.</p>
         <div class="bunching-chart-canvas bunching-cv-canvas">
           <canvas id="bunching-route-chart" role="img" aria-label="Headway coefficient of variation by route"></canvas>
         </div>
@@ -291,7 +297,7 @@
   </footer>
 
   <script src="../lib.js?v=bunching-v3"></script>
-  <script src="app.js?v=report-trends-v4"></script>
+  <script src="app.js?v=report-trends-v5"></script>
   <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "0e36b12e46b04a69b5e9ff6883f6d23d"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
 </html>

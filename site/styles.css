@@ -728,17 +728,19 @@ footer a:hover {
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  min-width: 118px;
+  align-items: flex-start;
+  width: 220px;
   padding: 12px 14px;
-  border: 1px solid #b9d6c1;
+  border: 1px solid #d4dde5;
   border-radius: 12px;
-  background: #eff8f1;
-  color: #285a34;
+  background: #f5f7f9;
+  color: #445565;
 }
 .bunching-benchmark span,
-.bunching-benchmark small { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; }
+.bunching-benchmark small { font-size: 10px; line-height: 1.45; }
+.bunching-benchmark span { text-transform: uppercase; letter-spacing: 0.04em; }
 .bunching-benchmark strong { margin: 3px 0; font-size: 22px; }
+.bunching-benchmark a { color: #285f8f; }
 .bunching-cards { margin-top: 4px; }
 .bunching-cards .card { background: #fff; }
 .bunching-tail-grid {
