@@ -898,6 +898,29 @@ footer a:hover {
   position: relative;
   height: 330px;
 }
+.component-history-heading { margin-top: 28px; }
+.component-history-heading h3 { margin: 0; font-size: 18px; }
+.component-history-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.component-history-card h4 { margin: 0; font-size: 15px; }
+.component-history-description {
+  min-height: 60px;
+  margin: 4px 0 10px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.component-history-canvas {
+  position: relative;
+  height: 240px;
+}
+
+@media (max-width: 900px) {
+  .component-history-grid { grid-template-columns: 1fr; }
+  .component-history-description { min-height: 0; }
+}
 
 @media (max-width: 800px) {
   .grade-history-grid { grid-template-columns: 1fr; }
@@ -906,6 +929,7 @@ footer a:hover {
 @media (max-width: 480px) {
   .grade-history-card { padding: 14px 10px; }
   .grade-history-canvas { height: 310px; }
+  .component-history-canvas { height: 230px; }
 }
 
 .grade-legend {

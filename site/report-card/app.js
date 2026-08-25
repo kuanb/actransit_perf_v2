@@ -99,7 +99,7 @@ function emptyBunchingAccumulator() {
 
 function addBunchingMetrics(acc, metrics) {
   if (!metrics) return;
-  const aggregation = metrics.aggregation || {};
+  const aggregation = metrics.aggregation || metrics;
   for (const key of [
     "headway_n", "cell_n", "comparison_n", "bunched_headway_n",
     "long_gap_n", "scheduled_headway_n", "all_scheduled_headway_n",
@@ -573,12 +573,69 @@ function historyChartOptions(scores) {
   };
 }
 
+function componentHistoryChartOptions(values, yTitle, tooltipLabel) {
+  const valid = values.filter((value) => value != null && Number.isFinite(value));
+  let min = valid.length ? Math.max(0, Math.floor(Math.min(...valid) / 5) * 5 - 5) : 0;
+  let max = valid.length ? Math.min(100, Math.ceil(Math.max(...valid) / 5) * 5 + 5) : 100;
+  if (max - min < 20) {
+    const missingRange = 20 - (max - min);
+    const addAbove = Math.min(missingRange, 100 - max);
+    max += addAbove;
+    min = Math.max(0, min - (missingRange - addAbove));
+  }
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: "index", intersect: false },
+    scales: {
+      x: {
+        grid: { display: false },
+        ticks: { maxRotation: 0, autoSkipPadding: 18 },
+      },
+      y: {
+        min,
+        max,
+        ticks: { stepSize: 5 },
+        title: { display: true, text: yTitle },
+      },
+    },
+    plugins: {
+      legend: { display: false },
+      tooltip: { callbacks: { label: tooltipLabel } },
+    },
+  };
+}
+
+function renderComponentHistoryChart(canvasID, labels, values, label, color, fillColor, yTitle, tooltipLabel) {
+  new Chart(document.getElementById(canvasID), {
+    type: "line",
+    data: {
+      labels,
+      datasets: [{
+        label,
+        data: values,
+        borderColor: color,
+        backgroundColor: fillColor,
+        borderWidth: 2.5,
+        fill: true,
+        tension: 0.2,
+        pointRadius: 3,
+        pointHoverRadius: 5,
+        spanGaps: false,
+      }],
+    },
+    options: componentHistoryChartOptions(values, yTitle, tooltipLabel),
+  });
+}
+
 function renderGradeHistory(points, topRoutes) {
   const agencyMeta = document.getElementById("agency-history-meta");
   const routeMeta = document.getElementById("route-history-meta");
+  const componentMeta = document.getElementById("component-history-meta");
   if (!points.length) {
     agencyMeta.textContent = "Not enough daily data for a complete four-week historical point yet.";
     routeMeta.textContent = "Not enough daily data for a complete four-week historical point yet.";
+    componentMeta.textContent = "Not enough daily data for a complete four-week historical point yet.";
     return;
   }
 
@@ -587,6 +644,7 @@ function renderGradeHistory(points, topRoutes) {
   const last = historyDateLabel(points[points.length - 1].endDate);
   agencyMeta.textContent = `${points.length} weekly points · ${first}–${last}`;
   routeMeta.textContent = `Top 10 by scheduled trips in the current four-week window · ${first}–${last}`;
+  componentMeta.textContent = `${points.length} weekly points · ${first}–${last} · each point is a trailing four-week window`;
   const agencyScores = points.map((point) => point.agencyScore);
 
   new Chart(document.getElementById("agency-grade-history"), {
@@ -630,6 +688,43 @@ function renderGradeHistory(points, topRoutes) {
     },
     options: historyChartOptions(routeDatasets.flatMap((dataset) => dataset.data)),
   });
+
+  const serviceDelivered = points.map((point) => point.agencyComponents.stopSDPct);
+  const onTime = points.map((point) => point.agencyComponents.onTimePct);
+  const spacingScores = points.map((point) => point.agencyComponents.bunchingScore);
+  renderComponentHistoryChart(
+    "service-delivered-history",
+    labels,
+    serviceDelivered,
+    "On Time Service Delivered",
+    "#5f3dc4",
+    "rgba(95, 61, 196, 0.12)",
+    "Percent",
+    (ctx) => `On Time Service Delivered: ${fmt(ctx.parsed.y)}%`
+  );
+  renderComponentHistoryChart(
+    "on-time-history",
+    labels,
+    onTime,
+    "On time within 3 minutes",
+    "#2b8a3e",
+    "rgba(43, 138, 62, 0.12)",
+    "Percent",
+    (ctx) => `On time within 3 minutes: ${fmt(ctx.parsed.y)}%`
+  );
+  renderComponentHistoryChart(
+    "bunching-score-history",
+    labels,
+    spacingScores,
+    "Bus-spacing sub-score",
+    "#e8590c",
+    "rgba(232, 89, 12, 0.12)",
+    "Score / 100",
+    (ctx) => {
+      const cv = points[ctx.dataIndex].agencyComponents.headwayCV;
+      return `Bus-spacing score: ${fmt(ctx.parsed.y)} / 100 · headway CV ${fmt(cv, 2)}`;
+    }
+  );
 }
 
 async function loadGradeHistory(dates, currentDailies, currentRoutes) {
@@ -657,9 +752,17 @@ async function loadGradeHistory(dates, currentDailies, currentRoutes) {
     if (dailies.length !== WINDOW_DAYS) return null;
     const routes = aggregateRoutes(dailies).filter((route) => route.score != null);
     const agencyRoutes = routes.filter((route) => !isLimitedRoute(route));
+    const agency = aggregateAgency(agencyRoutes);
+    const bunchingEligible = agency.bunching_grade_eligible && agency.headway_cv != null;
     return {
       endDate: dates[endpointIndex],
-      agencyScore: aggregateAgency(agencyRoutes).score,
+      agencyScore: agency.score,
+      agencyComponents: {
+        stopSDPct: agency.stop_sd_pct,
+        onTimePct: agency.on_time_pct,
+        bunchingScore: bunchingEligible ? bunchingScore(agency.headway_cv) : null,
+        headwayCV: bunchingEligible ? agency.headway_cv : null,
+      },
       routeScores: new Map(routes.map((route) => [route.route_id, route.score])),
     };
   }).filter((point) => point && point.agencyScore != null).reverse();
@@ -781,7 +884,9 @@ function renderBunchingSection(routes, agency) {
     },
   });
 
-  const progressCandidates = ordered.filter((route) => route.progress_cv.some((value) => value != null));
+  const progressCandidates = ordered.filter((route) =>
+    route.progress_cv.filter((value) => value != null).length >= 2
+  );
   const progressRoutes = [progressCandidates[0], progressCandidates[2], progressCandidates[Math.max(0, progressCandidates.length - 3)], progressCandidates[progressCandidates.length - 1]]
     .filter((route, index, all) => route && all.indexOf(route) === index);
   const lineColors = ["#2b8a3e", "#1971c2", "#e8590c", "#c92a2a"];

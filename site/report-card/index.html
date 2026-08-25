@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AC Transit route report card</title>
-  <link rel="stylesheet" href="../styles.css">
+  <link rel="stylesheet" href="../styles.css?v=report-trends-v2">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 </head>
 <body>
@@ -54,6 +54,33 @@
         <p id="route-history-meta" class="muted grade-history-meta">Loading available history…</p>
         <div class="grade-history-canvas">
           <canvas id="route-grade-history" role="img" aria-label="Numerical grade scores by week for the ten routes with the most scheduled trips in the current evaluation period"></canvas>
+        </div>
+      </article>
+    </div>
+    <div class="component-history-heading">
+      <h3>Agency score components over time</h3>
+      <p id="component-history-meta" class="muted grade-history-meta">Loading available history…</p>
+    </div>
+    <div class="component-history-grid">
+      <article class="grade-history-card component-history-card">
+        <h4>On Time Service Delivered</h4>
+        <p class="muted component-history-description">Eligible scheduled stop-arrivals inside the −1 to +7 minute rider window · 40% of grade</p>
+        <div class="component-history-canvas">
+          <canvas id="service-delivered-history" role="img" aria-label="Agency-wide On Time Service Delivered percentage by week"></canvas>
+        </div>
+      </article>
+      <article class="grade-history-card component-history-card">
+        <h4>On time within 3 minutes</h4>
+        <p class="muted component-history-description">Observed stop-arrivals from scheduled time through 3 minutes late · 10% of grade</p>
+        <div class="component-history-canvas">
+          <canvas id="on-time-history" role="img" aria-label="Agency-wide on-time percentage by week"></canvas>
+        </div>
+      </article>
+      <article class="grade-history-card component-history-card">
+        <h4>Bus spacing and bunching</h4>
+        <p class="muted component-history-description">Spacing sub-score = 100 × (1 − headway CV) · 35% of grade · higher is better</p>
+        <div class="component-history-canvas">
+          <canvas id="bunching-score-history" role="img" aria-label="Agency-wide bus-spacing sub-score by week"></canvas>
         </div>
       </article>
     </div>
@@ -201,7 +228,7 @@
   </footer>
 
   <script src="../lib.js?v=bunching-v3"></script>
-  <script src="app.js?v=bunching-v3"></script>
+  <script src="app.js?v=report-trends-v2"></script>
   <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "0e36b12e46b04a69b5e9ff6883f6d23d"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
 </html>
