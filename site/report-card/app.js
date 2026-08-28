@@ -533,12 +533,12 @@ function historyDateLabel(date) {
   }).format(new Date(`${date}T00:00:00Z`));
 }
 
-function historyChartOptions(scores) {
+function historyChartOptions(scores, tickStep = 10, minimumRange = 20) {
   const valid = scores.filter((score) => score != null && Number.isFinite(score));
-  let min = valid.length ? Math.max(0, Math.floor(Math.min(...valid) / 10) * 10) : 0;
-  let max = valid.length ? Math.min(100, Math.ceil(Math.max(...valid) / 10) * 10) : 100;
-  if (max - min < 20) {
-    const missingRange = 20 - (max - min);
+  let min = valid.length ? Math.max(0, Math.floor(Math.min(...valid) / tickStep) * tickStep) : 0;
+  let max = valid.length ? Math.min(100, Math.ceil(Math.max(...valid) / tickStep) * tickStep) : 100;
+  if (max - min < minimumRange) {
+    const missingRange = minimumRange - (max - min);
     const addAbove = Math.min(missingRange, 100 - max);
     max += addAbove;
     min = Math.max(0, min - (missingRange - addAbove));
@@ -555,7 +555,7 @@ function historyChartOptions(scores) {
       y: {
         min,
         max,
-        ticks: { stepSize: 10 },
+        ticks: { stepSize: tickStep },
         title: { display: true, text: "Score / 100" },
       },
     },
@@ -662,7 +662,7 @@ function renderGradeHistory(points, topRoutes) {
         pointHoverRadius: 5,
       }],
     },
-    options: historyChartOptions(agencyScores),
+    options: historyChartOptions(agencyScores, 5, 5),
   });
 
   const colors = [
