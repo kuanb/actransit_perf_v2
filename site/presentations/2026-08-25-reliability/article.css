@@ -36,6 +36,9 @@ h1 { max-width: 970px; margin: 0; font-size: clamp(46px, 7vw, 79px); letter-spac
 .action h3 { margin: 2px 0 11px; font-size: 29px; }
 .action p { margin: 0; color: #3c4c55; font-size: 17px; }
 .article > .closing { margin-top: 48px; font-size: 23px; line-height: 1.6; }
+.author-note { width: min(900px, 100%); margin: 70px auto 0; padding: 26px 30px; border-top: 3px solid var(--purple); border-bottom: 1px solid var(--line); }
+.author-note h2 { margin: 0 0 8px; font-size: 24px; }
+.author-note p { max-width: 760px; margin: 0; color: #3c4c55; font-size: 16px; }
 .methodology { width: min(900px, 100%); margin: 70px auto 0; padding: 28px 30px; border-left: 5px solid var(--teal); background: rgba(255, 253, 249, .8); }
 .methodology h2 { margin: 0 0 12px; font-size: 26px; }
 .methodology p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.65; }
@@ -53,6 +56,7 @@ h1 { max-width: 970px; margin: 0; font-size: clamp(46px, 7vw, 79px); letter-spac
   .action-number { width: 34px; height: 34px; font-size: 18px; }
   .action h3 { font-size: 24px; }
   .action p { font-size: 16px; }
+  .author-note { padding: 22px 20px; }
   .methodology { padding: 22px 20px; }
 }
 
@@ -60,5 +64,5 @@ h1 { max-width: 970px; margin: 0; font-size: clamp(46px, 7vw, 79px); letter-spac
   .back, .footer { display: none; }
   body { background: #fff; }
   .shell { width: 100%; }
-  .plot, .action, .methodology { break-inside: avoid; }
+  .plot, .action, .author-note, .methodology { break-inside: avoid; }
 }
