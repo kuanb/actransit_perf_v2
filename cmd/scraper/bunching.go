@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	bunchingMethodologyVersion  = 2
+	bunchingMethodologyVersion  = 3
 	bunchingMinHeadwaySeconds   = 30
 	bunchingMaxHeadwaySeconds   = 90 * 60
 	bunchingMaxFrequencySeconds = 40 * 60
@@ -391,7 +391,6 @@ func queryBunchingObservations(ctx context.Context, serviceDate civil.Date) ([]b
 		FROM obs
 		WHERE actual_arrival IS NOT NULL
 		  AND scheduled_arrival IS NOT NULL
-		  AND is_stale = FALSE
 	`, dedupedDayObservationsCTE(serviceDate)))
 	it, err := q.Read(ctx)
 	if err != nil {

@@ -17,7 +17,8 @@ import (
 )
 
 const (
-	routeWaitWeeklyPrefix = "stats/weekly/route_wait/"
+	routeWaitWeeklyPrefix       = "stats/weekly/route_wait/"
+	routeWaitMethodologyVersion = 2
 
 	// Headway bounds applied when deriving inter-arrival gaps from
 	// successive actual_arrival values at the same (route, stop). 30 s
@@ -81,9 +82,10 @@ type routeWaitDayBlock struct {
 }
 
 type routeWaitWeeklyStats struct {
-	RouteID string                       `json:"route_id"`
-	WeekEnd string                       `json:"week_end"`
-	Days    map[string]routeWaitDayBlock `json:"days"` // "weekday" / "weekend"
+	MethodologyVersion int                          `json:"methodology_version"`
+	RouteID            string                       `json:"route_id"`
+	WeekEnd            string                       `json:"week_end"`
+	Days               map[string]routeWaitDayBlock `json:"days"` // "weekday" / "weekend"
 }
 
 // generateAllRouteWaitTimeStats derives the passenger wait-time
@@ -131,9 +133,10 @@ func generateAllRouteWaitTimeStats(ctx context.Context, weekStart, weekEnd civil
 		r, ok := byRoute[rid]
 		if !ok {
 			r = &routeWaitWeeklyStats{
-				RouteID: rid,
-				WeekEnd: weekEnd.String(),
-				Days:    make(map[string]routeWaitDayBlock),
+				MethodologyVersion: routeWaitMethodologyVersion,
+				RouteID:            rid,
+				WeekEnd:            weekEnd.String(),
+				Days:               make(map[string]routeWaitDayBlock),
 			}
 			byRoute[rid] = r
 		}
@@ -271,13 +274,13 @@ func queryObservedExpectedWaitByHour(ctx context.Context, weekStart, weekEnd civ
 		WITH %s,
 		arrivals AS (
 		  SELECT
-		    route_id, stop_id, service_date, actual_arrival,
+		    route_id, direction_id, stop_id, service_date, actual_arrival,
 		    LEAD(actual_arrival) OVER (
-		      PARTITION BY route_id, stop_id, service_date
+		      PARTITION BY route_id, direction_id, stop_id, service_date
 		      ORDER BY actual_arrival
 		    ) AS next_arrival
 		  FROM obs
-		  WHERE actual_arrival IS NOT NULL AND is_stale = FALSE
+		  WHERE actual_arrival IS NOT NULL AND direction_id IS NOT NULL
 		),
 		headways AS (
 		  SELECT
@@ -454,13 +457,13 @@ func headwaysCTE(weekStart, weekEnd civil.Date) string {
 	return fmt.Sprintf(`%s,
 arrivals AS (
   SELECT
-    route_id, stop_id, service_date, actual_arrival,
+    route_id, direction_id, stop_id, service_date, actual_arrival,
     LEAD(actual_arrival) OVER (
-      PARTITION BY route_id, stop_id, service_date
+      PARTITION BY route_id, direction_id, stop_id, service_date
       ORDER BY actual_arrival
     ) AS next_arrival
   FROM obs
-  WHERE actual_arrival IS NOT NULL AND is_stale = FALSE
+  WHERE actual_arrival IS NOT NULL AND direction_id IS NOT NULL
 ),
 headways AS (
   SELECT

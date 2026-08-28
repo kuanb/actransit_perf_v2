@@ -155,6 +155,7 @@ answer.
 CREATE TABLE actransit.trip_observations (
   service_date          DATE        NOT NULL,
   route_id              STRING      NOT NULL,
+  direction_id          INT64,
   trip_id               STRING      NOT NULL,
   vehicle_id            STRING      NOT NULL,
   stop_sequence         INT64       NOT NULL,

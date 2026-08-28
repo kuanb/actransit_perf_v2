@@ -163,7 +163,7 @@ function renderCards(selector, items) {
 function busSpacingAvailable(bunching) {
   return Boolean(
     bunching &&
-    bunching.methodology_version === 2 &&
+    bunching.methodology_version === 3 &&
     bunching.status === "available" &&
     bunching.eligibility &&
     bunching.eligibility.eligible === true &&
@@ -179,7 +179,7 @@ function busSpacingScore(cv) {
 
 function busSpacingStatusLabel(bunching) {
   if (busSpacingAvailable(bunching)) return "Available";
-  if (!bunching || bunching.methodology_version !== 2 || bunching.status === "missing") {
+  if (!bunching || bunching.methodology_version !== 3 || bunching.status === "missing") {
     return "Missing";
   }
   if (bunching.status === "partial") return "Partial window";
@@ -204,7 +204,7 @@ function busSpacingWarningText(bunching, gradeWeight = null) {
   const suffix = gradeWeight === null
     ? "No CV or bunching metric is reported for this window."
     : `The ${gradeWeight}% bus-spacing component is skipped and the other available grade components are renormalized.`;
-  if (!bunching || bunching.methodology_version !== 2 || bunching.status === "missing") {
+  if (!bunching || bunching.methodology_version !== 3 || bunching.status === "missing") {
     return `Bus-spacing data is missing for this window. ${suffix}`;
   }
   if (bunching.status === "partial") {

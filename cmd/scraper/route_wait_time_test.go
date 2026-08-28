@@ -2,9 +2,28 @@ package main
 
 import (
 	"math"
+	"strings"
 	"testing"
 	"time"
+
+	"cloud.google.com/go/civil"
 )
+
+func TestHeadwaysCTEUsesActualArrivalsWithinDirection(t *testing.T) {
+	q := headwaysCTE(
+		civil.Date{Year: 2026, Month: 8, Day: 24},
+		civil.Date{Year: 2026, Month: 8, Day: 28},
+	)
+	if !strings.Contains(q, "PARTITION BY route_id, direction_id, stop_id, service_date") {
+		t.Fatal("headways must partition arrivals by route, direction, stop, and service date")
+	}
+	if !strings.Contains(q, "actual_arrival IS NOT NULL AND direction_id IS NOT NULL") {
+		t.Fatal("headways must use observed arrivals with a known direction")
+	}
+	if strings.Contains(q, "is_stale = FALSE") {
+		t.Fatal("headways must retain actual arrivals from stale-finalized trips")
+	}
+}
 
 func sumDensity(d []float64) float64 {
 	s := 0.0

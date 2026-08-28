@@ -74,6 +74,44 @@ func TestComputeDailyBunching(t *testing.T) {
 	}
 }
 
+func TestComputeDailyBunchingSeparatesDirectionsAtSharedStop(t *testing.T) {
+	base := time.Date(2026, 8, 10, 15, 0, 0, 0, time.UTC)
+	schedule := &bunchingSchedule{
+		TripMeta:     make(map[string]bunchingTripMeta),
+		TripProgress: make(map[bunchingTripStopKey]int),
+		ByStop:       make(map[bunchingStopKey][]bunchingScheduledArrival),
+	}
+	var observations []bunchingObservation
+	for direction, offset := range []time.Duration{0, 5 * time.Minute} {
+		key := bunchingStopKey{RouteID: "R1", DirectionID: string(rune('0' + direction)), StopID: "TERMINAL"}
+		for i := 0; i < 2; i++ {
+			tripID := key.DirectionID + string(rune('A'+i))
+			arrival := base.Add(offset + time.Duration(i)*10*time.Minute)
+			schedule.TripMeta[tripID] = bunchingTripMeta{RouteID: "R1", DirectionID: key.DirectionID}
+			schedule.TripProgress[bunchingTripStopKey{TripID: tripID, StopSequence: 1}] = 10
+			schedule.ByStop[key] = append(schedule.ByStop[key], bunchingScheduledArrival{
+				TripID: tripID, Arrival: arrival, Progress: 10, StopID: "TERMINAL", StopSeq: 1,
+			})
+			observations = append(observations, bunchingObservation{
+				RouteID: "R1", TripID: tripID, StopID: "TERMINAL", StopSequence: 1,
+				ScheduledArrival: arrival, ActualArrival: arrival,
+			})
+		}
+	}
+
+	_, routes := computeDailyBunching(observations, schedule)
+	route := routes["R1"]
+	if route == nil {
+		t.Fatal("route bunching missing")
+	}
+	if route.HeadwayN != 2 {
+		t.Fatalf("headways=%d, want one 10-minute headway per direction", route.HeadwayN)
+	}
+	if route.Aggregation.ObservedHeadwaySeconds != 20*60 {
+		t.Fatalf("observed headway seconds=%.0f, want 1200", route.Aggregation.ObservedHeadwaySeconds)
+	}
+}
+
 func TestBunchingCVRequiresTwoHeadwaysInCell(t *testing.T) {
 	acc := bunchingAccumulator{}
 	acc.addObservedCell([]bunchingGap{{Seconds: 600}})

@@ -756,8 +756,11 @@
         </p>
         <p class="muted defn">
           <strong>How it's computed.</strong> For every (stop, day) we
-          line up consecutive bus arrivals on this route and measure the
-          gap between them (the <em>headway</em>). Under the inspection
+          line up consecutive bus arrivals within the same route direction
+          and measure the gap between them (the <em>headway</em>). Every
+          recorded arrival is retained even if the trip later times out;
+          stops the bus never reached have no arrival and do not enter the
+          sequence. Under the inspection
           paradox a random passenger lands in a gap of length
           <code>h</code> with probability proportional to <code>h</code>
           and then waits uniformly on <code>(0, h)</code>, so the
@@ -946,8 +949,8 @@
     <div id="loading">Loading route data…</div>
   </div>
 
-  <script src="../lib.js?v=bunching-v3"></script>
-  <script src="app.js?v=bunching-v3"></script>
+  <script src="../lib.js?v=bunching-v4"></script>
+  <script src="app.js?v=bunching-v4"></script>
   <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "0e36b12e46b04a69b5e9ff6883f6d23d"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
 </html>

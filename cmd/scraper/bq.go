@@ -24,6 +24,7 @@ var bqClient *bigquery.Client
 type tripObservationRow struct {
 	ServiceDate      civil.Date             `bigquery:"service_date"      json:"service_date"`
 	RouteID          string                 `bigquery:"route_id"          json:"route_id"`
+	DirectionID      int64                  `bigquery:"direction_id"      json:"direction_id"`
 	TripID           string                 `bigquery:"trip_id"           json:"trip_id"`
 	VehicleID        string                 `bigquery:"vehicle_id"        json:"vehicle_id"`
 	StopSequence     int64                  `bigquery:"stop_sequence"     json:"stop_sequence"`
@@ -120,6 +121,7 @@ func buildObservationRows(t inFlightTrip, cache *gtfsCache, serviceDate civil.Da
 		row := tripObservationRow{
 			ServiceDate:  serviceDate,
 			RouteID:      t.RouteID,
+			DirectionID:  int64(trip.DirectionID),
 			TripID:       t.TripID,
 			VehicleID:    t.VehicleID,
 			StopSequence: int64(st.StopSequence),

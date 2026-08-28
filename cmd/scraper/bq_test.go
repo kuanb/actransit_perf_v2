@@ -68,6 +68,7 @@ func TestTripToRows(t *testing.T) {
 	// Inject scheduled arrivals so we can exercise delay computation.
 	r := cache.Routes["R1"]
 	trip := r.Trips["T1"]
+	trip.DirectionID = 1
 	for i := range trip.StopTimes {
 		trip.StopTimes[i].ArrivalTime = []string{"08:00:00", "08:01:00", "08:03:00"}[i]
 	}
@@ -105,6 +106,9 @@ func TestTripToRows(t *testing.T) {
 		o1 := obs[0]
 		if o1.StopSequence != 1 || o1.StopID != "A" {
 			t.Fatalf("obs[0] stop = %d/%s, want 1/A", o1.StopSequence, o1.StopID)
+		}
+		if o1.DirectionID != 1 {
+			t.Fatalf("obs[0] direction_id = %d, want 1", o1.DirectionID)
 		}
 		if !o1.ScheduledArrival.Valid || !o1.ScheduledArrival.Timestamp.Equal(t0) {
 			t.Fatalf("obs[0] scheduled = %v, want %v", o1.ScheduledArrival, t0)
@@ -199,11 +203,11 @@ func TestTripToRows(t *testing.T) {
 
 	t.Run("malformed service_date short-circuits service_date and scheduled_arrival but rows still emit", func(t *testing.T) {
 		trip := inFlightTrip{
-			VehicleID:   "V1",
-			RouteID:     "R1",
-			TripID:      "T1",
-			ServiceDate: "BADDATE",
-			Probes:      []probe{{TS: t0, DistAlongRouteM: 100}},
+			VehicleID:    "V1",
+			RouteID:      "R1",
+			TripID:       "T1",
+			ServiceDate:  "BADDATE",
+			Probes:       []probe{{TS: t0, DistAlongRouteM: 100}},
 			StopArrivals: map[int]time.Time{1: t0},
 		}
 		obs, probes := tripToRows(trip, cache, ingestedAt, true)

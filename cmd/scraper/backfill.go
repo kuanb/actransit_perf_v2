@@ -74,9 +74,9 @@ func processBackfillDay(ctx context.Context, serviceDate civil.Date, force bool)
 		}
 	}
 
-	gtfsBytes, err := readGTFSCurrentZip(ctx)
+	gtfsBytes, cache, err := loadBackfillGTFS(ctx, serviceDate)
 	if err != nil {
-		return stats, fmt.Errorf("read gtfs zip: %w", err)
+		return stats, err
 	}
 	zr, err := zip.NewReader(bytes.NewReader(gtfsBytes), int64(len(gtfsBytes)))
 	if err != nil {
@@ -91,11 +91,6 @@ func processBackfillDay(ctx context.Context, serviceDate civil.Date, force bool)
 			"current GTFS feed has no active services for %s — refresh GTFS or pick a date the feed covers",
 			serviceDate,
 		)
-	}
-
-	cache := ensureGTFSCache(ctx)
-	if cache == nil {
-		return stats, errors.New("gtfs cache is nil; /refresh-gtfs has not yet processed the feed")
 	}
 
 	startTS := time.Date(serviceDate.Year, serviceDate.Month, serviceDate.Day, backfillWindowStartHrPT, 0, 0, 0, loc).Unix()
@@ -153,6 +148,34 @@ func processBackfillDay(ctx context.Context, serviceDate civil.Date, force bool)
 	}
 	stats.StatsRegenerated = true
 	return stats, nil
+}
+
+func loadBackfillGTFS(ctx context.Context, serviceDate civil.Date) ([]byte, *gtfsCache, error) {
+	current, err := readGTFSCurrentZip(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("read current gtfs zip: %w", err)
+	}
+	supported, err := gtfsSupportsServiceDate(current, serviceDate)
+	if err != nil {
+		return nil, nil, fmt.Errorf("inspect current gtfs zip: %w", err)
+	}
+	if supported {
+		cache := ensureGTFSCache(ctx)
+		if cache == nil {
+			return nil, nil, errors.New("gtfs cache is nil; /refresh-gtfs has not yet processed the feed")
+		}
+		return current, cache, nil
+	}
+
+	body, err := readGTFSZipForServiceDate(ctx, serviceDate)
+	if err != nil {
+		return nil, nil, fmt.Errorf("read archived gtfs zip: %w", err)
+	}
+	routes, err := processGTFS(body, "backfill")
+	if err != nil {
+		return nil, nil, fmt.Errorf("process archived gtfs zip: %w", err)
+	}
+	return body, &gtfsCache{Routes: routes}, nil
 }
 
 // readBackfillCSVs lists gs://ac-transit/maptime/{unix}.csv objects whose
