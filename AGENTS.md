@@ -72,6 +72,24 @@ Manual-only endpoints (no Cloud Scheduler):
   you reprocess the cached zip without waiting for AC Transit to roll a
   new feed. Useful when an earlier refresh half-succeeded.
 
+### Bunching backfill invariant
+
+`/backfill-day` regenerates bunching for the replayed date, but it does not
+upgrade older daily JSON outside the requested date. A change to
+`bunchingMethodologyVersion`, direction grouping, bunching eligibility, or
+the aggregation payload therefore invalidates the entire report-card history,
+not only the current 28-day grading window.
+
+After deploying any such change, run `make backfill-bunching-history`. The
+target discovers every date in `stats/_index.json`, recomputes stale daily
+payloads in week-aligned batches, refreshes their weekly bunching rollups, and
+then verifies that every indexed daily and weekly file matches the current Go
+methodology version. It defaults to `PARALLEL=2`, matching Cloud Run's instance
+ceiling; do not declare the migration or its backfill complete unless this
+target exits successfully. A range-limited observation replay and a
+full-history bunching migration are separate required scopes when the
+calculation itself changes.
+
 Two custom Cloud Monitoring metrics emitted from `/track-performance`:
 `custom.googleapis.com/actransit/vehicles_in_flight` and
 `.../trips_finalized_per_minute`. Both gauge int64, resource type `global`.
