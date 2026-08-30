@@ -25,6 +25,13 @@ plus updates `gtfs/current.zip` only if the hash changed:
 - `gtfs/current.zip` — the most recent GTFS, also tagged with the SHA-256 in metadata
 - `gtfs/<YYYYMMDDTHHMMSSZ>.zip` — immutable dated archives of each version observed
 
+The performance tracker writes completed trips to BigQuery. Daily, weekly,
+and monthly generators combine those observations with the GTFS schedule and
+publish report JSON under `stats/`. The agency-comparison fields reproduce AC
+Transit's Service Operated and On-Time Performance definitions from independent
+data. A daily `/refresh-published-kpis` job imports AC Transit's published
+monthly values for side-by-side comparison.
+
 ## Design docs
 
 In-progress / planned services have architecture artifacts under `docs/`:
@@ -43,6 +50,10 @@ directly via HTTPS, with permissive CORS for browsers:
 | Vehicle history  | `https://storage.googleapis.com/transit-203605-actransit-cache/history.json`              |
 | Route stops      | `https://storage.googleapis.com/transit-203605-actransit-cache/route_stops.json`          |
 | Current GTFS     | `https://storage.googleapis.com/transit-203605-actransit-cache/gtfs/current.zip`          |
+| Latest daily report | `https://storage.googleapis.com/transit-203605-actransit-cache/stats/latest.json`       |
+| Latest weekly report | `https://storage.googleapis.com/transit-203605-actransit-cache/stats/weekly/latest.json` |
+| Latest monthly KPI report | `https://storage.googleapis.com/transit-203605-actransit-cache/stats/monthly/latest.json` |
+| Published AC Transit KPIs | `https://storage.googleapis.com/transit-203605-actransit-cache/stats/published-kpis/latest.json` |
 
 ## Stack
 
@@ -66,6 +77,7 @@ make deploy                 # terraform apply at the currently-running tag (infr
 make build                  # just build (rare; use release instead)
 make invoke                 # curl /scrape with your identity token
 make logs                   # recent Cloud Run logs
+make backfill-agency-kpis-history  # rebuild KPI comparison history after deployment
 ```
 
 `make deploy` refuses to run if the tag isn't in Artifact Registry, so you

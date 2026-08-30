@@ -59,6 +59,10 @@ Makefile            Authoritative entry points — see README.md "Deploy"
 | `/refresh-stops`          | `0 */6 * * *`      | UTC       | Writes `route_stops.json` |
 | `/refresh-gtfs`           | `0 22 * * *`       | PT        | Refreshes `gtfs/current.zip` + per-route processed JSONs |
 | `/generate-daily-stats`   | `0 2 * * *`        | PT        | Reads BQ for prior PT day, writes `stats/<date>.json`, `stats/latest.json`, updates `stats/_index.json` |
+| `/generate-daily-agency-kpis` | `0 7 * * *`    | PT        | Recomputes prior day's SO/OTP comparison after owl service closes |
+| `/generate-weekly-stats`  | `0 8 * * SUN`      | PT        | Rolls Sunday–Saturday daily reports into `stats/weekly/` |
+| `/generate-monthly-stats` | `0 9 1 * *`        | PT        | Rolls prior calendar month into `stats/monthly/` |
+| `/refresh-published-kpis` | `0 10 * * *`       | PT        | Imports AC Transit's published monthly SO/OTP JSON |
 
 Manual-only endpoints (no Cloud Scheduler):
 
@@ -71,6 +75,10 @@ Manual-only endpoints (no Cloud Scheduler):
 - **`/refresh-gtfs?force=true`** — bypasses the unchanged-hash skip; lets
   you reprocess the cached zip without waiting for AC Transit to roll a
   new feed. Useful when an earlier refresh half-succeeded.
+- **`/backfill-agency-kpis?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD`** —
+  patches comparison fields into existing daily and weekly reports and builds
+  affected monthly files without replaying observations. Use
+  `make backfill-agency-kpis-history` for the full indexed history.
 
 ### Bunching backfill invariant
 

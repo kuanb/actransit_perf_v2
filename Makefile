@@ -13,10 +13,11 @@ GIT_SHA  := $(shell git rev-parse --short HEAD 2>/dev/null)
 DIRTY    := $(shell git diff-index --quiet HEAD -- 2>/dev/null || echo "-dirty")
 AUTO_TAG := $(GIT_SHA)$(DIRTY)
 BUNCHING_VERSION := $(shell sed -nE 's/^[[:space:]]*bunchingMethodologyVersion[[:space:]]*=[[:space:]]*([0-9]+).*/\1/p' cmd/scraper/bunching.go)
+AGENCY_KPI_VERSION := $(shell sed -nE 's/^[[:space:]]*agencyKPIMethodologyVersion[[:space:]]*=[[:space:]]*([0-9]+).*/\1/p' cmd/scraper/agency_kpi.go)
 PARALLEL ?= 2
 BUNCHING_VERIFY_PARALLEL ?= 16
 
-.PHONY: tf-init tf-plan tf-apply tf-fmt build deploy release logs invoke run-local test smoke hooks-install backfill backfill-bunching backfill-bunching-history verify-bunching-history
+.PHONY: tf-init tf-plan tf-apply tf-fmt build deploy release logs invoke run-local test smoke hooks-install backfill backfill-bunching backfill-bunching-history verify-bunching-history backfill-agency-kpis backfill-agency-kpis-history verify-agency-kpi-history
 
 tf-init:
 	cd infra && terraform init
@@ -125,6 +126,46 @@ verify-bunching-history:
 	printf '%s\n' "$$WEEKS" | xargs -n 1 -P "$(BUNCHING_VERIFY_PARALLEL)" sh -c 'week="$$1"; curl -fsS --connect-timeout 10 --max-time 60 "https://storage.googleapis.com/$(PROJECT_ID)-actransit-cache/stats/weekly/$${week}.json" | jq -e --argjson expected "$${EXPECTED}" '\''.methodology_version == $$expected and .system.bunching.methodology_version == $$expected and all(.route_daily_service_delivered[]; .bunching.methodology_version == $$expected)'\'' >/dev/null || { echo "MISMATCH week $${week}"; exit 1; }' sh; \
 	echo "==> verified $$(printf '%s\n' "$$DATES" | wc -l | tr -d ' ') daily and $$(printf '%s\n' "$$WEEKS" | wc -l | tr -d ' ') weekly files at bunching methodology v$$EXPECTED"
 
+backfill-agency-kpis:
+	@test -n "$(START)" -a -n "$(END)" || (echo "usage: make backfill-agency-kpis START=YYYY-MM-DD END=YYYY-MM-DD [FORCE=true]" && exit 1)
+	@URL="$$(cd infra && terraform output -raw scraper_url)"; \
+	TOKEN="$$(gcloud auth print-identity-token)"; \
+	QS="start_date=$(START)&end_date=$(END)"; \
+	if [ "$(FORCE)" = "true" ]; then QS="$$QS&force=true"; fi; \
+	echo "==> POST $$URL/backfill-agency-kpis?$$QS"; \
+	curl --fail --max-time 1800 -X POST -H "Authorization: Bearer $$TOKEN" \
+		"$$URL/backfill-agency-kpis?$$QS"
+
+# Recomputes agency-comparison KPI fields in month-sized batches. The
+# endpoint patches existing daily and weekly JSON, then builds monthly
+# artifacts, without replaying observations or re-running unrelated metrics.
+backfill-agency-kpis-history:
+	@set -eu; \
+	URL="$$(cd infra && terraform output -raw scraper_url)"; \
+	TOKEN="$$(gcloud auth print-identity-token)"; \
+	RANGES="$$(gsutil cat gs://$(PROJECT_ID)-actransit-cache/stats/_index.json | python3 -c 'import collections,datetime,json,sys; dates=sorted(datetime.date.fromisoformat(v) for v in json.load(sys.stdin)["dates"]); groups=collections.defaultdict(list); [groups[(d.year,d.month)].append(d) for d in dates]; print("\n".join(f"{min(v)} {max(v)}" for _,v in sorted(groups.items())))')"; \
+	test -n "$$RANGES" || { echo "ERROR: stats index contains no dates"; exit 1; }; \
+	export URL TOKEN; \
+	printf '%s\n' "$$RANGES" | while read -r start_date end_date; do \
+		echo "==> $$start_date..$$end_date"; \
+		curl -sS --fail-with-body --max-time 1800 -X POST -H "Authorization: Bearer $$TOKEN" "$$URL/backfill-agency-kpis?start_date=$${start_date}&end_date=$${end_date}" | jq -c '{start_date,end_date,daily_updated,daily_missing,weekly_updated,weekly_missing,monthly_updated}'; \
+	done; \
+	$(MAKE) verify-agency-kpi-history
+
+verify-agency-kpi-history:
+	@test -n "$(AGENCY_KPI_VERSION)" || { echo "ERROR: couldn't read agencyKPIMethodologyVersion"; exit 1; }
+	@set -eu; \
+	EXPECTED="$(AGENCY_KPI_VERSION)"; \
+	DATES="$$(gsutil cat gs://$(PROJECT_ID)-actransit-cache/stats/_index.json | jq -r '.dates[]')"; \
+	WEEKS="$$(gsutil cat gs://$(PROJECT_ID)-actransit-cache/stats/weekly/_index.json | jq -r '.weeks[]')"; \
+	MONTHS="$$(gsutil cat gs://$(PROJECT_ID)-actransit-cache/stats/monthly/_index.json | jq -r '.months[]')"; \
+	test -n "$$DATES" -a -n "$$WEEKS" -a -n "$$MONTHS" || { echo "ERROR: a KPI artifact index is empty"; exit 1; }; \
+	export EXPECTED; \
+	printf '%s\n' "$$DATES" | xargs -n 1 -P "$(BUNCHING_VERIFY_PARALLEL)" sh -c 'day="$$1"; curl -fsS --connect-timeout 10 --max-time 60 "https://storage.googleapis.com/$(PROJECT_ID)-actransit-cache/stats/$${day}.json" | jq -e --argjson expected "$${EXPECTED}" '\''.agency_kpi.methodology_version == $$expected and all(.routes[]; .agency_kpi.methodology_version == $$expected)'\'' >/dev/null || { echo "MISMATCH day $$day"; exit 1; }' sh; \
+	printf '%s\n' "$$WEEKS" | xargs -n 1 -P "$(BUNCHING_VERIFY_PARALLEL)" sh -c 'week="$$1"; curl -fsS --connect-timeout 10 --max-time 60 "https://storage.googleapis.com/$(PROJECT_ID)-actransit-cache/stats/weekly/$${week}.json" | jq -e --argjson expected "$${EXPECTED}" '\''.agency_kpi.methodology_version == $$expected and all(.route_daily_service_delivered[]; .agency_kpi.methodology_version == $$expected)'\'' >/dev/null || { echo "MISMATCH week $$week"; exit 1; }' sh; \
+	printf '%s\n' "$$MONTHS" | xargs -n 1 -P "$(BUNCHING_VERIFY_PARALLEL)" sh -c 'month="$$1"; curl -fsS --connect-timeout 10 --max-time 60 "https://storage.googleapis.com/$(PROJECT_ID)-actransit-cache/stats/monthly/$${month}.json" | jq -e --argjson expected "$${EXPECTED}" '\''.agency_kpi.methodology_version == $$expected and all(.routes[]; .agency_kpi.methodology_version == $$expected)'\'' >/dev/null || { echo "MISMATCH month $$month"; exit 1; }' sh; \
+	echo "==> verified agency KPI methodology v$$EXPECTED across daily, weekly, and monthly history"
+
 run-local:
 	go run ./cmd/scraper
 
@@ -175,6 +216,10 @@ smoke:
 	hit POST /generate-daily-stats; \
 	check "$$BUCKET/stats/latest.json"; \
 	check "$$BUCKET/stats/_index.json"; \
+	hit POST /generate-monthly-stats; \
+	check "$$BUCKET/stats/monthly/latest.json"; \
+	hit POST /refresh-published-kpis; \
+	check "$$BUCKET/stats/published-kpis/latest.json"; \
 	if [ "$(TAG)" = "full" ]; then \
 		hit POST /refresh-gtfs; \
 		check "$$BUCKET/gtfs/current.zip"; \

@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AC Transit KPI comparison</title>
+  <link rel="stylesheet" href="../styles.css?v=kpi-comparison-v2">
+  <script src="../independence-notice.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <header>
+    <div class="header-body">
+      <h1>AC Transit KPI comparison</h1>
+      <div id="meta" class="muted">Loading monthly history…</div>
+    </div>
+    <nav class="header-nav">
+      <a href="../daily/">Daily →</a>
+      <a href="../weekly/">Weekly →</a>
+      <a href="../report-card/">Report card →</a>
+      <a href="" aria-current="page">KPI comparison</a>
+    </nav>
+  </header>
+
+  <section class="report-intro">
+    <p>
+      This page compares independently calculated service metrics with the monthly
+      figures published on AC Transit's
+      <a href="https://kpitest.actransit.org/" target="_blank" rel="noopener">Key Performance Indicators site</a>.
+      Percentages are recomputed from raw counts at every rollup; route percentages are never averaged equally.
+    </p>
+  </section>
+
+  <section class="methodology-note" aria-labelledby="methodology-title">
+    <h2 id="methodology-title">How this comparison is calculated</h2>
+    <p>
+      <strong>Service Operated:</strong> following
+      <a href="https://kpitest.actransit.org/serviceoperated" target="_blank" rel="noopener">AC Transit's published formula</a>,
+      a planned GTFS trip counts as operated when at least one vehicle probe identified that trip. A trip that did
+      not reach its last passenger-boarding stop still counts as operated and is tracked separately as partial.
+    </p>
+    <p>
+      <strong>On-Time Performance:</strong>
+      <a href="https://kpitest.actransit.org/" target="_blank" rel="noopener">AC Transit defines on time</a> as
+      departing a timepoint no more than one minute early and no more than five minutes late. Each interior, pickup-eligible GTFS
+      <code>timepoint=1</code> counts once. This project detects stop arrivals rather than departures, so it uses
+      the detected arrival versus the scheduled arrival as a proxy and excludes origins and final terminals.
+      A timepoint passes when its delay is inclusively between −60 and +300 seconds. Missing observations on an
+      operated trip count as failures; the all-scheduled version also counts every timepoint on an unobserved trip
+      as a failure. This proxy is deliberately labeled because it is not the same underlying CAD/AVL measurement
+      used by AC Transit.
+    </p>
+  </section>
+
+  <main id="kpi-content">
+    <section aria-labelledby="service-operated-title">
+      <h2 id="service-operated-title">Service Operated</h2>
+      <p class="muted defn">
+        Operated planned trips divided by all planned trips. Select a month to see count-weighted weekly segments
+        and the share of operated trips that were partial.
+      </p>
+      <div class="kpi-comparison-chart">
+        <canvas id="service-operated-chart" role="img" aria-label="Monthly Service Operated percentages calculated by this project and reported by AC Transit"></canvas>
+      </div>
+      <div class="table-wrap bounded-table-wrap">
+        <table id="service-operated-table" class="kpi-comparison-table">
+          <thead>
+            <tr>
+              <th>Month</th>
+              <th>Our Service Operated</th>
+              <th>AC Transit reported</th>
+              <th class="expand-th"><span class="sr-only">Expand</span></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section aria-labelledby="otp-title">
+      <h2 id="otp-title">On-Time Performance</h2>
+      <p class="muted defn">
+        The operated-service denominator includes timepoints on trips we observed. The all-scheduled denominator
+        additionally treats timepoints on ghosted trips as failures.
+      </p>
+      <div class="kpi-comparison-chart">
+        <canvas id="otp-chart" role="img" aria-label="Monthly On-Time Performance percentages using operated trips, all scheduled trips, and AC Transit's published values"></canvas>
+      </div>
+      <div class="table-wrap bounded-table-wrap">
+        <table id="otp-table" class="kpi-comparison-table">
+          <thead>
+            <tr>
+              <th>Month</th>
+              <th>Our OTP — operated trips</th>
+              <th>Our OTP — all scheduled</th>
+              <th>AC Transit reported</th>
+              <th class="expand-th"><span class="sr-only">Expand</span></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <p id="load-error" class="warning" hidden></p>
+
+  <footer>
+    <a href="https://kuanbutts.com" target="_blank" rel="noopener">
+      A project by Kuan Butts &copy; <span id="footer-year"></span>
+    </a>
+  </footer>
+
+  <script src="../lib.js?v=bunching-v4"></script>
+  <script src="app.js?v=kpi-comparison-v2"></script>
+  <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "0e36b12e46b04a69b5e9ff6883f6d23d"}'></script><!-- End Cloudflare Web Analytics -->
+</body>
+</html>

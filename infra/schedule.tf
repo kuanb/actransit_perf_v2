@@ -83,16 +83,73 @@ resource "google_cloud_scheduler_job" "generate_daily_stats" {
   }
 }
 
+# The general daily report is generated at 02:00 PT. Recompute only the KPI
+# comparison after the owl-service window has closed so late-night trips do
+# not look ghosted or partial.
+resource "google_cloud_scheduler_job" "generate_daily_agency_kpis" {
+  name             = "actransit-generate-daily-agency-kpis"
+  region           = var.region
+  schedule         = "0 7 * * *"
+  time_zone        = "America/Los_Angeles"
+  attempt_deadline = "300s"
+
+  http_target {
+    http_method = "POST"
+    uri         = "${google_cloud_run_v2_service.scraper.uri}/generate-daily-agency-kpis"
+
+    oidc_token {
+      service_account_email = google_service_account.scheduler.email
+      audience              = google_cloud_run_v2_service.scraper.uri
+    }
+  }
+}
+
 resource "google_cloud_scheduler_job" "generate_weekly_stats" {
   name             = "actransit-generate-weekly-stats"
   region           = var.region
-  schedule         = "0 3 * * SUN"
+  schedule         = "0 8 * * SUN"
   time_zone        = "America/Los_Angeles"
   attempt_deadline = "300s"
 
   http_target {
     http_method = "POST"
     uri         = "${google_cloud_run_v2_service.scraper.uri}/generate-weekly-stats"
+
+    oidc_token {
+      service_account_email = google_service_account.scheduler.email
+      audience              = google_cloud_run_v2_service.scraper.uri
+    }
+  }
+}
+
+resource "google_cloud_scheduler_job" "generate_monthly_stats" {
+  name             = "actransit-generate-monthly-stats"
+  region           = var.region
+  schedule         = "0 9 1 * *"
+  time_zone        = "America/Los_Angeles"
+  attempt_deadline = "300s"
+
+  http_target {
+    http_method = "POST"
+    uri         = "${google_cloud_run_v2_service.scraper.uri}/generate-monthly-stats"
+
+    oidc_token {
+      service_account_email = google_service_account.scheduler.email
+      audience              = google_cloud_run_v2_service.scraper.uri
+    }
+  }
+}
+
+resource "google_cloud_scheduler_job" "refresh_published_kpis" {
+  name             = "actransit-refresh-published-kpis"
+  region           = var.region
+  schedule         = "0 10 * * *"
+  time_zone        = "America/Los_Angeles"
+  attempt_deadline = "60s"
+
+  http_target {
+    http_method = "POST"
+    uri         = "${google_cloud_run_v2_service.scraper.uri}/refresh-published-kpis"
 
     oidc_token {
       service_account_email = google_service_account.scheduler.email

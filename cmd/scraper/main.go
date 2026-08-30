@@ -125,9 +125,13 @@ func main() {
 	http.HandleFunc("/refresh-gtfs", handleRefreshGTFS)
 	http.HandleFunc("/track-performance", handleTrackPerformance)
 	http.HandleFunc("/generate-daily-stats", handleGenerateDailyStats)
+	http.HandleFunc("/generate-daily-agency-kpis", handleGenerateDailyAgencyKPIs)
 	http.HandleFunc("/generate-weekly-stats", handleGenerateWeeklyStats)
+	http.HandleFunc("/generate-monthly-stats", handleGenerateMonthlyStats)
+	http.HandleFunc("/refresh-published-kpis", handleRefreshPublishedKPIs)
 	http.HandleFunc("/backfill-day", handleBackfillDay)
 	http.HandleFunc("/backfill-bunching", handleBackfillBunching)
+	http.HandleFunc("/backfill-agency-kpis", handleBackfillAgencyKPIs)
 	http.HandleFunc("/", handleHealth)
 
 	slog.Info("listening", "port", port)
@@ -236,6 +240,38 @@ func handleGenerateDailyStats(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(stats)
 }
 
+func handleGenerateDailyAgencyKPIs(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	dateStr := r.URL.Query().Get("service_date")
+	var serviceDate civil.Date
+	if dateStr != "" {
+		parsed, err := civil.ParseDate(dateStr)
+		if err != nil {
+			http.Error(w, "invalid service_date: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		serviceDate = parsed
+	} else {
+		serviceDate = previousPTDate(time.Now())
+	}
+	updated, err := regenerateDailyAgencyKPI(r.Context(), serviceDate)
+	if err != nil {
+		slog.Error("generate-daily-agency-kpis failed", "service_date", serviceDate, "err", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if !updated {
+		http.Error(w, "daily stats not found for "+serviceDate.String(), http.StatusNotFound)
+		return
+	}
+	slog.Info("generate-daily-agency-kpis ok",
+		"duration_ms", time.Since(start).Milliseconds(),
+		"service_date", serviceDate,
+	)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{"service_date": serviceDate.String(), "status": "updated"})
+}
+
 func handleBackfillDay(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	dateStr := r.URL.Query().Get("service_date")
@@ -328,6 +364,53 @@ func handleGenerateWeeklyStats(w http.ResponseWriter, r *http.Request) {
 		"week_end", stats.WeekEnd,
 		"routes", len(stats.RouteDailyServiceDelivered),
 		"route_hourly_routes", len(stats.RouteDelayByHour),
+	)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(stats)
+}
+
+func handleGenerateMonthlyStats(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	monthStr := r.URL.Query().Get("month")
+	var month civil.Date
+	if monthStr != "" {
+		parsed, err := parseMonth(monthStr)
+		if err != nil {
+			http.Error(w, "invalid month: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		month = parsed
+	} else {
+		month = defaultMonthlyStatsMonth(time.Now())
+	}
+	stats, err := generateMonthlyStats(r.Context(), month)
+	if err != nil {
+		slog.Error("generate-monthly-stats failed", "month", monthStr, "err", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	slog.Info("generate-monthly-stats ok",
+		"duration_ms", time.Since(start).Milliseconds(),
+		"month", stats.Month,
+		"status", stats.Status,
+		"days_available", stats.DaysAvailable,
+	)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(stats)
+}
+
+func handleRefreshPublishedKPIs(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	stats, err := refreshPublishedKPIs(r.Context())
+	if err != nil {
+		slog.Error("refresh-published-kpis failed", "err", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	slog.Info("refresh-published-kpis ok",
+		"duration_ms", time.Since(start).Milliseconds(),
+		"service_operated_months", len(stats.ServiceOperated),
+		"on_time_performance_months", len(stats.OnTimePerformance),
 	)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(stats)

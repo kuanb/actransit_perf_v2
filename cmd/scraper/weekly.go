@@ -30,6 +30,7 @@ type weeklyStats struct {
 	WeekStart                  string                   `json:"week_start"`
 	WeekEnd                    string                   `json:"week_end"`
 	GeneratedAt                time.Time                `json:"generated_at"`
+	AgencyKPI                  agencyKPIStats           `json:"agency_kpi"`
 	System                     *systemStats             `json:"system"`
 	ScheduleComplianceTotal    weeklyScheduleCompliance `json:"schedule_compliance_total"`
 	DelayMinuteHistogram       []minuteBucket           `json:"delay_minute_histogram"`
@@ -73,6 +74,7 @@ type delayCell struct {
 
 type routeDailySD struct {
 	RouteID             string              `json:"route_id"`
+	AgencyKPI           agencyKPIStats      `json:"agency_kpi"`
 	OverallP50DelayMin  *float64            `json:"overall_p50_delay_min"`
 	ByDay               []routeDailySDByDay `json:"by_day"`
 	Color               string              `json:"color"`
@@ -124,6 +126,13 @@ func processWeeklyStats(ctx context.Context, weekEndSat civil.Date) (*weeklyStat
 	}
 	out.DailyServiceDelivered = aggregateDailyServiceDelivered(dailies, weekStart)
 	out.ScheduleComplianceTotal = aggregateScheduleCompliance(dailies)
+	var dailyAgencyKPI []agencyKPIStats
+	for _, daily := range dailies {
+		if daily != nil {
+			dailyAgencyKPI = append(dailyAgencyKPI, daily.AgencyKPI)
+		}
+	}
+	out.AgencyKPI = aggregateAgencyKPIStats(dailyAgencyKPI)
 
 	sys, err := queryWeeklySystemStats(ctx, weekStart, weekEndSat)
 	if err != nil {
@@ -293,6 +302,7 @@ func aggregateRouteDailySD(dailies []*dailyStats, weekStart civil.Date, routeOve
 		gapWindows     int
 		gapDays        int
 		bunching       [7]*bunchingStats
+		agencyKPI      []agencyKPIStats
 		activeDays     int
 	}
 	byRoute := make(map[string]*accum)
@@ -326,6 +336,7 @@ func aggregateRouteDailySD(dailies []*dailyStats, weekStart civil.Date, routeOve
 			a.deliveredByDay[i] = r.StopSDDeliveredN
 			a.scheduled[i] = r.ScheduledTrips
 			a.bunching[i] = r.Bunching
+			a.agencyKPI = append(a.agencyKPI, r.AgencyKPI)
 			a.activeDays++
 			if r.TwoBusGapWindows != nil {
 				a.gapWindows += *r.TwoBusGapWindows
@@ -402,6 +413,7 @@ func aggregateRouteDailySD(dailies []*dailyStats, weekStart civil.Date, routeOve
 		}
 		out = append(out, routeDailySD{
 			RouteID:             it.a.rid,
+			AgencyKPI:           aggregateAgencyKPIStats(it.a.agencyKPI),
 			OverallP50DelayMin:  p50Min,
 			ByDay:               byDay,
 			Color:               it.a.color,

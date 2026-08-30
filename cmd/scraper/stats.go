@@ -30,6 +30,7 @@ type dailyStats struct {
 	MethodologyVersion   int                 `json:"methodology_version"`
 	ServiceDate          string              `json:"service_date"`
 	GeneratedAt          time.Time           `json:"generated_at"`
+	AgencyKPI            agencyKPIStats      `json:"agency_kpi"`
 	System               systemStats         `json:"system"`
 	ScheduleCompliance   scheduleCompliance  `json:"schedule_compliance"`
 	DistortionHistogram  distortionHistogram `json:"distortion_histogram"`
@@ -108,6 +109,7 @@ type notCompletedDistribution struct {
 
 type routeStats struct {
 	RouteID          string         `json:"route_id"`
+	AgencyKPI        agencyKPIStats `json:"agency_kpi"`
 	TripsObserved    int64          `json:"trips_observed"`
 	Observations     int64          `json:"observations"`
 	OnTimePct        float64        `json:"on_time_pct"`
@@ -182,6 +184,17 @@ func generateDailyStats(ctx context.Context, serviceDate civil.Date) (*dailyStat
 	ranTrips := make(map[string]struct{}, len(tripProgress))
 	for tripID := range tripProgress {
 		ranTrips[tripID] = struct{}{}
+	}
+	agencyKPI, routeAgencyKPI, err := calculateDailyAgencyKPI(
+		ctx,
+		zr,
+		serviceDate,
+		scheduledTripRoute,
+		stopPlan,
+		tripProgress,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("calculate agency KPI: %w", err)
 	}
 	scheduledRuns, err := loadScheduledRuns(zr, serviceDate, activeServices)
 	if err != nil {
@@ -262,6 +275,11 @@ func generateDailyStats(ctx context.Context, serviceDate civil.Date) (*dailyStat
 	var sysStopTotalN, sysStopDeliveredN int64
 	for i := range routes {
 		rid := routes[i].RouteID
+		routeKPI, ok := routeAgencyKPI[rid]
+		if !ok {
+			routeKPI = emptyAgencyKPIStats()
+		}
+		routes[i].AgencyKPI = routeKPI
 		routes[i].Bunching = routeBunching[rid]
 		if routes[i].Bunching == nil {
 			routes[i].Bunching = finalizeBunchingStats(bunchingAccumulator{}, nil, nil, time.Now().UTC(), 1, 1)
@@ -339,6 +357,7 @@ func generateDailyStats(ctx context.Context, serviceDate civil.Date) (*dailyStat
 		MethodologyVersion:   3,
 		ServiceDate:          serviceDate.String(),
 		GeneratedAt:          time.Now().UTC(),
+		AgencyKPI:            agencyKPI,
 		System:               *sys,
 		ScheduleCompliance:   sc,
 		DistortionHistogram:  distHist,
