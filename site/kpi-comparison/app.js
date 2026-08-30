@@ -40,7 +40,28 @@ function chartDataset(label, data, color, dash = []) {
   };
 }
 
-function comparisonChartOptions() {
+function scopedPercentRange(values) {
+  const valid = values.filter((value) => value !== null && value !== undefined && Number.isFinite(Number(value))).map(Number);
+  if (!valid.length) return { min: 0, max: 100 };
+
+  const observedMin = Math.min(...valid);
+  const observedMax = Math.max(...valid);
+  const padding = Math.max(2, (observedMax - observedMin) * 0.25);
+  let min = Math.max(0, Math.floor((observedMin - padding) / 5) * 5);
+  let max = Math.min(100, Math.ceil((observedMax + padding) / 5) * 5);
+  if (max - min < 10) {
+    if (min === 0) max = Math.min(100, min + 10);
+    else if (max === 100) min = Math.max(0, max - 10);
+    else {
+      min = Math.max(0, min - 5);
+      max = Math.min(100, max + 5);
+    }
+  }
+  return { min, max };
+}
+
+function comparisonChartOptions(values) {
+  const range = scopedPercentRange(values);
   return {
     responsive: true,
     maintainAspectRatio: false,
@@ -48,8 +69,8 @@ function comparisonChartOptions() {
     scales: {
       x: { grid: { display: false } },
       y: {
-        min: 0,
-        max: 100,
+        min: range.min,
+        max: range.max,
         ticks: { callback: (value) => `${value}%` },
         title: { display: true, text: "Percent" },
       },
@@ -69,30 +90,35 @@ function comparisonChartOptions() {
 function renderComparisonCharts(months, servicePublished, otpPublished) {
   const chronological = [...months].sort((a, b) => a.month.localeCompare(b.month));
   const labels = chronological.map((month) => monthLabel(month.month));
+  const serviceOurs = chronological.map((month) => month.agency_kpi.service_operated.operated_pct);
+  const serviceAgency = chronological.map((month) => servicePublished.get(month.month)?.pct ?? null);
 
   new Chart(document.getElementById("service-operated-chart"), {
     type: "line",
     data: {
       labels,
       datasets: [
-        chartDataset("Our calculation", chronological.map((month) => month.agency_kpi.service_operated.operated_pct), "#1971c2"),
-        chartDataset("AC Transit published", chronological.map((month) => servicePublished.get(month.month)?.pct ?? null), "#e8590c", [6, 4]),
+        chartDataset("Our calculation", serviceOurs, "#1971c2"),
+        chartDataset("AC Transit published", serviceAgency, "#e8590c", [6, 4]),
       ],
     },
-    options: comparisonChartOptions(),
+    options: comparisonChartOptions([...serviceOurs, ...serviceAgency]),
   });
 
+  const otpOperated = chronological.map((month) => month.agency_kpi.on_time_performance.of_operated_pct);
+  const otpScheduled = chronological.map((month) => month.agency_kpi.on_time_performance.of_scheduled_pct);
+  const otpAgency = chronological.map((month) => otpPublished.get(month.month)?.pct ?? null);
   new Chart(document.getElementById("otp-chart"), {
     type: "line",
     data: {
       labels,
       datasets: [
-        chartDataset("Our OTP — operated trips", chronological.map((month) => month.agency_kpi.on_time_performance.of_operated_pct), "#1971c2"),
-        chartDataset("Our OTP — all scheduled", chronological.map((month) => month.agency_kpi.on_time_performance.of_scheduled_pct), "#5f3dc4"),
-        chartDataset("AC Transit published", chronological.map((month) => otpPublished.get(month.month)?.pct ?? null), "#e8590c", [6, 4]),
+        chartDataset("Our OTP — operated trips", otpOperated, "#1971c2"),
+        chartDataset("Our OTP — all scheduled", otpScheduled, "#5f3dc4"),
+        chartDataset("AC Transit published", otpAgency, "#e8590c", [6, 4]),
       ],
     },
-    options: comparisonChartOptions(),
+    options: comparisonChartOptions([...otpOperated, ...otpScheduled, ...otpAgency]),
   });
 }
 
