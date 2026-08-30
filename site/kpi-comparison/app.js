@@ -13,8 +13,8 @@ function shortDate(date) {
     .format(new Date(Date.UTC(year, month - 1, day)));
 }
 
-function pct(value, digits = 1) {
-  return value === null || value === undefined ? "Pending" : `${Number(value).toFixed(digits)}%`;
+function pct(value, digits = 1, missingLabel = "Unavailable") {
+  return value === null || value === undefined ? missingLabel : `${Number(value).toFixed(digits)}%`;
 }
 
 function countRatio(numerator, denominator) {
@@ -248,7 +248,7 @@ function renderServiceOperated(months, published) {
       <tr class="kpi-row" data-month="${month.month}" tabindex="0" role="button" aria-expanded="false">
         <td>${monthLabel(month.month)}</td>
         <td>${pct(metric.operated_pct)}</td>
-        <td>${pct(external && external.pct, 2)}</td>
+        <td>${pct(external && external.pct, 2, "Not published")}</td>
         <td class="expand-cell" aria-hidden="true">▸</td>
       </tr>
       <tr class="kpi-detail" data-detail-month="${month.month}" hidden>
@@ -268,7 +268,7 @@ function renderOTP(months, published) {
         <td>${monthLabel(month.month)}</td>
         <td>${pct(metric.of_operated_pct)}</td>
         <td>${pct(metric.of_scheduled_pct)}</td>
-        <td>${pct(external && external.pct, 2)}</td>
+        <td>${pct(external && external.pct, 2, "Not published")}</td>
         <td class="expand-cell" aria-hidden="true">▸</td>
       </tr>
       <tr class="kpi-detail" data-detail-month="${month.month}" hidden>
