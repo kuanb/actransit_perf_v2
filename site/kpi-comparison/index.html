@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AC Transit KPI comparison</title>
-  <link rel="stylesheet" href="../styles.css?v=kpi-comparison-v2">
+  <link rel="stylesheet" href="../styles.css?v=kpi-comparison-v3">
   <script src="../independence-notice.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 </head>
@@ -53,6 +53,15 @@
   </section>
 
   <main id="kpi-content">
+    <div class="kpi-chart-controls">
+      <label class="kpi-weekly-toggle" for="weekly-chart-toggle">
+        <input id="weekly-chart-toggle" type="checkbox">
+        <span>
+          <strong>Show weekly points</strong>
+          <small>Both charts · shaded bands show each week’s daily minimum–maximum</small>
+        </span>
+      </label>
+    </div>
     <section aria-labelledby="service-operated-title">
       <h2 id="service-operated-title">Service Operated</h2>
       <p class="muted defn">
@@ -108,7 +117,7 @@
   </footer>
 
   <script src="../lib.js?v=bunching-v4"></script>
-  <script src="app.js?v=kpi-comparison-v4"></script>
+  <script src="app.js?v=kpi-comparison-v5"></script>
   <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "0e36b12e46b04a69b5e9ff6883f6d23d"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
 </html>

@@ -31,13 +31,25 @@ type monthlyStats struct {
 }
 
 type monthlyKPIWeek struct {
-	WeekStart     string         `json:"week_start"`
-	PeriodStart   string         `json:"period_start"`
-	PeriodEnd     string         `json:"period_end"`
-	Status        string         `json:"status"`
-	DaysExpected  int            `json:"days_expected"`
-	DaysAvailable int            `json:"days_available"`
-	AgencyKPI     agencyKPIStats `json:"agency_kpi"`
+	WeekStart     string               `json:"week_start"`
+	PeriodStart   string               `json:"period_start"`
+	PeriodEnd     string               `json:"period_end"`
+	Status        string               `json:"status"`
+	DaysExpected  int                  `json:"days_expected"`
+	DaysAvailable int                  `json:"days_available"`
+	AgencyKPI     agencyKPIStats       `json:"agency_kpi"`
+	DailyRange    monthlyKPIDailyRange `json:"daily_range"`
+}
+
+type monthlyKPIDailyRange struct {
+	ServiceOperated percentageRange `json:"service_operated"`
+	OTPOfOperated   percentageRange `json:"otp_of_operated"`
+	OTPOfScheduled  percentageRange `json:"otp_of_scheduled"`
+}
+
+type percentageRange struct {
+	MinPct *float64 `json:"min_pct,omitempty"`
+	MaxPct *float64 `json:"max_pct,omitempty"`
 }
 
 type monthlyRouteKPI struct {
@@ -186,6 +198,7 @@ func aggregateMonthlyStats(monthStart civil.Date, dailies []*dailyStats, generat
 			DaysExpected:  expected,
 			DaysAvailable: len(week.values),
 			AgencyKPI:     aggregateAgencyKPIStats(week.values),
+			DailyRange:    dailyKPIPercentageRange(week.values),
 		})
 	}
 	for _, route := range routes {
@@ -200,6 +213,38 @@ func aggregateMonthlyStats(monthStart civil.Date, dailies []*dailyStats, generat
 		return out.Routes[i].RouteID < out.Routes[j].RouteID
 	})
 	return out
+}
+
+func dailyKPIPercentageRange(values []agencyKPIStats) monthlyKPIDailyRange {
+	var serviceOperated, otpOfOperated, otpOfScheduled []float64
+	for _, value := range values {
+		if value.ServiceOperated.OperatedPct != nil {
+			serviceOperated = append(serviceOperated, *value.ServiceOperated.OperatedPct)
+		}
+		if value.OnTimePerformance.OfOperatedPct != nil {
+			otpOfOperated = append(otpOfOperated, *value.OnTimePerformance.OfOperatedPct)
+		}
+		if value.OnTimePerformance.OfScheduledPct != nil {
+			otpOfScheduled = append(otpOfScheduled, *value.OnTimePerformance.OfScheduledPct)
+		}
+	}
+	return monthlyKPIDailyRange{
+		ServiceOperated: percentageMinMax(serviceOperated),
+		OTPOfOperated:   percentageMinMax(otpOfOperated),
+		OTPOfScheduled:  percentageMinMax(otpOfScheduled),
+	}
+}
+
+func percentageMinMax(values []float64) percentageRange {
+	if len(values) == 0 {
+		return percentageRange{}
+	}
+	minPct, maxPct := values[0], values[0]
+	for _, value := range values[1:] {
+		minPct = min(minPct, value)
+		maxPct = max(maxPct, value)
+	}
+	return percentageRange{MinPct: &minPct, MaxPct: &maxPct}
 }
 
 func defaultMonthlyStatsMonth(now time.Time) civil.Date {

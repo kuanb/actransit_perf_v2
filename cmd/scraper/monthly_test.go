@@ -48,6 +48,30 @@ func TestAggregateMonthlyStatsUsesCalendarMonthWeekSegments(t *testing.T) {
 	}
 }
 
+func TestDailyKPIPercentageRange(t *testing.T) {
+	values := make([]agencyKPIStats, 2)
+	for i := range values {
+		values[i] = emptyAgencyKPIStats()
+		values[i].ServiceOperated.ScheduledTrips = 10
+		values[i].ServiceOperated.OperatedTrips = 8 + i
+		values[i].OnTimePerformance.OnTimeTimepoints = int64(6 + i)
+		values[i].OnTimePerformance.OperatedTimepoints = int64(8 + i)
+		values[i].OnTimePerformance.ScheduledTimepoints = 10
+		finalizeAgencyKPIStats(&values[i])
+	}
+
+	got := dailyKPIPercentageRange(values)
+	if *got.ServiceOperated.MinPct != 80 || *got.ServiceOperated.MaxPct != 90 {
+		t.Fatalf("Service Operated range = %+v", got.ServiceOperated)
+	}
+	if *got.OTPOfOperated.MinPct != 75 || *got.OTPOfOperated.MaxPct != 77.8 {
+		t.Fatalf("operated OTP range = %+v", got.OTPOfOperated)
+	}
+	if *got.OTPOfScheduled.MinPct != 60 || *got.OTPOfScheduled.MaxPct != 70 {
+		t.Fatalf("scheduled OTP range = %+v", got.OTPOfScheduled)
+	}
+}
+
 func TestDefaultMonthlyStatsMonth(t *testing.T) {
 	pt, err := time.LoadLocation("America/Los_Angeles")
 	if err != nil {

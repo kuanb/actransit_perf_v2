@@ -719,6 +719,30 @@ footer a:hover {
 }
 .methodology-note h2 { margin-top: 0; }
 .methodology-note p:last-child { margin-bottom: 0; }
+.kpi-chart-controls {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 0 14px;
+}
+.kpi-weekly-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid #b9d4ea;
+  border-radius: 8px;
+  background: #f4f9fd;
+  cursor: pointer;
+}
+.kpi-weekly-toggle input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: #1971c2;
+}
+.kpi-weekly-toggle span { display: flex; flex-direction: column; }
+.kpi-weekly-toggle strong { font-size: 14px; }
+.kpi-weekly-toggle small { color: #5b6873; font-size: 11px; }
 .kpi-comparison-chart {
   position: relative;
   height: 320px;

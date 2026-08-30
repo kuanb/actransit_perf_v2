@@ -1,5 +1,7 @@
 const MONTHLY_INDEX_URL = `${GCS_BASE}/stats/monthly/_index.json`;
 const PUBLISHED_KPI_URL = `${GCS_BASE}/stats/published-kpis/latest.json`;
+let serviceOperatedChart;
+let otpChart;
 
 function monthLabel(month) {
   const [year, number] = month.split("-").map(Number);
@@ -25,7 +27,7 @@ function publishedMap(values) {
   return new Map((values || []).map((value) => [value.month, value]));
 }
 
-function chartDataset(label, data, color, dash = []) {
+function chartDataset(label, data, color, dash = [], extra = {}) {
   return {
     label,
     data,
@@ -37,7 +39,36 @@ function chartDataset(label, data, color, dash = []) {
     pointRadius: 4,
     pointHoverRadius: 6,
     spanGaps: false,
+    ...extra,
   };
+}
+
+function rangeBandDatasets(label, minimum, maximum, color, fillColor) {
+  return [
+    {
+      label: `${label} minimum`,
+      data: minimum,
+      borderWidth: 0,
+      pointRadius: 0,
+      fill: false,
+      order: 10,
+      hideLegend: true,
+      hideTooltip: true,
+    },
+    {
+      label,
+      data: maximum,
+      borderColor: color,
+      backgroundColor: fillColor,
+      borderWidth: 0,
+      pointRadius: 0,
+      pointStyle: "rect",
+      fill: "-1",
+      order: 10,
+      rangeBand: true,
+      rangeMinimum: minimum,
+    },
+  ];
 }
 
 function scopedPercentRange(values) {
@@ -78,47 +109,135 @@ function comparisonChartOptions(values) {
     plugins: {
       legend: {
         position: "bottom",
-        labels: { usePointStyle: true, boxWidth: 8, padding: 16 },
+        labels: {
+          usePointStyle: true,
+          boxWidth: 8,
+          padding: 16,
+          filter: (item, data) => !data.datasets[item.datasetIndex].hideLegend,
+        },
       },
       tooltip: {
-        callbacks: { label: (ctx) => `${ctx.dataset.label}: ${Number(ctx.parsed.y).toFixed(2)}%` },
+        filter: (item) => !item.dataset.hideTooltip,
+        callbacks: {
+          label: (ctx) => {
+            if (ctx.dataset.rangeBand) {
+              const minimum = ctx.dataset.rangeMinimum[ctx.dataIndex];
+              return `${ctx.dataset.label}: ${Number(minimum).toFixed(1)}%–${Number(ctx.parsed.y).toFixed(1)}%`;
+            }
+            return `${ctx.dataset.label}: ${Number(ctx.parsed.y).toFixed(2)}%`;
+          },
+        },
       },
     },
   };
 }
 
-function renderComparisonCharts(months, servicePublished, otpPublished) {
-  const chronological = [...months].sort((a, b) => a.month.localeCompare(b.month));
-  const labels = chronological.map((month) => monthLabel(month.month));
-  const serviceOurs = chronological.map((month) => month.agency_kpi.service_operated.operated_pct);
-  const serviceAgency = chronological.map((month) => servicePublished.get(month.month)?.pct ?? null);
+function weeklyChartPoints(months) {
+  return months.flatMap((month) => {
+    const weeks = (month.weeks || []).filter((week) => week.status !== "missing");
+    return weeks.map((week, index) => ({
+      month: month.month,
+      week,
+      monthEnd: index === weeks.length - 1,
+      label: `${shortDate(week.period_start)}–${shortDate(week.period_end)}`,
+    }));
+  });
+}
 
-  new Chart(document.getElementById("service-operated-chart"), {
+function renderComparisonCharts(months, servicePublished, otpPublished, weekly = false) {
+  const chronological = [...months].sort((a, b) => a.month.localeCompare(b.month));
+  const points = weekly ? weeklyChartPoints(chronological) : chronological;
+  const labels = weekly ? points.map((point) => point.label) : points.map((month) => monthLabel(month.month));
+  const serviceOurs = weekly
+    ? points.map((point) => point.week.agency_kpi.service_operated.operated_pct)
+    : points.map((month) => month.agency_kpi.service_operated.operated_pct);
+  const serviceAgency = weekly
+    ? points.map((point) => point.monthEnd ? servicePublished.get(point.month)?.pct ?? null : null)
+    : points.map((month) => servicePublished.get(month.month)?.pct ?? null);
+  const serviceMinimum = weekly
+    ? points.map((point) => point.week.daily_range?.service_operated?.min_pct ?? null)
+    : [];
+  const serviceMaximum = weekly
+    ? points.map((point) => point.week.daily_range?.service_operated?.max_pct ?? null)
+    : [];
+  const serviceDatasets = weekly
+    ? [
+        ...rangeBandDatasets("Daily min–max — Service Operated", serviceMinimum, serviceMaximum, "rgba(25, 113, 194, 0.45)", "rgba(25, 113, 194, 0.14)"),
+        chartDataset("Our calculation — weekly", serviceOurs, "#1971c2"),
+        chartDataset("AC Transit published — monthly", serviceAgency, "#e8590c", [6, 4], { spanGaps: true }),
+      ]
+    : [
+        chartDataset("Our calculation — monthly", serviceOurs, "#1971c2"),
+        chartDataset("AC Transit published — monthly", serviceAgency, "#e8590c", [6, 4]),
+      ];
+
+  if (serviceOperatedChart) serviceOperatedChart.destroy();
+  serviceOperatedChart = new Chart(document.getElementById("service-operated-chart"), {
     type: "line",
-    data: {
-      labels,
-      datasets: [
-        chartDataset("Our calculation", serviceOurs, "#1971c2"),
-        chartDataset("AC Transit published", serviceAgency, "#e8590c", [6, 4]),
-      ],
-    },
-    options: comparisonChartOptions([...serviceOurs, ...serviceAgency]),
+    data: { labels, datasets: serviceDatasets },
+    options: comparisonChartOptions([...serviceOurs, ...serviceAgency, ...serviceMinimum, ...serviceMaximum]),
   });
 
-  const otpOperated = chronological.map((month) => month.agency_kpi.on_time_performance.of_operated_pct);
-  const otpScheduled = chronological.map((month) => month.agency_kpi.on_time_performance.of_scheduled_pct);
-  const otpAgency = chronological.map((month) => otpPublished.get(month.month)?.pct ?? null);
-  new Chart(document.getElementById("otp-chart"), {
+  const otpOperated = weekly
+    ? points.map((point) => point.week.agency_kpi.on_time_performance.of_operated_pct)
+    : points.map((month) => month.agency_kpi.on_time_performance.of_operated_pct);
+  const otpScheduled = weekly
+    ? points.map((point) => point.week.agency_kpi.on_time_performance.of_scheduled_pct)
+    : points.map((month) => month.agency_kpi.on_time_performance.of_scheduled_pct);
+  const otpAgency = weekly
+    ? points.map((point) => point.monthEnd ? otpPublished.get(point.month)?.pct ?? null : null)
+    : points.map((month) => otpPublished.get(month.month)?.pct ?? null);
+  const otpOperatedMinimum = weekly
+    ? points.map((point) => point.week.daily_range?.otp_of_operated?.min_pct ?? null)
+    : [];
+  const otpOperatedMaximum = weekly
+    ? points.map((point) => point.week.daily_range?.otp_of_operated?.max_pct ?? null)
+    : [];
+  const otpScheduledMinimum = weekly
+    ? points.map((point) => point.week.daily_range?.otp_of_scheduled?.min_pct ?? null)
+    : [];
+  const otpScheduledMaximum = weekly
+    ? points.map((point) => point.week.daily_range?.otp_of_scheduled?.max_pct ?? null)
+    : [];
+  const otpDatasets = weekly
+    ? [
+        ...rangeBandDatasets("Daily min–max — operated-trip OTP", otpOperatedMinimum, otpOperatedMaximum, "rgba(25, 113, 194, 0.45)", "rgba(25, 113, 194, 0.12)"),
+        ...rangeBandDatasets("Daily min–max — all-scheduled OTP", otpScheduledMinimum, otpScheduledMaximum, "rgba(95, 61, 196, 0.45)", "rgba(95, 61, 196, 0.12)"),
+        chartDataset("Our OTP — operated trips — weekly", otpOperated, "#1971c2"),
+        chartDataset("Our OTP — all scheduled — weekly", otpScheduled, "#5f3dc4"),
+        chartDataset("AC Transit published — monthly", otpAgency, "#e8590c", [6, 4], { spanGaps: true }),
+      ]
+    : [
+        chartDataset("Our OTP — operated trips — monthly", otpOperated, "#1971c2"),
+        chartDataset("Our OTP — all scheduled — monthly", otpScheduled, "#5f3dc4"),
+        chartDataset("AC Transit published — monthly", otpAgency, "#e8590c", [6, 4]),
+      ];
+
+  if (otpChart) otpChart.destroy();
+  otpChart = new Chart(document.getElementById("otp-chart"), {
     type: "line",
-    data: {
-      labels,
-      datasets: [
-        chartDataset("Our OTP — operated trips", otpOperated, "#1971c2"),
-        chartDataset("Our OTP — all scheduled", otpScheduled, "#5f3dc4"),
-        chartDataset("AC Transit published", otpAgency, "#e8590c", [6, 4]),
-      ],
-    },
-    options: comparisonChartOptions([...otpOperated, ...otpScheduled, ...otpAgency]),
+    data: { labels, datasets: otpDatasets },
+    options: comparisonChartOptions([
+      ...otpOperated,
+      ...otpScheduled,
+      ...otpAgency,
+      ...otpOperatedMinimum,
+      ...otpOperatedMaximum,
+      ...otpScheduledMinimum,
+      ...otpScheduledMaximum,
+    ]),
+  });
+
+  const detail = weekly ? "Weekly" : "Monthly";
+  document.getElementById("service-operated-chart").setAttribute("aria-label", `${detail} Service Operated comparison`);
+  document.getElementById("otp-chart").setAttribute("aria-label", `${detail} On-Time Performance comparison`);
+}
+
+function initializeComparisonCharts(months, servicePublished, otpPublished) {
+  const toggle = document.getElementById("weekly-chart-toggle");
+  renderComparisonCharts(months, servicePublished, otpPublished, toggle.checked);
+  toggle.addEventListener("change", () => {
+    renderComparisonCharts(months, servicePublished, otpPublished, toggle.checked);
   });
 }
 
@@ -143,6 +262,13 @@ function sampleKPI(scheduledTrips, operatedTrips, partialTrips, onTime, operated
   };
 }
 
+function sampleRange(value, spread) {
+  return {
+    min_pct: Math.max(0, Math.round((value - spread) * 10) / 10),
+    max_pct: Math.min(100, Math.round((value + spread) * 10) / 10),
+  };
+}
+
 function sampleMonth(month, ranges, totals) {
   const dayCounts = ranges.map(([start, end]) =>
     Math.round((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86400000) + 1
@@ -161,11 +287,20 @@ function sampleMonth(month, ranges, totals) {
     month,
     status: "complete",
     agency_kpi: sampleKPI(...totals),
-    weeks: ranges.map(([period_start, period_end], index) => ({
-      period_start,
-      period_end,
-      agency_kpi: sampleKPI(...allocated.map((values) => values[index])),
-    })),
+    weeks: ranges.map(([period_start, period_end], index) => {
+      const agencyKPI = sampleKPI(...allocated.map((values) => values[index]));
+      return {
+        period_start,
+        period_end,
+        status: "complete",
+        agency_kpi: agencyKPI,
+        daily_range: {
+          service_operated: sampleRange(agencyKPI.service_operated.operated_pct, 1.2 + (index % 2) * 0.4),
+          otp_of_operated: sampleRange(agencyKPI.on_time_performance.of_operated_pct, 2.8 + (index % 2) * 0.6),
+          otp_of_scheduled: sampleRange(agencyKPI.on_time_performance.of_scheduled_pct, 3.2 + (index % 2) * 0.6),
+        },
+      };
+    }),
   };
 }
 
@@ -303,7 +438,7 @@ async function loadComparison() {
     const preview = localPreviewData();
     const servicePublished = publishedMap(preview.published.service_operated);
     const otpPublished = publishedMap(preview.published.on_time_performance);
-    renderComparisonCharts(preview.months, servicePublished, otpPublished);
+    initializeComparisonCharts(preview.months, servicePublished, otpPublished);
     renderServiceOperated(preview.months, servicePublished);
     renderOTP(preview.months, otpPublished);
     document.getElementById("meta").textContent = "Local preview data · May–July 2026";
@@ -321,7 +456,7 @@ async function loadComparison() {
     .sort((a, b) => b.month.localeCompare(a.month));
   const servicePublished = publishedMap(published.service_operated);
   const otpPublished = publishedMap(published.on_time_performance);
-  renderComparisonCharts(completeMonths, servicePublished, otpPublished);
+  initializeComparisonCharts(completeMonths, servicePublished, otpPublished);
   renderServiceOperated(completeMonths, servicePublished);
   renderOTP(completeMonths, otpPublished);
 
