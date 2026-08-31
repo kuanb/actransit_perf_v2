@@ -1,0 +1,17 @@
+[
+  {"name": "service_date",                       "type": "DATE",      "mode": "REQUIRED"},
+  {"name": "observed_at",                        "type": "TIMESTAMP", "mode": "REQUIRED"},
+  {"name": "vehicle_id",                         "type": "STRING",    "mode": "REQUIRED"},
+  {"name": "route_id",                           "type": "STRING",    "mode": "NULLABLE"},
+  {"name": "trip_id",                            "type": "STRING",    "mode": "NULLABLE"},
+  {"name": "latitude",                           "type": "FLOAT64",   "mode": "NULLABLE"},
+  {"name": "longitude",                          "type": "FLOAT64",   "mode": "NULLABLE"},
+  {"name": "position_reported_at",               "type": "TIMESTAMP", "mode": "NULLABLE"},
+  {"name": "vehicle_capacity",                    "type": "INT64",     "mode": "NULLABLE"},
+  {"name": "current_passenger_count",             "type": "INT64",     "mode": "NULLABLE"},
+  {"name": "estimated_occupancy_percentage",      "type": "INT64",     "mode": "NULLABLE"},
+  {"name": "estimated_occupancy_status",          "type": "STRING",    "mode": "NULLABLE"},
+  {"name": "estimated_occupancy_status_color",    "type": "STRING",    "mode": "NULLABLE"},
+  {"name": "apc_reported_at",                     "type": "TIMESTAMP", "mode": "NULLABLE"},
+  {"name": "ingested_at",                         "type": "TIMESTAMP", "mode": "REQUIRED"}
+]

@@ -18,6 +18,13 @@ from AC Transit's `/allstops` endpoint, written to a third object:
 
 - `route_stops.json` — `[{routeName, processedStops}]` for each active route
 
+Another minutely job (`/scrape-ridership`) fetches AC Transit's realtime APC
+attributes into an independent, append-only BigQuery table. It also publishes a
+small live snapshot and a rolling 24-hour series for the public ridership page:
+
+- `ridership/latest.json` — current vehicles, crowding fields, and transparent rider estimates
+- `ridership/24h.json` — one systemwide summary per minute, capped at 24 hours
+
 A third job (`/refresh-gtfs`) runs nightly at 22:00 America/Los_Angeles,
 downloads the static GTFS zip, hashes it, and writes a new dated archive
 plus updates `gtfs/current.zip` only if the hash changed:
@@ -49,6 +56,8 @@ directly via HTTPS, with permissive CORS for browsers:
 | Latest vehicles  | `https://storage.googleapis.com/transit-203605-actransit-cache/latest.json`               |
 | Vehicle history  | `https://storage.googleapis.com/transit-203605-actransit-cache/history.json`              |
 | Route stops      | `https://storage.googleapis.com/transit-203605-actransit-cache/route_stops.json`          |
+| Live ridership   | `https://storage.googleapis.com/transit-203605-actransit-cache/ridership/latest.json`     |
+| Ridership, 24 hours | `https://storage.googleapis.com/transit-203605-actransit-cache/ridership/24h.json`      |
 | Current GTFS     | `https://storage.googleapis.com/transit-203605-actransit-cache/gtfs/current.zip`          |
 | Latest daily report | `https://storage.googleapis.com/transit-203605-actransit-cache/stats/latest.json`       |
 | Latest weekly report | `https://storage.googleapis.com/transit-203605-actransit-cache/stats/weekly/latest.json` |
@@ -60,7 +69,7 @@ directly via HTTPS, with permissive CORS for browsers:
 - **Compute:** Cloud Run (Go 1.25, distroless image)
 - **Schedule:** Cloud Scheduler → HTTPS + OIDC
 - **Cache:** Cloud Storage (GCS)
-- **Secret:** Secret Manager (`actransit-token`)
+- **Secrets:** Secret Manager (`actransit-token`, `actransit-gtfs-token`, `actransit-ridership-token`)
 - **Alerts:** Cloud Monitoring → email
 - **IaC:** Terraform (state in GCS)
 

@@ -29,6 +29,24 @@ resource "google_cloud_scheduler_job" "scrape" {
   }
 }
 
+resource "google_cloud_scheduler_job" "scrape_ridership" {
+  name             = "actransit-scrape-ridership"
+  region           = var.region
+  schedule         = "* * * * *"
+  time_zone        = "Etc/UTC"
+  attempt_deadline = "60s"
+
+  http_target {
+    http_method = "POST"
+    uri         = "${google_cloud_run_v2_service.scraper.uri}/scrape-ridership"
+
+    oidc_token {
+      service_account_email = google_service_account.scheduler.email
+      audience              = google_cloud_run_v2_service.scraper.uri
+    }
+  }
+}
+
 resource "google_cloud_scheduler_job" "refresh_stops" {
   name             = "actransit-refresh-stops"
   region           = var.region

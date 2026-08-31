@@ -42,8 +42,9 @@ var (
 	gcsClient  *storage.Client
 	bucketName string
 
-	apiToken  *tokenCache
-	gtfsToken *tokenCache
+	apiToken       *tokenCache
+	gtfsToken      *tokenCache
+	ridershipToken *tokenCache
 )
 
 type tokenCache struct {
@@ -77,18 +78,21 @@ func main() {
 	bucketName = os.Getenv("CACHE_BUCKET")
 	apiSecretName := os.Getenv("SECRET_NAME")
 	gtfsSecretName := os.Getenv("GTFS_SECRET_NAME")
+	ridershipSecretName := os.Getenv("RIDERSHIP_SECRET_NAME")
 	projectID = os.Getenv("PROJECT_ID")
-	if bucketName == "" || apiSecretName == "" || gtfsSecretName == "" || projectID == "" {
+	if bucketName == "" || apiSecretName == "" || gtfsSecretName == "" || ridershipSecretName == "" || projectID == "" {
 		slog.Error("missing required env",
 			"CACHE_BUCKET", bucketName,
 			"SECRET_NAME", apiSecretName,
 			"GTFS_SECRET_NAME", gtfsSecretName,
+			"RIDERSHIP_SECRET_NAME", ridershipSecretName,
 			"PROJECT_ID", projectID,
 		)
 		os.Exit(1)
 	}
 	apiToken = &tokenCache{name: apiSecretName}
 	gtfsToken = &tokenCache{name: gtfsSecretName}
+	ridershipToken = &tokenCache{name: ridershipSecretName}
 
 	ctx := context.Background()
 	c, err := storage.NewClient(ctx)
@@ -121,6 +125,7 @@ func main() {
 	}
 
 	http.HandleFunc("/scrape", handleScrape)
+	http.HandleFunc("/scrape-ridership", handleScrapeRidership)
 	http.HandleFunc("/refresh-stops", handleRefreshStops)
 	http.HandleFunc("/refresh-gtfs", handleRefreshGTFS)
 	http.HandleFunc("/track-performance", handleTrackPerformance)
@@ -637,11 +642,11 @@ func httpGet(ctx context.Context, url string) ([]byte, error) {
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, sanitizeHTTPError(err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("upstream %s: %s", url, resp.Status)
+		return nil, fmt.Errorf("upstream %s: %s", req.URL.Path, resp.Status)
 	}
 	return io.ReadAll(resp.Body)
 }

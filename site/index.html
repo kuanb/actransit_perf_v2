@@ -65,7 +65,13 @@
       color: inherit;
     }
 
-    .report-card-button {
+    .site-actions {
+      flex-shrink: 0;
+      display: flex;
+      gap: 10px;
+    }
+
+    .site-button {
       flex-shrink: 0;
       display: inline-flex;
       align-items: center;
@@ -81,9 +87,20 @@
       box-shadow: 0 2px 0 #b28e22;
     }
 
-    .report-card-button:hover,
-    .report-card-button:focus-visible {
+    .site-button:hover,
+    .site-button:focus-visible {
       background: #ffdc6b;
+    }
+
+    .ridership-button {
+      color: #fff;
+      background: #2b7a5c;
+      box-shadow: 0 2px 0 #15513c;
+    }
+
+    .ridership-button:hover,
+    .ridership-button:focus-visible {
+      background: #36936f;
     }
 
     .map-frame {
@@ -111,7 +128,9 @@
         font-size: 13px;
       }
 
-      .report-card-button {
+      .site-actions { flex-direction: column; }
+
+      .site-button {
         width: 100%;
         min-height: 46px;
         padding: 10px 16px;
@@ -126,7 +145,10 @@
       <h1>This is not an official AC Transit website.</h1>
       <p class="attribution">Built and maintained by <a href="https://kuanbutts.com/">Kuan Butts</a>.</p>
     </div>
-    <a class="report-card-button" href="report-card/">View the real-time report card →</a>
+    <div class="site-actions">
+      <a class="site-button ridership-button" href="ridership/">View live ridership →</a>
+      <a class="site-button" href="report-card/">View the report card →</a>
+    </div>
   </header>
 
   <main class="map-frame">

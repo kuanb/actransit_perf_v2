@@ -6,7 +6,7 @@ Three structured artifacts:
 
 1. `gcs://transit-203605-actransit-cache/gtfs/processed/route_<route_id>.json` — daily-rebuilt static GTFS, indexed for fast lookup
 2. `gcs://transit-203605-actransit-cache/state.json` — short-lived in-flight trip state, mutated each minute
-3. BigQuery dataset `actransit` — two tables holding completed-trip analytics
+3. BigQuery dataset `actransit` — completed-trip analytics plus raw ridership observations
 
 ## 1. `gtfs/processed/route_<route_id>.json`
 
@@ -263,3 +263,59 @@ Both tables include `ingested_at` so we can reprocess if logic changes —
 filter on `ingested_at` to find rows from a specific tracker version. If we
 ever need a hard schema break, the partition layout makes "drop one day,
 reingest" cheap.
+
+### `actransit.ridership_observations`
+
+One append-only row per active vehicle per polling minute. This is a separate
+table rather than a schema change to the trip tables: ridership is sampled while
+a trip is in progress, has different nullability and retention needs, and must
+not put existing performance history at risk.
+
+```sql
+CREATE TABLE actransit.ridership_observations (
+  service_date                          DATE        NOT NULL,
+  observed_at                           TIMESTAMP   NOT NULL,
+  vehicle_id                            STRING      NOT NULL,
+  route_id                              STRING,
+  trip_id                               STRING,
+  latitude                              FLOAT64,
+  longitude                             FLOAT64,
+  position_reported_at                  TIMESTAMP,
+  vehicle_capacity                      INT64,
+  current_passenger_count               INT64,
+  estimated_occupancy_percentage        INT64,
+  estimated_occupancy_status            STRING,
+  estimated_occupancy_status_color      STRING,
+  apc_reported_at                       TIMESTAMP,
+  ingested_at                           TIMESTAMP   NOT NULL
+)
+PARTITION BY service_date
+CLUSTER BY route_id, vehicle_id;
+```
+
+The logical row key is `(observed_at, vehicle_id)`. BigQuery streaming inserts
+use that pair as an insert ID for retry deduplication. `trip_id` is enriched
+from the synchronized GTFS-Realtime snapshot when its vehicle timestamp is
+within five minutes. If enrichment is missing, link after the fact by vehicle
+and nearest probe time rather than by timestamp alone:
+
+```sql
+SELECT
+  r.* EXCEPT(trip_id),
+  COALESCE(r.trip_id, p.trip_id) AS trip_id
+FROM actransit.ridership_observations AS r
+LEFT JOIN actransit.trip_probes AS p
+  ON p.service_date = r.service_date
+ AND p.vehicle_id = r.vehicle_id
+ AND ABS(TIMESTAMP_DIFF(p.observed_at, r.observed_at, SECOND)) <= 120
+WHERE r.service_date = @service_date
+QUALIFY ROW_NUMBER() OVER (
+  PARTITION BY r.observed_at, r.vehicle_id
+  ORDER BY ABS(TIMESTAMP_DIFF(p.observed_at, r.observed_at, SECOND))
+) = 1;
+```
+
+Direct count and occupancy-percentage fields remain nullable because AC Transit
+documents them but currently returns null values. Raw statuses and capacities
+are retained so any future estimation-method change can be recomputed from the
+source observations.

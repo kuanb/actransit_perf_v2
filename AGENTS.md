@@ -23,6 +23,7 @@ User-facing project docs are in `README.md` and `docs/`. Read those for
 cmd/scraper/        Single Go binary; one HTTP handler per Cloud Scheduler job
   main.go             Routes, GCS read/write, /scrape, /refresh-stops, /refresh-gtfs,
                       /generate-daily-stats, /backfill-day handler wiring
+  ridership.go        /scrape-ridership: APC attributes → BQ + live 24-hour GCS JSON
   track.go            /track-performance handler + state machine + metric emit +
                       arrival detection + trailing-stop tolerance fallback
   bq.go               BigQuery row construction (tripToRows) — applies the
@@ -55,6 +56,7 @@ Makefile            Authoritative entry points — see README.md "Deploy"
 | Endpoint                  | Cron               | Time zone | Side effects                                   |
 |---------------------------|--------------------|-----------|------------------------------------------------|
 | `/scrape`                 | `* * * * *`        | UTC       | Writes `latest.json`, appends to `history.json` |
+| `/scrape-ridership`       | `* * * * *`        | UTC       | Appends APC attributes to BQ, writes `ridership/latest.json` + `ridership/24h.json` |
 | `/track-performance`      | `* * * * *`        | UTC       | Reads `latest.json` + `state.json`, writes `state.json`, finalizes trips into BQ, emits two custom metrics |
 | `/refresh-stops`          | `0 */6 * * *`      | UTC       | Writes `route_stops.json` |
 | `/refresh-gtfs`           | `0 22 * * *`       | PT        | Refreshes `gtfs/current.zip` + per-route processed JSONs |
@@ -277,6 +279,14 @@ trusting the chart — chart alignment periods can hide both gaps and bugs.
   `latest.json` and friends will appear stale via the public URL even right
   after a fresh write. Set `w.CacheControl` in `writeObject`
   (`cmd/scraper/main.go`) for any object that needs to be fresh.
+
+- **The realtime attributes API documents direct passenger counts, but does not
+  currently populate them.** As of 2026-08-31, all active vehicles returned a
+  fresh `DateTimeAPCReported`, capacity, and crowding status while
+  `CurrentPassengerCount` and `EstimatedOccupancyPercentage` were null. Keep
+  those warehouse fields nullable. The live ridership page uses methodology v1
+  status-band estimates (35% / 75% / 100% of capacity) and automatically gives
+  direct counts precedence if AC Transit begins returning them.
 
 - **Custom metric writes occasionally return gRPC `Internal` (code 13).**
   This is transient backend flakiness, not a schema/quota problem. The

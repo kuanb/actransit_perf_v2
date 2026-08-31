@@ -50,6 +50,11 @@ resource "google_cloud_run_v2_service" "scraper" {
       }
 
       env {
+        name  = "RIDERSHIP_SECRET_NAME"
+        value = "${data.google_secret_manager_secret.actransit_ridership_token.id}/versions/latest"
+      }
+
+      env {
         name  = "PROJECT_ID"
         value = var.project_id
       }

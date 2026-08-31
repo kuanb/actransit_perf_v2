@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A live, independent estimate of how many people are riding AC Transit, with current vehicle crowding and a 24-hour ridership trend.">
+  <title>AC Transit Live Ridership</title>
+  <link rel="canonical" href="https://ac-transit.com/ridership/">
+  <link rel="preconnect" href="https://api.mapbox.com">
+  <link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/v3.5.2/mapbox-gl.css">
+  <link rel="stylesheet" href="styles.css?v=ridership-v1">
+  <script src="../independence-notice.js" defer></script>
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.5.2/mapbox-gl.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <header class="hero">
+    <nav class="hero-nav" aria-label="Site navigation">
+      <a class="brand" href="../">AC Transit Data</a>
+      <div>
+        <a href="https://ac-transit.com/">Live map</a>
+        <a href="../report-card/">Performance</a>
+      </div>
+    </nav>
+
+    <div class="hero-copy">
+      <p class="eyebrow">Independent live estimate</p>
+      <h1><span id="rider-count">—</span> people are riding AC Transit right now.</h1>
+      <p id="coverage-copy" class="hero-subtitle">Waiting for the first current ridership snapshot…</p>
+    </div>
+
+    <section class="trend-panel" aria-labelledby="trend-title">
+      <div class="panel-heading">
+        <div>
+          <p class="panel-kicker">Rolling view</p>
+          <h2 id="trend-title">Estimated riders over the past 24 hours</h2>
+        </div>
+        <p id="updated-at" class="freshness" role="status">Loading live data…</p>
+      </div>
+      <div class="trend-canvas">
+        <canvas id="ridership-trend" role="img" aria-label="Estimated AC Transit ridership over the past 24 hours"></canvas>
+      </div>
+    </section>
+  </header>
+
+  <main>
+    <section class="metric-strip" aria-label="Current ridership coverage">
+      <article>
+        <span>Active vehicles</span>
+        <strong id="active-vehicles">—</strong>
+      </article>
+      <article>
+        <span>Fresh APC status</span>
+        <strong id="apc-coverage">—</strong>
+      </article>
+      <article>
+        <span>Modeled vehicles</span>
+        <strong id="modeled-vehicles">—</strong>
+      </article>
+      <article>
+        <span>Fleet capacity</span>
+        <strong id="fleet-capacity">—</strong>
+      </article>
+    </section>
+
+    <section class="live-grid">
+      <article class="map-card">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">Where the buses are</p>
+            <h2>Live vehicles</h2>
+          </div>
+          <div class="legend" aria-label="Crowding legend">
+            <span><i class="status-not-crowded"></i>Not crowded</span>
+            <span><i class="status-some-crowding"></i>Some crowding</span>
+            <span><i class="status-crowded"></i>Crowded</span>
+          </div>
+        </div>
+        <div id="vehicle-map" aria-label="Map of current AC Transit vehicles"></div>
+      </article>
+
+      <aside class="side-stack">
+        <article class="crowding-card">
+          <p class="section-kicker">Systemwide right now</p>
+          <h2>Crowding mix</h2>
+          <div id="status-bars" class="status-bars" aria-live="polite">
+            <p class="empty-state">Loading crowding status…</p>
+          </div>
+        </article>
+
+        <article class="routes-card">
+          <div class="section-heading compact">
+            <div>
+              <p class="section-kicker">Largest current loads</p>
+              <h2>Routes</h2>
+            </div>
+            <span class="estimate-label">Modeled</span>
+          </div>
+          <div class="route-table-wrap">
+            <table>
+              <thead>
+                <tr><th>Route</th><th>Vehicles</th><th>Riders</th></tr>
+              </thead>
+              <tbody id="route-rows">
+                <tr><td colspan="3" class="empty-state">Loading routes…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </aside>
+    </section>
+
+    <section class="methodology" aria-labelledby="methodology-title">
+      <div>
+        <p class="section-kicker">About this data</p>
+        <h2 id="methodology-title">A live estimate built from AC Transit’s APC feed</h2>
+      </div>
+      <div class="methodology-copy">
+        <p>AC Transit publishes a recommended capacity, a fresh APC timestamp, and one of three crowding bands for each active vehicle. The feed currently leaves its direct passenger-count and occupancy-percentage fields empty, so this page models the bands as 35% of capacity for <strong>Not Crowded</strong>, 75% for <strong>Some Crowding</strong>, and 100% for <strong>Crowded</strong>.</p>
+        <p>If AC Transit begins returning direct counts, those values automatically take priority. Vehicles with APC data older than five minutes are excluded from the headline estimate. The raw source fields are retained for long-term analysis, so the model can be revised without losing the underlying observations.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>Independent project by <a href="https://kuanbutts.com/">Kuan Butts</a>. Not an official AC Transit website.</p>
+    <p>Source: <a href="https://api.actransit.org/transit/Help/Api/GET-vehicle-realtimeattributes_vehicleId_routename">AC Transit realtime vehicle attributes</a>.</p>
+  </footer>
+
+  <script src="../lib.js?v=ridership-v1"></script>
+  <script src="app.js?v=ridership-v1"></script>
+  <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "0e36b12e46b04a69b5e9ff6883f6d23d"}'></script><!-- End Cloudflare Web Analytics -->
+</body>
+</html>

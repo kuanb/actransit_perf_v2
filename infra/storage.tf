@@ -2,7 +2,7 @@ resource "google_storage_bucket" "cache" {
   name                        = "${var.project_id}-actransit-cache"
   location                    = var.region
   storage_class               = "STANDARD"
-  force_destroy               = true
+  force_destroy               = false
   uniform_bucket_level_access = true
   public_access_prevention    = "inherited"
 

@@ -2,14 +2,14 @@ resource "google_bigquery_dataset" "actransit" {
   dataset_id                 = "actransit"
   location                   = var.region
   description                = "AC Transit performance analytics"
-  delete_contents_on_destroy = true
+  delete_contents_on_destroy = false
 }
 
 resource "google_bigquery_table" "trip_observations" {
   dataset_id          = google_bigquery_dataset.actransit.dataset_id
   table_id            = "trip_observations"
   description         = "One row per (trip_id, stop_sequence) — schedule vs. actual + per-leg metrics"
-  deletion_protection = false
+  deletion_protection = true
 
   time_partitioning {
     type  = "DAY"
@@ -25,7 +25,7 @@ resource "google_bigquery_table" "trip_probes" {
   dataset_id          = google_bigquery_dataset.actransit.dataset_id
   table_id            = "trip_probes"
   description         = "One row per probe observation — projected onto route, audit trail for trip replay"
-  deletion_protection = false
+  deletion_protection = true
 
   time_partitioning {
     type  = "DAY"
@@ -35,6 +35,22 @@ resource "google_bigquery_table" "trip_probes" {
   clustering = ["route_id", "trip_id"]
 
   schema = file("${path.module}/schemas/trip_probes.json")
+}
+
+resource "google_bigquery_table" "ridership_observations" {
+  dataset_id          = google_bigquery_dataset.actransit.dataset_id
+  table_id            = "ridership_observations"
+  description         = "One row per active vehicle per minute from AC Transit realtime APC attributes"
+  deletion_protection = true
+
+  time_partitioning {
+    type  = "DAY"
+    field = "service_date"
+  }
+
+  clustering = ["route_id", "vehicle_id"]
+
+  schema = file("${path.module}/schemas/ridership_observations.json")
 }
 
 resource "google_bigquery_dataset_iam_member" "scraper_writer" {

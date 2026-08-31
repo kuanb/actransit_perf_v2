@@ -203,6 +203,9 @@ smoke:
 	hit GET /; \
 	hit POST /scrape; \
 	check "$$BUCKET/latest.json"; \
+	hit POST /scrape-ridership; \
+	check "$$BUCKET/ridership/latest.json"; \
+	check "$$BUCKET/ridership/24h.json"; \
 	hit POST /refresh-stops; \
 	check "$$BUCKET/route_stops.json"; \
 	hit POST /track-performance; \
@@ -212,6 +215,7 @@ smoke:
 	echo "==> bq tables exist (chunk 4)"; \
 	bq show -q $(PROJECT_ID):actransit.trip_observations >/dev/null 2>&1 || { echo "FAIL: actransit.trip_observations missing"; exit 1; }; \
 	bq show -q $(PROJECT_ID):actransit.trip_probes >/dev/null 2>&1 || { echo "FAIL: actransit.trip_probes missing"; exit 1; }; \
+	bq show -q $(PROJECT_ID):actransit.ridership_observations >/dev/null 2>&1 || { echo "FAIL: actransit.ridership_observations missing"; exit 1; }; \
 	echo "  OK"; \
 	hit POST /generate-daily-stats; \
 	check "$$BUCKET/stats/latest.json"; \

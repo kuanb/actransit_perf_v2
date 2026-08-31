@@ -18,6 +18,7 @@ write the results to BigQuery for analytical queries. Surface a real-time
                   │  (existing: /scrape /refresh-stops /refresh-gtfs)  │
                   │                                                    │
 [every 1 min]──▶  │  /scrape           writes latest.json (existing)   │
+[every 1 min]──▶  │  /scrape-ridership writes BQ + live 24h JSON       │
 [every 1 min]──▶  │  /track-performance (new)                          │
                   │     1. read latest.json + state.json from GCS      │
                   │     2. load static GTFS from in-mem cache          │
@@ -218,6 +219,19 @@ state forever."
 | GCS `gtfs/processed/*` (1 daily write batch + cold-start reads) | ~$0.01/mo |
 | Cloud Run invocations (2× existing rate) | $0 (free tier) |
 | Cloud Scheduler (4th job) | $0.10/mo (first paid job) |
+
+### Ridership sidecar data path
+
+`/scrape-ridership` is a separate handler and Scheduler job in the same Cloud
+Run service. A failure cannot block `/scrape` or `/track-performance`, while the
+implementation still reuses the existing authenticated runtime, GCS client,
+BigQuery client, and deployment path.
+
+Each successful poll writes approximately one row per active vehicle to the
+new `ridership_observations` table, then publishes `ridership/latest.json` and
+the bounded `ridership/24h.json`. The browser reads GCS rather than BigQuery, so
+the public page remains current without exposing a query service or incurring a
+query on every visit.
 | Cloud Monitoring custom metrics | $0/mo (first 6 free) |
 
 Total marginal cost: **~$0.40/month** on top of the existing ~$1/month.
