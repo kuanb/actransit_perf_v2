@@ -8,7 +8,7 @@
   <link rel="canonical" href="https://ac-transit.com/ridership/">
   <link rel="preconnect" href="https://api.mapbox.com">
   <link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/v3.5.2/mapbox-gl.css">
-  <link rel="stylesheet" href="styles.css?v=ridership-v1">
+  <link rel="stylesheet" href="styles.css?v=ridership-v2">
   <script src="../independence-notice.js" defer></script>
   <script src="https://api.mapbox.com/mapbox-gl-js/v3.5.2/mapbox-gl.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
@@ -70,11 +70,18 @@
             <p class="section-kicker">Where the buses are</p>
             <h2>Live vehicles</h2>
           </div>
-          <div class="legend" aria-label="Crowding legend">
-            <span><i class="status-not-crowded"></i>Not crowded</span>
-            <span><i class="status-some-crowding"></i>Some crowding</span>
-            <span><i class="status-crowded"></i>Crowded</span>
-          </div>
+          <table class="occupancy-legend" aria-label="Occupancy status rider estimate factors">
+            <caption>Occupancy model</caption>
+            <thead>
+              <tr><th>Feed status</th><th>Rider estimate</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><i class="status-not-crowded"></i>Not Crowded</td><td>35% of capacity</td></tr>
+              <tr><td><i class="status-some-crowding"></i>Some Crowding</td><td>75% of capacity</td></tr>
+              <tr><td><i class="status-crowded"></i>Crowded</td><td>100% of capacity</td></tr>
+              <tr><td><i class="status-unavailable"></i>Null / unavailable</td><td>Excluded</td></tr>
+            </tbody>
+          </table>
         </div>
         <div id="vehicle-map" aria-label="Map of current AC Transit vehicles"></div>
       </article>
