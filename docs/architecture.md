@@ -120,10 +120,10 @@ Steady-state size: ~50 KB (50–200 in-flight trips × small probe history each)
 ### Warehouse: BigQuery
 
 Native GCP analytical store. Free tier: 10 GiB storage + 1 TiB query/month
-+ 2 GB streaming inserts/month. At our data scale (single-digit GB/year),
-storage and ingest are free; query cost is bounded by partition-pruning.
++ 2 TiB/month through the gRPC Storage Write API. At our data scale, ingest is
+free and query cost is bounded by partition-pruning.
 
-Four tables under dataset `actransit`:
+Five tables under dataset `actransit`:
 
 - `trip_observations` — one row per (trip_id, stop_seq); the rolled-up "did
   the bus arrive on time?" answer.
@@ -131,15 +131,17 @@ Four tables under dataset `actransit`:
   replay of a trip.
 - `ridership_observations` — one row per active vehicle per ridership poll.
 - `api_request_observations` — one row per vehicle-location or ridership API
-  request, retaining raw latency and health outcomes for later hourly and daily
-  report-card aggregation.
+  request, retaining 90 days of raw latency and health outcomes.
+- `api_request_hourly` — permanent hourly buckets plus an exact daily total for
+  each upstream source.
 
 All are partitioned by `service_date` (DATE). Trip tables are clustered by
 `route_id` and `trip_id`, ridership by `route_id` and `vehicle_id`, and request
 health by `source` and `outcome`. See `data-model.md` for full schemas.
 
-Writes: BigQuery streaming inserts via the Storage Write API (more efficient
-than legacy `tabledata.insertAll`).
+Ridership and request-health rows use the gRPC Storage Write API. Live trip
+tracking still uses legacy streaming inserts, while bulk backfills use free
+BigQuery load jobs.
 
 ### GTFS static: per-route processed JSON in GCS
 
@@ -218,7 +220,7 @@ state forever."
 | Line item | Estimate |
 |---|---|
 | BigQuery storage (probes + observations) | ~$0.05/mo at ~1 GB |
-| BigQuery streaming inserts | $0/mo (free tier 2 GB/mo > our 6.5 GB/yr) |
+| Ridership + request-health ingestion | $0/mo through the Storage Write API free tier |
 | BigQuery query (manual analytical queries) | $0 (free tier 1 TiB/mo) |
 | GCS `state.json` reads + writes (60/min) | ~$0.22/mo |
 | GCS `gtfs/processed/*` (1 daily write batch + cold-start reads) | ~$0.01/mo |
@@ -234,8 +236,9 @@ implementation still reuses the existing authenticated runtime, GCS client,
 BigQuery client, and deployment path.
 
 Each successful poll writes approximately one row per active vehicle to the
-new `ridership_observations` table, then publishes `ridership/latest.json` and
-the bounded `ridership/24h.json`. The browser reads GCS rather than BigQuery, so
+new `ridership_observations` table, then publishes `ridership/latest.json` with
+both current vehicle detail and the bounded 24-hour series. The browser reads
+one GCS object rather than BigQuery, so
 the public page remains current without exposing a query service or incurring a
 query on every visit.
 
@@ -245,7 +248,8 @@ end-to-end body-read latency, response bytes, and a stable outcome category.
 Telemetry insertion is best-effort so a BigQuery outage does not prevent a
 valid vehicle snapshot from reaching GCS.
 
-Total marginal cost: **~$0.40/month** on top of the existing ~$1/month.
+Total marginal cost: **~$0.25/month**, primarily the once-per-minute GCS object
+replacement, on top of the existing project cost.
 
 ## Phased rollout
 

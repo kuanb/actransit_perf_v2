@@ -1,5 +1,5 @@
 const RIDERSHIP_LATEST_URL = `${GCS_BASE}/ridership/latest.json`;
-const RIDERSHIP_HISTORY_URL = `${GCS_BASE}/ridership/24h.json`;
+const LEGACY_RIDERSHIP_HISTORY_URL = `${GCS_BASE}/ridership/24h.json`;
 const RIDERSHIP_SNAPSHOT_MAX_AGE_MS = 10 * 60_000;
 const RIDERSHIP_HISTORY_MINUTES = 24 * 60;
 const MINUTE_MS = 60_000;
@@ -296,10 +296,10 @@ function renderTrend(history) {
 
 async function loadRidership() {
   try {
-    const [snapshot, history] = await Promise.all([
-      fetchJSON(RIDERSHIP_LATEST_URL),
-      fetchJSON(RIDERSHIP_HISTORY_URL).catch(() => ({ points: [] })),
-    ]);
+    const snapshot = await fetchJSON(RIDERSHIP_LATEST_URL);
+    const history = Array.isArray(snapshot.history?.points)
+      ? snapshot.history
+      : await fetchJSON(LEGACY_RIDERSHIP_HISTORY_URL).catch(() => ({ points: [] }));
     lastRidershipSnapshot = snapshot;
     renderTrend(history);
     if (!currentSnapshot(snapshot.observed_at)) {

@@ -60,13 +60,30 @@ resource "google_bigquery_table" "api_request_observations" {
   deletion_protection = true
 
   time_partitioning {
-    type  = "DAY"
-    field = "service_date"
+    type          = "DAY"
+    field         = "service_date"
+    expiration_ms = 7776000000
   }
 
   clustering = ["source", "outcome"]
 
   schema = file("${path.module}/schemas/api_request_observations.json")
+}
+
+resource "google_bigquery_table" "api_request_hourly" {
+  dataset_id          = google_bigquery_dataset.actransit.dataset_id
+  table_id            = "api_request_hourly"
+  description         = "Permanent hourly and daily API request health aggregates"
+  deletion_protection = true
+
+  time_partitioning {
+    type  = "DAY"
+    field = "service_date"
+  }
+
+  clustering = ["source", "is_total"]
+
+  schema = file("${path.module}/schemas/api_request_hourly.json")
 }
 
 resource "google_bigquery_dataset_iam_member" "scraper_writer" {

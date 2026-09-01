@@ -17,6 +17,7 @@ import (
 
 const (
 	apiRequestBQTable         = "api_request_observations"
+	apiRequestHourlyBQTable   = "api_request_hourly"
 	apiSourceVehicleLocations = "vehicle_locations"
 	apiSourceRidership        = "ridership"
 	apiRequestTimeout         = 30 * time.Second
@@ -141,18 +142,28 @@ func recordAPIRequest(ctx context.Context, observation apiRequestObservation) {
 }
 
 func writeAPIRequestObservation(ctx context.Context, observation apiRequestObservation) error {
-	if bqClient == nil {
+	if apiRequestBQWriter == nil {
 		return nil
 	}
-	schema, err := bigquery.InferSchema(apiRequestObservation{})
-	if err != nil {
-		return err
-	}
 	observation.IngestedAt = time.Now().UTC()
-	row := &bigquery.StructSaver{
-		Schema:   schema,
-		InsertID: observation.Source + ":" + observation.ObservedAt.Format(time.RFC3339Nano),
-		Struct:   observation,
+	row := map[string]any{
+		"service_date": bqDateValue(observation.ServiceDate),
+		"observed_at":  observation.ObservedAt.UnixMicro(),
+		"source":       observation.Source,
+		"endpoint":     observation.Endpoint,
+		"latency_ms":   observation.LatencyMS,
+		"success":      observation.Success,
+		"outcome":      observation.Outcome,
+		"ingested_at":  observation.IngestedAt.UnixMicro(),
 	}
-	return bqClient.Dataset(bqDatasetID).Table(apiRequestBQTable).Inserter().Put(ctx, []*bigquery.StructSaver{row})
+	if observation.StatusCode.Valid {
+		row["status_code"] = observation.StatusCode.Int64
+	}
+	if observation.ResponseBytes.Valid {
+		row["response_bytes"] = observation.ResponseBytes.Int64
+	}
+	if observation.ErrorMessage.Valid {
+		row["error_message"] = observation.ErrorMessage.StringVal
+	}
+	return apiRequestBQWriter.Append(ctx, []map[string]any{row})
 }

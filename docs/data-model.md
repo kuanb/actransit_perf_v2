@@ -293,8 +293,9 @@ PARTITION BY service_date
 CLUSTER BY route_id, vehicle_id;
 ```
 
-The logical row key is `(observed_at, vehicle_id)`. BigQuery streaming inserts
-use that pair as an insert ID for retry deduplication. `trip_id` is enriched
+The logical row key is `(observed_at, vehicle_id)`. The gRPC Storage Write API
+uses the table's default stream; analytical queries should use that key when
+deduplicating a rare retried append. `trip_id` is enriched
 from the synchronized GTFS-Realtime snapshot when its vehicle timestamp is
 within five minutes. If enrichment is missing, link after the fact by vehicle
 and nearest probe time rather than by timestamp alone:
@@ -323,9 +324,8 @@ source observations.
 ### `actransit.api_request_observations`
 
 One row per request made by the minutely vehicle-location and ridership polling
-paths. Raw requests are retained so report generation can use hourly buckets for
-weekly detail and daily buckets for a 28-day report card without losing tail
-latency or failure information.
+paths. Raw partitions expire after 90 days so recent reports can be recomputed
+without retaining request-level telemetry indefinitely.
 
 ```sql
 CREATE TABLE actransit.api_request_observations (
@@ -350,3 +350,32 @@ HTTP response was received. `outcome` is one of `success`, `timeout`,
 `http_4xx`, `http_5xx`, `http_other`, `transport_error`, `body_read_error`,
 `decode_error`, `invalid_payload`, or `request_error`. Endpoint query strings
 are deliberately omitted so API tokens never enter the warehouse.
+
+### `actransit.api_request_hourly`
+
+Permanent rollups generated after each service day. Each source has one row per
+observed hour plus an `is_total = TRUE` row that preserves exact daily tail
+latencies. The table retains request and success counts, p50/p95/p99/max latency,
+timeouts, HTTP 4xx/5xx counts, and other failures such as decode errors.
+
+```sql
+CREATE TABLE actransit.api_request_hourly (
+  service_date        DATE        NOT NULL,
+  source              STRING      NOT NULL,
+  is_total            BOOL        NOT NULL,
+  hour_start          TIMESTAMP,
+  requests            INT64       NOT NULL,
+  successful_requests INT64       NOT NULL,
+  p50_latency_ms      FLOAT64,
+  p95_latency_ms      FLOAT64,
+  p99_latency_ms      FLOAT64,
+  max_latency_ms      FLOAT64,
+  timeout_count       INT64       NOT NULL,
+  http_4xx_count      INT64       NOT NULL,
+  http_5xx_count      INT64       NOT NULL,
+  other_error_count   INT64       NOT NULL,
+  updated_at          TIMESTAMP   NOT NULL
+)
+PARTITION BY service_date
+CLUSTER BY source, is_total;
+```

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/bigquery"
+	"cloud.google.com/go/bigquery/storage/managedwriter"
 	"cloud.google.com/go/civil"
 	monitoring "cloud.google.com/go/monitoring/apiv3/v2"
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
@@ -118,6 +119,25 @@ func main() {
 	}
 	defer bq.Close()
 	bqClient = bq
+
+	bqWrite, err := managedwriter.NewClient(ctx, projectID)
+	if err != nil {
+		slog.Error("managedwriter.NewClient failed", "err", err)
+		os.Exit(1)
+	}
+	defer bqWrite.Close()
+	apiRequestBQWriter, err = newBQStorageWriter(ctx, bqWrite, apiRequestBQTable, apiRequestObservation{})
+	if err != nil {
+		slog.Error("initialize api request writer failed", "err", err)
+		os.Exit(1)
+	}
+	defer apiRequestBQWriter.Close()
+	ridershipBQWriter, err = newBQStorageWriter(ctx, bqWrite, ridershipBQTable, ridershipObservationRow{})
+	if err != nil {
+		slog.Error("initialize ridership writer failed", "err", err)
+		os.Exit(1)
+	}
+	defer ridershipBQWriter.Close()
 
 	port := os.Getenv("PORT")
 	if port == "" {

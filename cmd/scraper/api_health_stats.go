@@ -26,6 +26,7 @@ type apiHealthSourceStats struct {
 	P50LatencyMS       float64           `json:"p50_latency_ms"`
 	P95LatencyMS       float64           `json:"p95_latency_ms"`
 	P99LatencyMS       float64           `json:"p99_latency_ms"`
+	MaxLatencyMS       float64           `json:"max_latency_ms"`
 	TimeoutCount       int64             `json:"timeout_count"`
 	HTTP4xxCount       int64             `json:"http_4xx_count"`
 	HTTP5xxCount       int64             `json:"http_5xx_count"`
@@ -41,6 +42,7 @@ type apiHealthBucket struct {
 	P50LatencyMS       float64   `json:"p50_latency_ms"`
 	P95LatencyMS       float64   `json:"p95_latency_ms"`
 	P99LatencyMS       float64   `json:"p99_latency_ms"`
+	MaxLatencyMS       float64   `json:"max_latency_ms"`
 	TimeoutCount       int64     `json:"timeout_count"`
 	HTTP4xxCount       int64     `json:"http_4xx_count"`
 	HTTP5xxCount       int64     `json:"http_5xx_count"`
@@ -56,6 +58,7 @@ type apiHealthAggregateRow struct {
 	P50LatencyMS       bigquery.NullFloat64   `bigquery:"p50_latency_ms"`
 	P95LatencyMS       bigquery.NullFloat64   `bigquery:"p95_latency_ms"`
 	P99LatencyMS       bigquery.NullFloat64   `bigquery:"p99_latency_ms"`
+	MaxLatencyMS       bigquery.NullFloat64   `bigquery:"max_latency_ms"`
 	TimeoutCount       int64                  `bigquery:"timeout_count"`
 	HTTP4xxCount       int64                  `bigquery:"http_4xx_count"`
 	HTTP5xxCount       int64                  `bigquery:"http_5xx_count"`
@@ -73,6 +76,10 @@ func queryAPIHealthStats(ctx context.Context, periodStart, periodEnd civil.Date)
 		    outcome
 		  FROM `+"`%s.%s.%s`"+`
 		  WHERE service_date BETWEEN @period_start AND @period_end
+		  QUALIFY ROW_NUMBER() OVER (
+		    PARTITION BY source, observed_at
+		    ORDER BY ingested_at DESC
+		  ) = 1
 		), aggregates AS (
 		  SELECT
 		    source,
@@ -83,6 +90,7 @@ func queryAPIHealthStats(ctx context.Context, periodStart, periodEnd civil.Date)
 		    APPROX_QUANTILES(latency_ms, 100)[OFFSET(50)] AS p50_latency_ms,
 		    APPROX_QUANTILES(latency_ms, 100)[OFFSET(95)] AS p95_latency_ms,
 		    APPROX_QUANTILES(latency_ms, 100)[OFFSET(99)] AS p99_latency_ms,
+		    MAX(latency_ms) AS max_latency_ms,
 		    COUNTIF(outcome = "timeout") AS timeout_count,
 		    COUNTIF(outcome = "http_4xx") AS http_4xx_count,
 		    COUNTIF(outcome = "http_5xx") AS http_5xx_count,
@@ -101,6 +109,7 @@ func queryAPIHealthStats(ctx context.Context, periodStart, periodEnd civil.Date)
 		    APPROX_QUANTILES(latency_ms, 100)[OFFSET(50)] AS p50_latency_ms,
 		    APPROX_QUANTILES(latency_ms, 100)[OFFSET(95)] AS p95_latency_ms,
 		    APPROX_QUANTILES(latency_ms, 100)[OFFSET(99)] AS p99_latency_ms,
+		    MAX(latency_ms) AS max_latency_ms,
 		    COUNTIF(outcome = "timeout") AS timeout_count,
 		    COUNTIF(outcome = "http_4xx") AS http_4xx_count,
 		    COUNTIF(outcome = "http_5xx") AS http_5xx_count,
@@ -132,7 +141,134 @@ func queryAPIHealthStats(ctx context.Context, periodStart, periodEnd civil.Date)
 		}
 		rows = append(rows, row)
 	}
-	return assembleAPIHealthStats(periodStart, periodEnd, rows), nil
+	stats := assembleAPIHealthStats(periodStart, periodEnd, rows)
+	if stats == nil && periodStart == periodEnd {
+		return queryAPIHealthRollupStats(ctx, periodStart)
+	}
+	return stats, nil
+}
+
+func rollupAPIHealthDay(ctx context.Context, serviceDate civil.Date) error {
+	q := bqClient.Query(fmt.Sprintf(`
+		MERGE `+"`%s.%s.%s`"+` AS target
+		USING (
+		  WITH requests AS (
+		    SELECT source, observed_at, latency_ms, success, outcome
+		    FROM `+"`%s.%s.%s`"+`
+		    WHERE service_date = @service_date
+		    QUALIFY ROW_NUMBER() OVER (
+		      PARTITION BY source, observed_at
+		      ORDER BY ingested_at DESC
+		    ) = 1
+		  )
+		  SELECT
+		    @service_date AS service_date,
+		    source,
+		    TRUE AS is_total,
+		    CAST(NULL AS TIMESTAMP) AS hour_start,
+		    COUNT(*) AS requests,
+		    COUNTIF(success) AS successful_requests,
+		    APPROX_QUANTILES(latency_ms, 100)[OFFSET(50)] AS p50_latency_ms,
+		    APPROX_QUANTILES(latency_ms, 100)[OFFSET(95)] AS p95_latency_ms,
+		    APPROX_QUANTILES(latency_ms, 100)[OFFSET(99)] AS p99_latency_ms,
+		    MAX(latency_ms) AS max_latency_ms,
+		    COUNTIF(outcome = "timeout") AS timeout_count,
+		    COUNTIF(outcome = "http_4xx") AS http_4xx_count,
+		    COUNTIF(outcome = "http_5xx") AS http_5xx_count,
+		    COUNTIF(NOT success AND outcome NOT IN ("timeout", "http_4xx", "http_5xx")) AS other_error_count,
+		    CURRENT_TIMESTAMP() AS updated_at
+		  FROM requests
+		  GROUP BY source
+
+		  UNION ALL
+
+		  SELECT
+		    @service_date AS service_date,
+		    source,
+		    FALSE AS is_total,
+		    TIMESTAMP_TRUNC(observed_at, HOUR, "America/Los_Angeles") AS hour_start,
+		    COUNT(*) AS requests,
+		    COUNTIF(success) AS successful_requests,
+		    APPROX_QUANTILES(latency_ms, 100)[OFFSET(50)] AS p50_latency_ms,
+		    APPROX_QUANTILES(latency_ms, 100)[OFFSET(95)] AS p95_latency_ms,
+		    APPROX_QUANTILES(latency_ms, 100)[OFFSET(99)] AS p99_latency_ms,
+		    MAX(latency_ms) AS max_latency_ms,
+		    COUNTIF(outcome = "timeout") AS timeout_count,
+		    COUNTIF(outcome = "http_4xx") AS http_4xx_count,
+		    COUNTIF(outcome = "http_5xx") AS http_5xx_count,
+		    COUNTIF(NOT success AND outcome NOT IN ("timeout", "http_4xx", "http_5xx")) AS other_error_count,
+		    CURRENT_TIMESTAMP() AS updated_at
+		  FROM requests
+		  GROUP BY source, hour_start
+		) AS source
+		ON target.service_date = source.service_date
+		 AND target.source = source.source
+		 AND target.is_total = source.is_total
+		 AND (target.hour_start = source.hour_start OR (target.hour_start IS NULL AND source.hour_start IS NULL))
+		WHEN MATCHED THEN UPDATE SET
+		  requests = source.requests,
+		  successful_requests = source.successful_requests,
+		  p50_latency_ms = source.p50_latency_ms,
+		  p95_latency_ms = source.p95_latency_ms,
+		  p99_latency_ms = source.p99_latency_ms,
+		  max_latency_ms = source.max_latency_ms,
+		  timeout_count = source.timeout_count,
+		  http_4xx_count = source.http_4xx_count,
+		  http_5xx_count = source.http_5xx_count,
+		  other_error_count = source.other_error_count,
+		  updated_at = source.updated_at
+		WHEN NOT MATCHED THEN INSERT (
+		  service_date, source, is_total, hour_start, requests, successful_requests,
+		  p50_latency_ms, p95_latency_ms, p99_latency_ms, max_latency_ms,
+		  timeout_count, http_4xx_count, http_5xx_count, other_error_count, updated_at
+		) VALUES (
+		  source.service_date, source.source, source.is_total, source.hour_start,
+		  source.requests, source.successful_requests, source.p50_latency_ms,
+		  source.p95_latency_ms, source.p99_latency_ms, source.max_latency_ms,
+		  source.timeout_count, source.http_4xx_count, source.http_5xx_count,
+		  source.other_error_count, source.updated_at
+		)
+	`, projectID, bqDatasetID, apiRequestHourlyBQTable, projectID, bqDatasetID, apiRequestBQTable))
+	q.Parameters = []bigquery.QueryParameter{{Name: "service_date", Value: serviceDate}}
+	job, err := q.Run(ctx)
+	if err != nil {
+		return err
+	}
+	status, err := job.Wait(ctx)
+	if err != nil {
+		return err
+	}
+	return status.Err()
+}
+
+func queryAPIHealthRollupStats(ctx context.Context, serviceDate civil.Date) (*apiHealthStats, error) {
+	q := bqClient.Query(fmt.Sprintf(`
+		SELECT
+		  source, is_total, hour_start, requests, successful_requests,
+		  p50_latency_ms, p95_latency_ms, p99_latency_ms, max_latency_ms,
+		  timeout_count, http_4xx_count, http_5xx_count, other_error_count
+		FROM `+"`%s.%s.%s`"+`
+		WHERE service_date = @service_date
+		ORDER BY source, is_total DESC, hour_start
+	`, projectID, bqDatasetID, apiRequestHourlyBQTable))
+	q.Parameters = []bigquery.QueryParameter{{Name: "service_date", Value: serviceDate}}
+	it, err := q.Read(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var rows []apiHealthAggregateRow
+	for {
+		var row apiHealthAggregateRow
+		err := it.Next(&row)
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		rows = append(rows, row)
+	}
+	return assembleAPIHealthStats(serviceDate, serviceDate, rows), nil
 }
 
 func assembleAPIHealthStats(periodStart, periodEnd civil.Date, rows []apiHealthAggregateRow) *apiHealthStats {
@@ -150,6 +286,7 @@ func assembleAPIHealthStats(periodStart, periodEnd civil.Date, rows []apiHealthA
 			source.P50LatencyMS = nullableAPILatency(row.P50LatencyMS)
 			source.P95LatencyMS = nullableAPILatency(row.P95LatencyMS)
 			source.P99LatencyMS = nullableAPILatency(row.P99LatencyMS)
+			source.MaxLatencyMS = nullableAPILatency(row.MaxLatencyMS)
 			source.TimeoutCount = row.TimeoutCount
 			source.HTTP4xxCount = row.HTTP4xxCount
 			source.HTTP5xxCount = row.HTTP5xxCount
@@ -167,6 +304,7 @@ func assembleAPIHealthStats(periodStart, periodEnd civil.Date, rows []apiHealthA
 			P50LatencyMS:       nullableAPILatency(row.P50LatencyMS),
 			P95LatencyMS:       nullableAPILatency(row.P95LatencyMS),
 			P99LatencyMS:       nullableAPILatency(row.P99LatencyMS),
+			MaxLatencyMS:       nullableAPILatency(row.MaxLatencyMS),
 			TimeoutCount:       row.TimeoutCount,
 			HTTP4xxCount:       row.HTTP4xxCount,
 			HTTP5xxCount:       row.HTTP5xxCount,

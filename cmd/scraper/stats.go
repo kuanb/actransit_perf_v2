@@ -147,6 +147,9 @@ type bqStatsStats struct {
 // combine, write the JSON to GCS at stats/<date>.json AND stats/latest.json.
 // Returns the rendered struct (also for the HTTP response body).
 func generateDailyStats(ctx context.Context, serviceDate civil.Date) (*dailyStats, error) {
+	if err := rollupAPIHealthDay(ctx, serviceDate); err != nil {
+		return nil, fmt.Errorf("roll up api health: %w", err)
+	}
 	gtfsBytes, err := readGTFSZipForServiceDate(ctx, serviceDate)
 	if err != nil {
 		return nil, fmt.Errorf("read gtfs zip: %w", err)

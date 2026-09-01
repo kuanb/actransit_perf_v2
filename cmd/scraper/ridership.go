@@ -132,6 +132,7 @@ type ridershipSnapshot struct {
 	IngestedAt         time.Time                  `json:"ingested_at"`
 	Summary            ridershipSummary           `json:"summary"`
 	Vehicles           []ridershipVehicleSnapshot `json:"vehicles"`
+	History            ridershipHistory           `json:"history"`
 }
 
 type ridershipHistory struct {
@@ -215,6 +216,11 @@ func scrapeRidership(ctx context.Context, now time.Time) (ridershipStats, error)
 	if err := writeRidershipRows(ctx, snapshot); err != nil {
 		return stats, fmt.Errorf("insert ridership observations: %w", err)
 	}
+	history, err := loadRidershipHistory(ctx)
+	if err != nil {
+		return stats, fmt.Errorf("load ridership history: %w", err)
+	}
+	snapshot.History = mergeRidershipHistory(history, snapshot.Summary)
 
 	payload, err := json.Marshal(snapshot)
 	if err != nil {
@@ -222,9 +228,6 @@ func scrapeRidership(ctx context.Context, now time.Time) (ridershipStats, error)
 	}
 	if err := writeObject(ctx, ridershipLatestObjectKey, payload); err != nil {
 		return stats, fmt.Errorf("write ridership latest: %w", err)
-	}
-	if err := updateRidershipHistory(ctx, snapshot.Summary); err != nil {
-		return stats, fmt.Errorf("update ridership history: %w", err)
 	}
 
 	stats.Vehicles = snapshot.Summary.ActiveVehicles
@@ -413,40 +416,56 @@ func tripContextIsCurrent(trip vehicleTripContext, positionReportedAt *time.Time
 }
 
 func writeRidershipRows(ctx context.Context, snapshot ridershipSnapshot) error {
-	if bqClient == nil || len(snapshot.Vehicles) == 0 {
+	if ridershipBQWriter == nil || len(snapshot.Vehicles) == 0 {
 		return nil
 	}
-	schema, err := bigquery.InferSchema(ridershipObservationRow{})
-	if err != nil {
-		return err
-	}
 	serviceDate := ridershipServiceDate(snapshot.ObservedAt)
-	rows := make([]*bigquery.StructSaver, 0, len(snapshot.Vehicles))
+	rows := make([]map[string]any, 0, len(snapshot.Vehicles))
 	for _, vehicle := range snapshot.Vehicles {
-		row := ridershipObservationRow{
-			ServiceDate:                   serviceDate,
-			ObservedAt:                    snapshot.ObservedAt,
-			VehicleID:                     vehicle.VehicleID,
-			RouteID:                       nullString(vehicle.RouteID),
-			TripID:                        nullString(vehicle.TripID),
-			Latitude:                      nullFloat64(vehicle.Latitude),
-			Longitude:                     nullFloat64(vehicle.Longitude),
-			PositionReportedAt:            nullTimestamp(vehicle.PositionReportedAt),
-			VehicleCapacity:               nullInt64(vehicle.Capacity),
-			CurrentPassengerCount:         nullInt64(vehicle.PassengerCount),
-			EstimatedOccupancyPercentage:  nullInt64(vehicle.OccupancyPercentage),
-			EstimatedOccupancyStatus:      nullString(vehicle.OccupancyStatus),
-			EstimatedOccupancyStatusColor: nullString(vehicle.OccupancyStatusColor),
-			APCReportedAt:                 nullTimestamp(vehicle.APCReportedAt),
-			IngestedAt:                    snapshot.IngestedAt,
+		row := map[string]any{
+			"service_date": bqDateValue(serviceDate),
+			"observed_at":  snapshot.ObservedAt.UnixMicro(),
+			"vehicle_id":   vehicle.VehicleID,
+			"ingested_at":  snapshot.IngestedAt.UnixMicro(),
 		}
-		rows = append(rows, &bigquery.StructSaver{
-			Schema:   schema,
-			InsertID: snapshot.ObservedAt.Format("20060102T1504Z") + ":" + vehicle.VehicleID,
-			Struct:   row,
-		})
+		putString(row, "route_id", vehicle.RouteID)
+		putString(row, "trip_id", vehicle.TripID)
+		putFloat64(row, "latitude", vehicle.Latitude)
+		putFloat64(row, "longitude", vehicle.Longitude)
+		putTimestamp(row, "position_reported_at", vehicle.PositionReportedAt)
+		putInt64(row, "vehicle_capacity", vehicle.Capacity)
+		putInt64(row, "current_passenger_count", vehicle.PassengerCount)
+		putInt64(row, "estimated_occupancy_percentage", vehicle.OccupancyPercentage)
+		putString(row, "estimated_occupancy_status", vehicle.OccupancyStatus)
+		putString(row, "estimated_occupancy_status_color", vehicle.OccupancyStatusColor)
+		putTimestamp(row, "apc_reported_at", vehicle.APCReportedAt)
+		rows = append(rows, row)
 	}
-	return bqClient.Dataset(bqDatasetID).Table(ridershipBQTable).Inserter().Put(ctx, rows)
+	return ridershipBQWriter.Append(ctx, rows)
+}
+
+func putString(row map[string]any, field, value string) {
+	if value != "" {
+		row[field] = value
+	}
+}
+
+func putInt64(row map[string]any, field string, value *int64) {
+	if value != nil {
+		row[field] = *value
+	}
+}
+
+func putFloat64(row map[string]any, field string, value *float64) {
+	if value != nil {
+		row[field] = *value
+	}
+}
+
+func putTimestamp(row map[string]any, field string, value *time.Time) {
+	if value != nil {
+		row[field] = value.UnixMicro()
+	}
 }
 
 func ridershipServiceDate(observedAt time.Time) civil.Date {
@@ -457,48 +476,33 @@ func ridershipServiceDate(observedAt time.Time) civil.Date {
 	return civil.DateOf(observedAt.In(loc))
 }
 
-func nullString(value string) bigquery.NullString {
-	return bigquery.NullString{StringVal: value, Valid: value != ""}
-}
-
-func nullInt64(value *int64) bigquery.NullInt64 {
-	if value == nil {
-		return bigquery.NullInt64{}
-	}
-	return bigquery.NullInt64{Int64: *value, Valid: true}
-}
-
-func nullFloat64(value *float64) bigquery.NullFloat64 {
-	if value == nil {
-		return bigquery.NullFloat64{}
-	}
-	return bigquery.NullFloat64{Float64: *value, Valid: true}
-}
-
-func nullTimestamp(value *time.Time) bigquery.NullTimestamp {
-	if value == nil {
-		return bigquery.NullTimestamp{}
-	}
-	return bigquery.NullTimestamp{Timestamp: value.UTC(), Valid: true}
-}
-
-func updateRidershipHistory(ctx context.Context, summary ridershipSummary) error {
-	payload, exists, err := readObject(ctx, ridershipHistoryObjectKey)
+func loadRidershipHistory(ctx context.Context) (ridershipHistory, error) {
+	payload, exists, err := readObject(ctx, ridershipLatestObjectKey)
 	if err != nil {
-		return err
+		return ridershipHistory{}, err
 	}
-	var history ridershipHistory
 	if exists {
-		if err := json.Unmarshal(payload, &history); err != nil {
-			return fmt.Errorf("parse ridership history: %w", err)
+		var snapshot ridershipSnapshot
+		if err := json.Unmarshal(payload, &snapshot); err != nil {
+			return ridershipHistory{}, fmt.Errorf("parse ridership latest: %w", err)
+		}
+		if len(snapshot.History.Points) > 0 {
+			return snapshot.History, nil
 		}
 	}
-	history = mergeRidershipHistory(history, summary)
-	payload, err = json.Marshal(history)
+
+	payload, exists, err = readObject(ctx, ridershipHistoryObjectKey)
 	if err != nil {
-		return err
+		return ridershipHistory{}, err
 	}
-	return writeObject(ctx, ridershipHistoryObjectKey, payload)
+	if !exists {
+		return ridershipHistory{}, nil
+	}
+	var history ridershipHistory
+	if err := json.Unmarshal(payload, &history); err != nil {
+		return ridershipHistory{}, fmt.Errorf("parse legacy ridership history: %w", err)
+	}
+	return history, nil
 }
 
 func mergeRidershipHistory(history ridershipHistory, summary ridershipSummary) ridershipHistory {

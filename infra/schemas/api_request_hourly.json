@@ -1,0 +1,17 @@
+[
+  {"name": "service_date",        "type": "DATE",      "mode": "REQUIRED"},
+  {"name": "source",              "type": "STRING",    "mode": "REQUIRED"},
+  {"name": "is_total",            "type": "BOOL",      "mode": "REQUIRED"},
+  {"name": "hour_start",          "type": "TIMESTAMP", "mode": "NULLABLE"},
+  {"name": "requests",            "type": "INT64",     "mode": "REQUIRED"},
+  {"name": "successful_requests", "type": "INT64",     "mode": "REQUIRED"},
+  {"name": "p50_latency_ms",      "type": "FLOAT64",   "mode": "NULLABLE"},
+  {"name": "p95_latency_ms",      "type": "FLOAT64",   "mode": "NULLABLE"},
+  {"name": "p99_latency_ms",      "type": "FLOAT64",   "mode": "NULLABLE"},
+  {"name": "max_latency_ms",      "type": "FLOAT64",   "mode": "NULLABLE"},
+  {"name": "timeout_count",       "type": "INT64",     "mode": "REQUIRED"},
+  {"name": "http_4xx_count",      "type": "INT64",     "mode": "REQUIRED"},
+  {"name": "http_5xx_count",      "type": "INT64",     "mode": "REQUIRED"},
+  {"name": "other_error_count",   "type": "INT64",     "mode": "REQUIRED"},
+  {"name": "updated_at",          "type": "TIMESTAMP", "mode": "REQUIRED"}
+]

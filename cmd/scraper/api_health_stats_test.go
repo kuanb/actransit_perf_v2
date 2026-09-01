@@ -23,6 +23,7 @@ func TestAssembleAPIHealthStats(t *testing.T) {
 			P50LatencyMS:       latency(125.44),
 			P95LatencyMS:       latency(505.55),
 			P99LatencyMS:       latency(30000.02),
+			MaxLatencyMS:       latency(30001.08),
 			TimeoutCount:       1,
 			HTTP4xxCount:       1,
 		},
@@ -34,6 +35,7 @@ func TestAssembleAPIHealthStats(t *testing.T) {
 			P50LatencyMS:       latency(120),
 			P95LatencyMS:       latency(480),
 			P99LatencyMS:       latency(1000),
+			MaxLatencyMS:       latency(1200),
 			HTTP4xxCount:       1,
 		},
 		{
@@ -61,7 +63,7 @@ func TestAssembleAPIHealthStats(t *testing.T) {
 		t.Fatalf("source order = %q, %q", got.Sources[0].Source, got.Sources[1].Source)
 	}
 	ridership := got.Sources[1]
-	if ridership.SuccessPct != 98 || ridership.P50LatencyMS != 125.4 || ridership.P95LatencyMS != 505.6 {
+	if ridership.SuccessPct != 98 || ridership.P50LatencyMS != 125.4 || ridership.P95LatencyMS != 505.6 || ridership.MaxLatencyMS != 30001.1 {
 		t.Fatalf("ridership summary = %+v", ridership)
 	}
 	if len(ridership.Buckets) != 1 || !ridership.Buckets[0].StartedAt.Equal(hour) {

@@ -20,14 +20,15 @@ from AC Transit's `/allstops` endpoint, written to a third object:
 
 Another minutely job (`/scrape-ridership`) fetches AC Transit's realtime APC
 attributes into an independent, append-only BigQuery table. It also publishes a
-small live snapshot and a rolling 24-hour series for the public ridership page:
+small live snapshot with a rolling 24-hour series for the public ridership page:
 
-- `ridership/latest.json` — current vehicles, crowding fields, and transparent rider estimates
-- `ridership/24h.json` — one systemwide summary per minute, capped at 24 hours
+- `ridership/latest.json` — current vehicles, crowding fields, transparent rider estimates, and one systemwide summary per minute for the last 24 hours
 
 Both minutely upstream requests also write one health observation to BigQuery,
 including latency, HTTP status, response size, and a categorized failure outcome
-for timeouts, 4xx/5xx responses, transport errors, and invalid payloads.
+for timeouts, 4xx/5xx responses, transport errors, and invalid payloads. Raw
+request rows expire after 90 days; permanent hourly and daily summaries are
+generated with each daily report.
 
 A third job (`/refresh-gtfs`) runs nightly at 22:00 America/Los_Angeles,
 downloads the static GTFS zip, hashes it, and writes a new dated archive
@@ -61,7 +62,6 @@ directly via HTTPS, with permissive CORS for browsers:
 | Vehicle history  | `https://storage.googleapis.com/transit-203605-actransit-cache/history.json`              |
 | Route stops      | `https://storage.googleapis.com/transit-203605-actransit-cache/route_stops.json`          |
 | Live ridership   | `https://storage.googleapis.com/transit-203605-actransit-cache/ridership/latest.json`     |
-| Ridership, 24 hours | `https://storage.googleapis.com/transit-203605-actransit-cache/ridership/24h.json`      |
 | Current GTFS     | `https://storage.googleapis.com/transit-203605-actransit-cache/gtfs/current.zip`          |
 | Latest daily report | `https://storage.googleapis.com/transit-203605-actransit-cache/stats/latest.json`       |
 | Latest weekly report | `https://storage.googleapis.com/transit-203605-actransit-cache/stats/weekly/latest.json` |
