@@ -69,3 +69,39 @@ resource "google_monitoring_alert_policy" "scraper_5xx" {
     auto_close = "604800s"
   }
 }
+
+resource "google_logging_metric" "scrape_ridership_success" {
+  name        = "actransit/scrape_ridership_success"
+  description = "Successful scrape-ridership handler completions"
+  filter      = <<-EOT
+    resource.type="cloud_run_revision"
+    resource.labels.service_name="actransit-scraper"
+    jsonPayload.msg="scrape-ridership ok"
+  EOT
+
+  metric_descriptor {
+    metric_kind = "DELTA"
+    value_type  = "INT64"
+    unit        = "1"
+  }
+}
+
+resource "google_monitoring_alert_policy" "scrape_ridership_absent" {
+  display_name = "actransit ridership snapshot stale"
+  combiner     = "OR"
+
+  conditions {
+    display_name = "No successful ridership scrape for 10 minutes"
+
+    condition_absent {
+      filter   = "resource.type = \"cloud_run_revision\" AND metric.type = \"logging.googleapis.com/user/${google_logging_metric.scrape_ridership_success.name}\""
+      duration = "600s"
+    }
+  }
+
+  notification_channels = [google_monitoring_notification_channel.email.id]
+
+  alert_strategy {
+    auto_close = "604800s"
+  }
+}

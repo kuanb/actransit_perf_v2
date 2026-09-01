@@ -35,6 +35,8 @@ var ridershipStatusFactors = map[string]float64{
 	"crowded":       1.00,
 }
 
+var ridershipTimestampLocation, ridershipTimestampLocationErr = time.LoadLocation("America/Los_Angeles")
+
 type realtimeVehicleAttributes struct {
 	VehicleID                     string     `json:"VehicleId"`
 	CurrentRoute                  string     `json:"CurrentRoute"`
@@ -47,6 +49,51 @@ type realtimeVehicleAttributes struct {
 	EstimatedOccupancyStatusColor string     `json:"EstimatedOccupancyStatusColor"`
 	EstimatedOccupancyStatus      string     `json:"EstimatedOccupancyStatus"`
 	DateTimeAPCReported           *time.Time `json:"DateTimeAPCReported"`
+}
+
+func (v *realtimeVehicleAttributes) UnmarshalJSON(data []byte) error {
+	type plain realtimeVehicleAttributes
+	raw := struct {
+		*plain
+		DateTimePositionReported json.RawMessage `json:"DateTimePositionReported"`
+		DateTimeAPCReported      json.RawMessage `json:"DateTimeAPCReported"`
+	}{plain: (*plain)(v)}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	positionReportedAt, err := parseRealtimeTimestamp(raw.DateTimePositionReported)
+	if err != nil {
+		return fmt.Errorf("DateTimePositionReported: %w", err)
+	}
+	apcReportedAt, err := parseRealtimeTimestamp(raw.DateTimeAPCReported)
+	if err != nil {
+		return fmt.Errorf("DateTimeAPCReported: %w", err)
+	}
+	v.DateTimePositionReported = positionReportedAt
+	v.DateTimeAPCReported = apcReportedAt
+	return nil
+}
+
+func parseRealtimeTimestamp(raw json.RawMessage) (*time.Time, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil, nil
+	}
+	var value string
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return nil, err
+	}
+	if parsed, err := time.Parse(time.RFC3339Nano, value); err == nil {
+		return &parsed, nil
+	}
+	if ridershipTimestampLocationErr != nil {
+		return nil, ridershipTimestampLocationErr
+	}
+	parsed, err := time.ParseInLocation("2006-02-01T15:04:05", value, ridershipTimestampLocation)
+	if err != nil {
+		return nil, fmt.Errorf("parse %q: %w", value, err)
+	}
+	return &parsed, nil
 }
 
 type ridershipVehicleSnapshot struct {

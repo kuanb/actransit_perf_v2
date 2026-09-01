@@ -20,6 +20,40 @@ func TestRealtimeVehicleAttributesDecode(t *testing.T) {
 	}
 }
 
+func TestRealtimeVehicleAttributesDecodeLocalDayMonthTimestamp(t *testing.T) {
+	var vehicles []realtimeVehicleAttributes
+	payload := `[{"VehicleId":"1001","DateTimePositionReported":"2026-01-09T00:01:00","DateTimeAPCReported":"2026-01-09T00:01:00"}]`
+	if err := json.Unmarshal([]byte(payload), &vehicles); err != nil {
+		t.Fatal(err)
+	}
+	want := time.Date(2026, 9, 1, 7, 1, 0, 0, time.UTC)
+	if vehicles[0].DateTimePositionReported == nil || !vehicles[0].DateTimePositionReported.Equal(want) {
+		t.Fatalf("position timestamp = %v, want %v", vehicles[0].DateTimePositionReported, want)
+	}
+	if vehicles[0].DateTimeAPCReported == nil || !vehicles[0].DateTimeAPCReported.Equal(want) {
+		t.Fatalf("APC timestamp = %v, want %v", vehicles[0].DateTimeAPCReported, want)
+	}
+}
+
+func TestRealtimeVehicleAttributesDecodeNullTimestamps(t *testing.T) {
+	var vehicles []realtimeVehicleAttributes
+	payload := `[{"VehicleId":"1001","DateTimePositionReported":null,"DateTimeAPCReported":null}]`
+	if err := json.Unmarshal([]byte(payload), &vehicles); err != nil {
+		t.Fatal(err)
+	}
+	if vehicles[0].DateTimePositionReported != nil || vehicles[0].DateTimeAPCReported != nil {
+		t.Fatalf("timestamps = %v, %v; want nil", vehicles[0].DateTimePositionReported, vehicles[0].DateTimeAPCReported)
+	}
+}
+
+func TestRealtimeVehicleAttributesRejectsInvalidTimestamp(t *testing.T) {
+	var vehicles []realtimeVehicleAttributes
+	payload := `[{"VehicleId":"1001","DateTimePositionReported":"not-a-time","DateTimeAPCReported":null}]`
+	if err := json.Unmarshal([]byte(payload), &vehicles); err == nil {
+		t.Fatal("expected invalid timestamp error")
+	}
+}
+
 func TestEstimateVehicleRiders(t *testing.T) {
 	now := time.Date(2026, 8, 31, 22, 0, 0, 0, time.UTC)
 	fresh := now.Add(-30 * time.Second)

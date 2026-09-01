@@ -1,5 +1,6 @@
 const RIDERSHIP_LATEST_URL = `${GCS_BASE}/ridership/latest.json`;
 const RIDERSHIP_HISTORY_URL = `${GCS_BASE}/ridership/24h.json`;
+const RIDERSHIP_SNAPSHOT_MAX_AGE_MS = 10 * 60_000;
 
 const STATUS_ORDER = ["Not Crowded", "Some Crowding", "Crowded"];
 const STATUS_COLORS = {
@@ -10,6 +11,7 @@ const STATUS_COLORS = {
 
 let ridershipMap;
 let ridershipChart;
+let lastRidershipSnapshot;
 let currentVehicleGeoJSON = { type: "FeatureCollection", features: [] };
 
 function escapeHTML(value) {
@@ -39,6 +41,12 @@ function freshTimestamp(timestamp, reference) {
   return age >= -60_000 && age <= 5 * 60_000;
 }
 
+function currentSnapshot(timestamp) {
+  const observedAt = new Date(timestamp).getTime();
+  const age = Date.now() - observedAt;
+  return Number.isFinite(observedAt) && age >= -60_000 && age <= RIDERSHIP_SNAPSHOT_MAX_AGE_MS;
+}
+
 function renderSummary(snapshot) {
   const summary = snapshot.summary;
   const estimate = summary.estimated_riders;
@@ -47,6 +55,7 @@ function renderSummary(snapshot) {
   document.querySelector("#rider-count").textContent = estimate == null
     ? "—"
     : intFmt(estimate);
+  document.querySelector("#rider-headline-copy").textContent = " people are riding AC Transit right now.";
   document.querySelector("#active-vehicles").textContent = intFmt(summary.active_vehicles);
   document.querySelector("#apc-coverage").textContent = `${coverage}%`;
   document.querySelector("#modeled-vehicles").textContent = `${intFmt(summary.estimated_vehicles)} / ${intFmt(summary.active_vehicles)}`;
@@ -58,6 +67,25 @@ function renderSummary(snapshot) {
     ? `${intFmt(direct)} vehicles are reporting direct passenger counts; the remaining estimate uses fresh APC crowding data on ${intFmt(summary.apc_reporting_vehicles)} of ${intFmt(summary.active_vehicles)} active vehicles.`
     : `Modeled from fresh APC crowding data on ${intFmt(summary.apc_reporting_vehicles)} of ${intFmt(summary.active_vehicles)} active vehicles (${coverage}% coverage). AC Transit currently publishes status bands rather than direct passenger counts.`;
   document.querySelector("#coverage-copy").textContent = coverageCopy;
+}
+
+function renderUnavailable(snapshot) {
+  const observedAt = snapshot?.observed_at;
+  const hasObservedAt = Number.isFinite(new Date(observedAt).getTime());
+  document.querySelector("#rider-count").textContent = "Live estimate temporarily unavailable";
+  document.querySelector("#rider-headline-copy").textContent = ".";
+  document.querySelector("#coverage-copy").textContent = hasObservedAt
+    ? `The most recent snapshot is ${formatAge(observedAt)}. Current ridership, coverage, routes, and vehicle locations are hidden until fresh data returns.`
+    : "Current ridership data is unavailable. The page will retry automatically in one minute.";
+  document.querySelector("#updated-at").textContent = hasObservedAt
+    ? `Last successful update ${formatAge(observedAt)}`
+    : "Live data is temporarily unavailable";
+  for (const id of ["active-vehicles", "apc-coverage", "modeled-vehicles", "fleet-capacity"]) {
+    document.querySelector(`#${id}`).textContent = "—";
+  }
+  document.querySelector("#status-bars").innerHTML = '<p class="empty-state">Current APC statuses are unavailable.</p>';
+  document.querySelector("#route-rows").innerHTML = '<tr><td colspan="3" class="empty-state">Current route estimates are unavailable.</td></tr>';
+  updateMap({ vehicles: [] });
 }
 
 function renderStatusBars(summary) {
@@ -245,14 +273,22 @@ async function loadRidership() {
       fetchJSON(RIDERSHIP_LATEST_URL),
       fetchJSON(RIDERSHIP_HISTORY_URL).catch(() => ({ points: [] })),
     ]);
+    lastRidershipSnapshot = snapshot;
+    renderTrend(history);
+    if (!currentSnapshot(snapshot.observed_at)) {
+      renderUnavailable(snapshot);
+      return;
+    }
     renderSummary(snapshot);
     renderStatusBars(snapshot.summary);
     renderRoutes(snapshot.vehicles || []);
     updateMap(snapshot);
-    renderTrend(history);
   } catch (error) {
-    document.querySelector("#updated-at").textContent = "Live data is temporarily unavailable";
-    document.querySelector("#coverage-copy").textContent = "The page will retry automatically in one minute.";
+    if (lastRidershipSnapshot && currentSnapshot(lastRidershipSnapshot.observed_at)) {
+      document.querySelector("#updated-at").textContent = `Updated ${formatAge(lastRidershipSnapshot.observed_at)}`;
+      return;
+    }
+    renderUnavailable(lastRidershipSnapshot);
   }
 }
 
