@@ -9,3 +9,16 @@ Makefile
 .DS_Store
 .idea/
 .vscode/
+.github/
+.githooks/
+.claude/
+.cursor/
+site/
+docs/
+*.md
+*.sh
+analysis/
+output/
+tmp/
+/scraper
+/=
