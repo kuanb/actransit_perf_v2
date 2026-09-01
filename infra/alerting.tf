@@ -19,7 +19,7 @@ resource "google_billing_budget" "monthly_cap" {
   display_name    = "actransit project monthly budget"
 
   budget_filter {
-    projects = ["projects/${var.project_id}"]
+    projects = ["projects/${data.google_project.current.number}"]
   }
 
   # $10/mo cap. Steady-state usage runs ~$1.50–2/mo; the higher cap

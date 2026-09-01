@@ -5,8 +5,6 @@ resource "google_monitoring_dashboard" "scraper" {
       columns = 12
       tiles = [
         {
-          xPos   = 0
-          yPos   = 0
           width  = 6
           height = 4
           widget = {
@@ -22,13 +20,11 @@ resource "google_monitoring_dashboard" "scraper" {
                   }
                 }
               }
-              thresholds = []
             }
           }
         },
         {
           xPos   = 6
-          yPos   = 0
           width  = 6
           height = 4
           widget = {
@@ -52,7 +48,6 @@ resource "google_monitoring_dashboard" "scraper" {
           }
         },
         {
-          xPos   = 0
           yPos   = 4
           width  = 12
           height = 6
@@ -63,6 +58,7 @@ resource "google_monitoring_dashboard" "scraper" {
               dataSets = [
                 {
                   plotType       = "LINE"
+                  targetAxis     = "Y1"
                   legendTemplate = "$${metric.labels.response_code_class}"
                   timeSeriesQuery = {
                     timeSeriesFilter = {
@@ -86,7 +82,6 @@ resource "google_monitoring_dashboard" "scraper" {
           }
         },
         {
-          xPos   = 0
           yPos   = 10
           width  = 12
           height = 6
@@ -97,6 +92,7 @@ resource "google_monitoring_dashboard" "scraper" {
               dataSets = [
                 {
                   plotType       = "LINE"
+                  targetAxis     = "Y1"
                   legendTemplate = "p50"
                   timeSeriesQuery = {
                     timeSeriesFilter = {
@@ -111,6 +107,7 @@ resource "google_monitoring_dashboard" "scraper" {
                 },
                 {
                   plotType       = "LINE"
+                  targetAxis     = "Y1"
                   legendTemplate = "p95"
                   timeSeriesQuery = {
                     timeSeriesFilter = {
@@ -125,6 +122,7 @@ resource "google_monitoring_dashboard" "scraper" {
                 },
                 {
                   plotType       = "LINE"
+                  targetAxis     = "Y1"
                   legendTemplate = "p99"
                   timeSeriesQuery = {
                     timeSeriesFilter = {
@@ -146,7 +144,6 @@ resource "google_monitoring_dashboard" "scraper" {
           }
         },
         {
-          xPos   = 0
           yPos   = 16
           width  = 6
           height = 6
@@ -157,6 +154,7 @@ resource "google_monitoring_dashboard" "scraper" {
               dataSets = [
                 {
                   plotType       = "LINE"
+                  targetAxis     = "Y1"
                   legendTemplate = "in_flight"
                   timeSeriesQuery = {
                     timeSeriesFilter = {
@@ -188,6 +186,7 @@ resource "google_monitoring_dashboard" "scraper" {
               dataSets = [
                 {
                   plotType       = "LINE"
+                  targetAxis     = "Y1"
                   legendTemplate = "trips/min"
                   timeSeriesQuery = {
                     timeSeriesFilter = {

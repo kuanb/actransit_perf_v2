@@ -17,7 +17,6 @@ variable "alert_email" {
 variable "image_tag" {
   type        = string
   description = "Tag of the scraper container image in Artifact Registry"
-  default     = "v1"
 }
 
 variable "billing_account_id" {

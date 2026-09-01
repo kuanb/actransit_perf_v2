@@ -23,10 +23,16 @@ tf-init:
 	cd infra && terraform init
 
 tf-plan:
-	cd infra && terraform plan
+	@if [ -n "$$TAG" ]; then T="$$TAG"; else \
+	  IMG=$$(gcloud run services describe $(SERVICE) --region=$(REGION) \
+	    --format='value(spec.template.spec.containers[].image)' 2>/dev/null); \
+	  case "$$IMG" in *@*) echo "ERROR: live image is digest-pinned (no tag). Pass TAG= explicitly." && exit 1;; esac; \
+	  T="$${IMG##*:}"; fi; \
+	test -n "$$T" || (echo "ERROR: no TAG= and couldn't read currently-deployed tag" && exit 1); \
+	echo "==> planning against $$T"; \
+	cd infra && terraform plan -var "image_tag=$$T"
 
-tf-apply:
-	cd infra && terraform apply
+tf-apply: deploy
 
 tf-fmt:
 	cd infra && terraform fmt -recursive
