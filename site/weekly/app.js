@@ -117,6 +117,7 @@ function render(data) {
   renderDelayHeatmap(data);
   renderRouteLineChart(data);
   renderRouteDayGrid(data);
+  renderAPIHealth(data.api_health);
 }
 
 // ---- system summary cards + delay histogram (mirrors daily) ----

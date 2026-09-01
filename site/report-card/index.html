@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AC Transit route report card</title>
-  <link rel="stylesheet" href="../styles.css?v=report-trends-v5">
+  <link rel="stylesheet" href="../styles.css?v=api-health-v1">
   <script src="../independence-notice.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 </head>
@@ -292,14 +292,41 @@
     </div>
   </section>
 
+  <section id="api-health-section" class="api-health-section" hidden>
+    <div class="api-health-heading">
+      <div>
+        <p class="api-health-kicker">Data pipeline</p>
+        <h2>Realtime API health</h2>
+        <p class="muted defn">Response performance for AC Transit’s vehicle-location and ridership-attribute feeds across this report-card window. Every scheduled query attempt is included, including timeouts and non-2xx responses. Summary latency values are the median of the available daily percentiles.</p>
+      </div>
+      <span id="api-health-window" class="api-health-window"></span>
+    </div>
+    <div id="api-health-cards" class="api-health-card-grid"></div>
+    <div id="api-health-chart-card" class="api-health-chart-card">
+      <div class="api-health-chart-heading">
+        <div>
+          <h3>Response time over time</h3>
+          <p class="muted">One line per upstream feed. Each point is that service day’s selected latency percentile.</p>
+        </div>
+        <div id="api-health-controls" class="hm-controls api-health-controls">
+          <label><input type="radio" name="api-health-percentile" value="p50"> Median</label>
+          <label><input type="radio" name="api-health-percentile" value="p95" checked> p95</label>
+          <label><input type="radio" name="api-health-percentile" value="p99"> p99</label>
+        </div>
+      </div>
+      <div class="api-health-chart-canvas"><canvas id="api-health-chart"></canvas></div>
+    </div>
+    <p class="muted api-health-methodology">A successful request returned HTTP 200 and a usable payload. Health bands: <strong>Healthy</strong> ≥ 99.5% successful, <strong>Degraded</strong> ≥ 95%, and <strong>Unhealthy</strong> below 95%.</p>
+  </section>
+
   <footer>
     <a href="https://kuanbutts.com" target="_blank" rel="noopener">
       A project by Kuan Butts &copy; <span id="footer-year"></span>
     </a>
   </footer>
 
-  <script src="../lib.js?v=bunching-v4"></script>
-  <script src="app.js?v=report-trends-v7"></script>
+  <script src="../lib.js?v=api-health-v1"></script>
+  <script src="app.js?v=api-health-v1"></script>
   <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "0e36b12e46b04a69b5e9ff6883f6d23d"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
 </html>

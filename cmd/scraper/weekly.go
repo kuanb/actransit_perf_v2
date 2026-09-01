@@ -38,6 +38,7 @@ type weeklyStats struct {
 	SystemDelayHeatmap         map[string][]delayCell   `json:"system_delay_heatmap"`
 	RouteDelayByHour           map[string][]delayCell   `json:"route_delay_by_hour"`
 	RouteDailyServiceDelivered []routeDailySD           `json:"route_daily_service_delivered"`
+	APIHealth                  *apiHealthStats          `json:"api_health,omitempty"`
 }
 
 // weeklyScheduleCompliance is the week-aggregated counterpart to
@@ -177,6 +178,12 @@ func processWeeklyStats(ctx context.Context, weekEndSat civil.Date) (*weeklyStat
 		return nil, fmt.Errorf("query route overall: %w", err)
 	}
 	out.RouteDailyServiceDelivered = aggregateRouteDailySD(dailies, weekStart, routeOverall)
+
+	apiHealth, err := queryAPIHealthStats(ctx, weekStart, weekEndSat)
+	if err != nil {
+		return nil, fmt.Errorf("query api health: %w", err)
+	}
+	out.APIHealth = apiHealth
 
 	payload, err := json.Marshal(out)
 	if err != nil {

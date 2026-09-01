@@ -1080,6 +1080,7 @@ async function load() {
       : "");
 
   render(routes, weekEnd);
+  renderAPIHealth(aggregateDailyAPIHealth(dailies));
   await loadGradeHistory(dates, dailies, routes);
 }
 

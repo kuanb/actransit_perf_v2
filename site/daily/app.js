@@ -388,6 +388,8 @@ function render(data, indexDates = [], weeklyWeeks = []) {
   document.getElementById("meta").textContent =
     `Service date: ${data.service_date} · generated ${data.generated_at}`;
 
+  renderAPIHealth(data.api_health);
+
   // ---- system cards ----
   const s = data.system;
   // renderCards moved to /lib.js (shared with /weekly/).

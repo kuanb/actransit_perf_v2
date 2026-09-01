@@ -37,6 +37,7 @@ type dailyStats struct {
 	DelayMinuteHistogram []minuteBucket      `json:"delay_minute_histogram"`
 	VolumeHistogram      volumeHistogram     `json:"volume_15min_histogram"`
 	Routes               []routeStats        `json:"routes"`
+	APIHealth            *apiHealthStats     `json:"api_health,omitempty"`
 }
 
 // volumeHistogram: 96 fifteen-minute buckets covering one PT day (00:00 →
@@ -352,6 +353,10 @@ func generateDailyStats(ctx context.Context, serviceDate civil.Date) (*dailyStat
 		pct := round1(100.0 * float64(sysStopDeliveredN) / float64(sysStopTotalN))
 		sc.StopSDPct = &pct
 	}
+	apiHealth, err := queryAPIHealthStats(ctx, serviceDate, serviceDate)
+	if err != nil {
+		return nil, fmt.Errorf("query api health: %w", err)
+	}
 
 	out := &dailyStats{
 		MethodologyVersion:   3,
@@ -364,6 +369,7 @@ func generateDailyStats(ctx context.Context, serviceDate civil.Date) (*dailyStat
 		DelayMinuteHistogram: minuteHist,
 		VolumeHistogram:      buildVolumeHistogram(volumeByRoute, colors, scheduledByRoute, 10),
 		Routes:               routes,
+		APIHealth:            apiHealth,
 	}
 
 	payload, err := json.Marshal(out)

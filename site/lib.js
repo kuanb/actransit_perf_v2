@@ -160,6 +160,228 @@ function renderCards(selector, items) {
     .join("");
 }
 
+function apiHealthSourceLabel(source) {
+  if (source === "vehicle_locations") return "Vehicle locations";
+  if (source === "ridership") return "Ridership attributes";
+  return String(source || "Unknown source").replaceAll("_", " ");
+}
+
+function formatAPILatency(ms) {
+  if (ms === null || ms === undefined || !Number.isFinite(Number(ms))) return "—";
+  const value = Number(ms);
+  return value >= 1000 ? `${fmt(value / 1000, 2)} s` : `${fmt(value, 0)} ms`;
+}
+
+function apiHealthPercent(successful, requests) {
+  return requests ? 100 * Number(successful || 0) / Number(requests) : 0;
+}
+
+function apiHealthCountLabel(value, label) {
+  return `${intFmt(value)} ${label}${Number(value) === 1 ? "" : "s"}`;
+}
+
+function apiHealthStatus(successPct) {
+  if (successPct >= 99.5) return { className: "is-healthy", label: "Healthy" };
+  if (successPct >= 95) return { className: "is-degraded", label: "Degraded" };
+  return { className: "is-unhealthy", label: "Unhealthy" };
+}
+
+function apiHealthQuantile(values, fraction) {
+  const sorted = values
+    .map(Number)
+    .filter(Number.isFinite)
+    .sort((a, b) => a - b);
+  if (!sorted.length) return null;
+  return sorted[Math.round((sorted.length - 1) * fraction)];
+}
+
+function aggregateDailyAPIHealth(dailies) {
+  const bySource = new Map();
+  for (const daily of dailies || []) {
+    const health = daily && daily.api_health;
+    if (!health || !Array.isArray(health.sources)) continue;
+    for (const source of health.sources) {
+      if (!source || !source.requests) continue;
+      if (!bySource.has(source.source)) {
+        bySource.set(source.source, {
+          source: source.source,
+          requests: 0,
+          successful_requests: 0,
+          timeout_count: 0,
+          http_4xx_count: 0,
+          http_5xx_count: 0,
+          other_error_count: 0,
+          buckets: [],
+        });
+      }
+      const aggregate = bySource.get(source.source);
+      aggregate.requests += Number(source.requests || 0);
+      aggregate.successful_requests += Number(source.successful_requests || 0);
+      aggregate.timeout_count += Number(source.timeout_count || 0);
+      aggregate.http_4xx_count += Number(source.http_4xx_count || 0);
+      aggregate.http_5xx_count += Number(source.http_5xx_count || 0);
+      aggregate.other_error_count += Number(source.other_error_count || 0);
+      aggregate.buckets.push({
+        started_at: daily.service_date,
+        requests: Number(source.requests || 0),
+        successful_requests: Number(source.successful_requests || 0),
+        success_pct: Number(source.success_pct || 0),
+        p50_latency_ms: source.p50_latency_ms,
+        p95_latency_ms: source.p95_latency_ms,
+        p99_latency_ms: source.p99_latency_ms,
+      });
+    }
+  }
+
+  const sources = Array.from(bySource.values());
+  for (const source of sources) {
+    source.buckets.sort((a, b) => a.started_at.localeCompare(b.started_at));
+    source.success_pct = apiHealthPercent(source.successful_requests, source.requests);
+    source.p50_latency_ms = apiHealthQuantile(source.buckets.map((b) => b.p50_latency_ms), 0.5);
+    source.p95_latency_ms = apiHealthQuantile(source.buckets.map((b) => b.p95_latency_ms), 0.5);
+    source.p99_latency_ms = apiHealthQuantile(source.buckets.map((b) => b.p99_latency_ms), 0.5);
+  }
+  sources.sort((a, b) => {
+    const order = { vehicle_locations: 0, ridership: 1 };
+    return (order[a.source] ?? 99) - (order[b.source] ?? 99) || a.source.localeCompare(b.source);
+  });
+  if (!sources.length) return null;
+
+  const dates = (dailies || []).map((d) => d && d.service_date).filter(Boolean).sort();
+  return {
+    period_start: dates[0],
+    period_end: dates[dates.length - 1],
+    bucket_granularity: "day",
+    sources,
+  };
+}
+
+function renderAPIHealth(health) {
+  const section = document.getElementById("api-health-section");
+  if (!section) return;
+  const sources = health && Array.isArray(health.sources)
+    ? health.sources.filter((source) => Number(source.requests) > 0)
+    : [];
+  section.hidden = sources.length === 0;
+  if (!sources.length) return;
+
+  const daily = health.bucket_granularity === "day";
+  const period = health.period_start === health.period_end
+    ? health.period_start
+    : `${health.period_start} → ${health.period_end}`;
+  document.getElementById("api-health-window").textContent =
+    `${period} · ${daily ? "daily" : "hourly"} latency buckets`;
+
+  document.getElementById("api-health-cards").innerHTML = sources.map((source) => {
+    const successPct = Number(source.success_pct ?? apiHealthPercent(source.successful_requests, source.requests));
+    const status = apiHealthStatus(successPct);
+    const failures = Math.max(0, Number(source.requests) - Number(source.successful_requests || 0));
+    const latencyLabels = daily
+      ? { p50: "Typical p50", p95: "Typical p95", p99: "Typical p99" }
+      : { p50: "Median", p95: "p95", p99: "p99" };
+    const errors = failures === 0
+      ? "No failures recorded in this window"
+      : `${apiHealthCountLabel(failures, "failure")} · ${apiHealthCountLabel(source.timeout_count || 0, "timeout")} · ` +
+        `${intFmt(source.http_4xx_count || 0)} 4xx · ${intFmt(source.http_5xx_count || 0)} 5xx · ` +
+        `${intFmt(source.other_error_count || 0)} other`;
+    return `
+      <article class="api-health-card">
+        <div class="api-health-card-heading">
+          <div>
+            <p>${apiHealthSourceLabel(source.source)}</p>
+            <strong>${fmt(successPct)}% successful</strong>
+          </div>
+          <span class="api-health-status ${status.className}">${status.label}</span>
+        </div>
+        <dl class="api-health-metrics">
+          <div><dt>${latencyLabels.p50}</dt><dd>${formatAPILatency(source.p50_latency_ms)}</dd></div>
+          <div><dt>${latencyLabels.p95}</dt><dd>${formatAPILatency(source.p95_latency_ms)}</dd></div>
+          <div><dt>${latencyLabels.p99}</dt><dd>${formatAPILatency(source.p99_latency_ms)}</dd></div>
+          <div><dt>Requests</dt><dd>${intFmt(source.requests)}</dd></div>
+        </dl>
+        <p class="api-health-errors">${errors}</p>
+      </article>`;
+  }).join("");
+
+  const bucketKeys = Array.from(new Set(
+    sources.flatMap((source) => (source.buckets || []).map((bucket) => bucket.started_at))
+  )).sort();
+  const controls = document.getElementById("api-health-controls");
+  const chartCard = document.getElementById("api-health-chart-card");
+  chartCard.hidden = bucketKeys.length === 0;
+  if (!bucketKeys.length) return;
+
+  const formatBucket = (value) => {
+    if (daily) {
+      const [year, month, day] = value.slice(0, 10).split("-").map(Number);
+      return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" })
+        .format(new Date(Date.UTC(year, month - 1, day)));
+    }
+    const date = new Date(value);
+    return new Intl.DateTimeFormat("en-US", {
+      weekday: health.period_start === health.period_end ? undefined : "short",
+      hour: "numeric",
+      timeZone: "America/Los_Angeles",
+    }).format(date);
+  };
+  const colors = { vehicle_locations: "#1971c2", ridership: "#d97706" };
+  const canvas = document.getElementById("api-health-chart");
+
+  const draw = (percentile) => {
+    if (canvas.apiHealthChart) canvas.apiHealthChart.destroy();
+    const metric = `${percentile}_latency_ms`;
+    canvas.apiHealthChart = new Chart(canvas.getContext("2d"), {
+      type: "line",
+      data: {
+        labels: bucketKeys.map(formatBucket),
+        datasets: sources.map((source, index) => {
+          const byBucket = new Map((source.buckets || []).map((bucket) => [bucket.started_at, bucket]));
+          return {
+            label: apiHealthSourceLabel(source.source),
+            data: bucketKeys.map((key) => byBucket.get(key)?.[metric] ?? null),
+            borderColor: colors[source.source] || ["#7c3aed", "#0f766e"][index % 2],
+            backgroundColor: "transparent",
+            borderWidth: 2.5,
+            pointRadius: daily ? 3 : 1.5,
+            pointHoverRadius: 5,
+            spanGaps: false,
+            tension: 0.22,
+          };
+        }),
+      },
+      options: {
+        maintainAspectRatio: false,
+        interaction: { intersect: false, mode: "index" },
+        plugins: {
+          legend: { position: "bottom", labels: { usePointStyle: true, boxWidth: 8 } },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => `${ctx.dataset.label}: ${formatAPILatency(ctx.raw)}`,
+            },
+          },
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { maxTicksLimit: daily ? 14 : 12, maxRotation: 0 },
+            title: { display: true, text: daily ? "Service date" : "Pacific time" },
+          },
+          y: {
+            beginAtZero: true,
+            title: { display: true, text: "Response time (ms)" },
+          },
+        },
+      },
+    });
+  };
+
+  controls.onchange = (event) => {
+    if (event.target.name === "api-health-percentile") draw(event.target.value);
+  };
+  const selected = controls.querySelector('input[name="api-health-percentile"]:checked');
+  draw(selected ? selected.value : "p95");
+}
+
 function busSpacingAvailable(bunching) {
   return Boolean(
     bunching &&
