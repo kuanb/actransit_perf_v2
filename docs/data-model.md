@@ -319,3 +319,34 @@ Direct count and occupancy-percentage fields remain nullable because AC Transit
 documents them but currently returns null values. Raw statuses and capacities
 are retained so any future estimation-method change can be recomputed from the
 source observations.
+
+### `actransit.api_request_observations`
+
+One row per request made by the minutely vehicle-location and ridership polling
+paths. Raw requests are retained so report generation can use hourly buckets for
+weekly detail and daily buckets for a 28-day report card without losing tail
+latency or failure information.
+
+```sql
+CREATE TABLE actransit.api_request_observations (
+  service_date   DATE        NOT NULL,
+  observed_at    TIMESTAMP   NOT NULL,
+  source         STRING      NOT NULL,
+  endpoint       STRING      NOT NULL,
+  latency_ms     FLOAT64     NOT NULL,
+  status_code    INT64,
+  success        BOOL        NOT NULL,
+  outcome        STRING      NOT NULL,
+  response_bytes INT64,
+  error_message  STRING,
+  ingested_at    TIMESTAMP   NOT NULL
+)
+PARTITION BY service_date
+CLUSTER BY source, outcome;
+```
+
+`source` is `vehicle_locations` or `ridership`. `status_code` is null when no
+HTTP response was received. `outcome` is one of `success`, `timeout`,
+`http_4xx`, `http_5xx`, `http_other`, `transport_error`, `body_read_error`,
+`decode_error`, `invalid_payload`, or `request_error`. Endpoint query strings
+are deliberately omitted so API tokens never enter the warehouse.

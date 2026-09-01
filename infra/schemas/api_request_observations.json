@@ -1,0 +1,13 @@
+[
+  {"name": "service_date",   "type": "DATE",      "mode": "REQUIRED"},
+  {"name": "observed_at",    "type": "TIMESTAMP", "mode": "REQUIRED"},
+  {"name": "source",         "type": "STRING",    "mode": "REQUIRED"},
+  {"name": "endpoint",       "type": "STRING",    "mode": "REQUIRED"},
+  {"name": "latency_ms",     "type": "FLOAT64",   "mode": "REQUIRED"},
+  {"name": "status_code",    "type": "INT64",     "mode": "NULLABLE"},
+  {"name": "success",        "type": "BOOL",      "mode": "REQUIRED"},
+  {"name": "outcome",        "type": "STRING",    "mode": "REQUIRED"},
+  {"name": "response_bytes", "type": "INT64",     "mode": "NULLABLE"},
+  {"name": "error_message",  "type": "STRING",    "mode": "NULLABLE"},
+  {"name": "ingested_at",    "type": "TIMESTAMP", "mode": "REQUIRED"}
+]

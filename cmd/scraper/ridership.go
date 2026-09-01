@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"math"
 	"net/http"
@@ -200,28 +199,20 @@ func fetchRidershipAttributes(ctx context.Context, token string) ([]realtimeVehi
 	query := endpoint.Query()
 	query.Set("token", token)
 	endpoint.RawQuery = query.Encode()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
+	body, observation, err := fetchObservedAPI(ctx, acTransitHTTPClient, apiSourceRidership, endpoint.String())
+	defer func() { recordAPIRequest(ctx, observation) }()
 	if err != nil {
-		return nil, err
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("fetch realtime attributes: %w", sanitizeHTTPError(err))
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("realtime attributes upstream: %s", resp.Status)
-	}
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read realtime attributes: %w", err)
+		return nil, fmt.Errorf("fetch realtime attributes: %w", err)
 	}
 	var vehicles []realtimeVehicleAttributes
 	if err := json.Unmarshal(body, &vehicles); err != nil {
+		setAPIRequestFailure(&observation, "decode_error", err)
 		return nil, fmt.Errorf("decode realtime attributes: %w", err)
 	}
 	if len(vehicles) == 0 {
-		return nil, fmt.Errorf("realtime attributes returned no vehicles")
+		err := fmt.Errorf("realtime attributes returned no vehicles")
+		setAPIRequestFailure(&observation, "invalid_payload", err)
+		return nil, err
 	}
 	return vehicles, nil
 }

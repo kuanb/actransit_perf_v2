@@ -53,6 +53,22 @@ resource "google_bigquery_table" "ridership_observations" {
   schema = file("${path.module}/schemas/ridership_observations.json")
 }
 
+resource "google_bigquery_table" "api_request_observations" {
+  dataset_id          = google_bigquery_dataset.actransit.dataset_id
+  table_id            = "api_request_observations"
+  description         = "One row per scheduled AC Transit vehicle-location or ridership API request"
+  deletion_protection = true
+
+  time_partitioning {
+    type  = "DAY"
+    field = "service_date"
+  }
+
+  clustering = ["source", "outcome"]
+
+  schema = file("${path.module}/schemas/api_request_observations.json")
+}
+
 resource "google_bigquery_dataset_iam_member" "scraper_writer" {
   dataset_id = google_bigquery_dataset.actransit.dataset_id
   role       = "roles/bigquery.dataEditor"

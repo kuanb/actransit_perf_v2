@@ -454,13 +454,15 @@ func scrape(ctx context.Context) error {
 		return fmt.Errorf("get token: %w", err)
 	}
 
-	body, err := httpGet(ctx, fmt.Sprintf(feedURLTemplate, token))
+	body, observation, err := fetchObservedAPI(ctx, acTransitHTTPClient, apiSourceVehicleLocations, fmt.Sprintf(feedURLTemplate, token))
+	defer func() { recordAPIRequest(ctx, observation) }()
 	if err != nil {
 		return fmt.Errorf("fetch feed: %w", err)
 	}
 
 	feed := &gtfs.FeedMessage{}
 	if err := proto.Unmarshal(body, feed); err != nil {
+		setAPIRequestFailure(&observation, "decode_error", err)
 		return fmt.Errorf("decode protobuf: %w", err)
 	}
 

@@ -25,6 +25,10 @@ small live snapshot and a rolling 24-hour series for the public ridership page:
 - `ridership/latest.json` — current vehicles, crowding fields, and transparent rider estimates
 - `ridership/24h.json` — one systemwide summary per minute, capped at 24 hours
 
+Both minutely upstream requests also write one health observation to BigQuery,
+including latency, HTTP status, response size, and a categorized failure outcome
+for timeouts, 4xx/5xx responses, transport errors, and invalid payloads.
+
 A third job (`/refresh-gtfs`) runs nightly at 22:00 America/Los_Angeles,
 downloads the static GTFS zip, hashes it, and writes a new dated archive
 plus updates `gtfs/current.zip` only if the hash changed:

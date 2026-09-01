@@ -123,15 +123,20 @@ Native GCP analytical store. Free tier: 10 GiB storage + 1 TiB query/month
 + 2 GB streaming inserts/month. At our data scale (single-digit GB/year),
 storage and ingest are free; query cost is bounded by partition-pruning.
 
-Two tables under dataset `actransit`:
+Four tables under dataset `actransit`:
 
 - `trip_observations` — one row per (trip_id, stop_seq); the rolled-up "did
   the bus arrive on time?" answer.
 - `trip_probes` — one row per probe observation; the audit log enabling full
   replay of a trip.
+- `ridership_observations` — one row per active vehicle per ridership poll.
+- `api_request_observations` — one row per vehicle-location or ridership API
+  request, retaining raw latency and health outcomes for later hourly and daily
+  report-card aggregation.
 
-Both partitioned by `service_date` (DATE), clustered by `route_id`. See
-`data-model.md` for full schemas.
+All are partitioned by `service_date` (DATE). Trip tables are clustered by
+`route_id` and `trip_id`, ridership by `route_id` and `vehicle_id`, and request
+health by `source` and `outcome`. See `data-model.md` for full schemas.
 
 Writes: BigQuery streaming inserts via the Storage Write API (more efficient
 than legacy `tabledata.insertAll`).
@@ -219,6 +224,7 @@ state forever."
 | GCS `gtfs/processed/*` (1 daily write batch + cold-start reads) | ~$0.01/mo |
 | Cloud Run invocations (2× existing rate) | $0 (free tier) |
 | Cloud Scheduler (4th job) | $0.10/mo (first paid job) |
+| Cloud Monitoring custom metrics | $0/mo (first 6 free) |
 
 ### Ridership sidecar data path
 
@@ -232,7 +238,12 @@ new `ridership_observations` table, then publishes `ridership/latest.json` and
 the bounded `ridership/24h.json`. The browser reads GCS rather than BigQuery, so
 the public page remains current without exposing a query service or incurring a
 query on every visit.
-| Cloud Monitoring custom metrics | $0/mo (first 6 free) |
+
+Both minutely polling paths write a request-health row even when the upstream
+request fails. The collectors use a 30-second timeout and preserve HTTP status,
+end-to-end body-read latency, response bytes, and a stable outcome category.
+Telemetry insertion is best-effort so a BigQuery outage does not prevent a
+valid vehicle snapshot from reaching GCS.
 
 Total marginal cost: **~$0.40/month** on top of the existing ~$1/month.
 

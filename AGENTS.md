@@ -55,8 +55,8 @@ Makefile            Authoritative entry points — see README.md "Deploy"
 
 | Endpoint                  | Cron               | Time zone | Side effects                                   |
 |---------------------------|--------------------|-----------|------------------------------------------------|
-| `/scrape`                 | `* * * * *`        | UTC       | Writes `latest.json`, appends to `history.json` |
-| `/scrape-ridership`       | `* * * * *`        | UTC       | Appends APC attributes to BQ, writes `ridership/latest.json` + `ridership/24h.json` |
+| `/scrape`                 | `* * * * *`        | UTC       | Writes vehicle cache JSON and API request health to BQ |
+| `/scrape-ridership`       | `* * * * *`        | UTC       | Appends APC attributes + API request health to BQ, writes live ridership JSON |
 | `/track-performance`      | `* * * * *`        | UTC       | Reads `latest.json` + `state.json`, writes `state.json`, finalizes trips into BQ, emits two custom metrics |
 | `/refresh-stops`          | `0 */6 * * *`      | UTC       | Writes `route_stops.json` |
 | `/refresh-gtfs`           | `0 22 * * *`       | PT        | Refreshes `gtfs/current.zip` + per-route processed JSONs |
