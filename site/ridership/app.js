@@ -1,6 +1,8 @@
 const RIDERSHIP_LATEST_URL = `${GCS_BASE}/ridership/latest.json`;
 const RIDERSHIP_HISTORY_URL = `${GCS_BASE}/ridership/24h.json`;
 const RIDERSHIP_SNAPSHOT_MAX_AGE_MS = 10 * 60_000;
+const RIDERSHIP_HISTORY_MINUTES = 24 * 60;
+const MINUTE_MS = 60_000;
 
 const STATUS_ORDER = ["Not Crowded", "Some Crowding", "Crowded"];
 const STATUS_COLORS = {
@@ -208,12 +210,36 @@ function initializeMap() {
   });
 }
 
+function trendSeries(history) {
+  const valuesByMinute = new Map();
+  let latestPoint;
+  for (const point of Array.isArray(history.points) ? history.points : []) {
+    const observedAt = new Date(point.observed_at).getTime();
+    const value = Number(point.estimated_riders);
+    if (!Number.isFinite(observedAt) || point.estimated_riders == null || !Number.isFinite(value)) continue;
+    const minute = Math.floor(observedAt / MINUTE_MS) * MINUTE_MS;
+    valuesByMinute.set(minute, value);
+    latestPoint = Math.max(latestPoint ?? minute, minute);
+  }
+
+  const updatedAt = new Date(history.updated_at).getTime();
+  const end = Number.isFinite(updatedAt)
+    ? Math.floor(updatedAt / MINUTE_MS) * MINUTE_MS
+    : latestPoint;
+  if (end == null) return { labels: [], values: [] };
+
+  const start = end - (RIDERSHIP_HISTORY_MINUTES - 1) * MINUTE_MS;
+  const labels = [];
+  const values = [];
+  for (let minute = start; minute <= end; minute += MINUTE_MS) {
+    labels.push(new Date(minute).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
+    values.push(valuesByMinute.get(minute) ?? null);
+  }
+  return { labels, values };
+}
+
 function renderTrend(history) {
-  const points = Array.isArray(history.points)
-    ? history.points.filter((point) => point.estimated_riders != null)
-    : [];
-  const labels = points.map((point) => new Date(point.observed_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
-  const values = points.map((point) => Number(point.estimated_riders));
+  const { labels, values } = trendSeries(history);
   if (ridershipChart) {
     ridershipChart.data.labels = labels;
     ridershipChart.data.datasets[0].data = values;
@@ -237,6 +263,7 @@ function renderTrend(history) {
         pointHitRadius: 10,
         tension: 0.28,
         fill: true,
+        spanGaps: false,
       }],
     },
     options: {
