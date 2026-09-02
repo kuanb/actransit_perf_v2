@@ -2,6 +2,7 @@ const RIDERSHIP_LATEST_URL = `${GCS_BASE}/ridership/latest.json`;
 const LEGACY_RIDERSHIP_HISTORY_URL = `${GCS_BASE}/ridership/24h.json`;
 const RIDERSHIP_SNAPSHOT_MAX_AGE_MS = 10 * 60_000;
 const RIDERSHIP_HISTORY_MINUTES = 24 * 60;
+const RIDERSHIP_TREND_WINDOW_MINUTES = 4;
 const MINUTE_MS = 60_000;
 
 const STATUS_ORDER = ["Not Crowded", "Some Crowding", "Crowded"];
@@ -210,6 +211,18 @@ function initializeMap() {
   });
 }
 
+function nearbyRidershipMean(valuesByMinute, minute) {
+  let total = 0;
+  let count = 0;
+  for (let offset = -RIDERSHIP_TREND_WINDOW_MINUTES; offset <= RIDERSHIP_TREND_WINDOW_MINUTES; offset++) {
+    const value = valuesByMinute.get(minute + offset * MINUTE_MS);
+    if (!Number.isFinite(value)) continue;
+    total += value;
+    count++;
+  }
+  return count > 0 ? Math.round(total / count) : null;
+}
+
 function trendSeries(history) {
   const valuesByMinute = new Map();
   let latestPoint;
@@ -233,7 +246,7 @@ function trendSeries(history) {
   const values = [];
   for (let minute = start; minute <= end; minute += MINUTE_MS) {
     labels.push(new Date(minute).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
-    values.push(valuesByMinute.get(minute) ?? null);
+    values.push(valuesByMinute.get(minute) ?? nearbyRidershipMean(valuesByMinute, minute));
   }
   return { labels, values };
 }

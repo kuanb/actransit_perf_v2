@@ -124,7 +124,7 @@
       </div>
       <div class="methodology-copy">
         <p>AC Transit publishes a recommended capacity, a fresh APC timestamp, and one of three crowding bands for each active vehicle. The feed currently leaves its direct passenger-count and occupancy-percentage fields empty, so this page models the bands as 35% of capacity for <strong>Not Crowded</strong>, 75% for <strong>Some Crowding</strong>, and 100% for <strong>Crowded</strong>.</p>
-        <p>If AC Transit begins returning direct counts, those values automatically take priority. Vehicles with APC data older than five minutes are excluded from the headline estimate. The raw source fields are retained for long-term analysis, so the model can be revised without losing the underlying observations.</p>
+        <p>If AC Transit begins returning direct counts, those values automatically take priority. Vehicles with APC data older than five minutes are excluded from the headline estimate. Missing minutes in the 24-hour chart use the mean of available observations within four minutes before or after. The raw source fields are retained for long-term analysis, so the model can be revised without losing the underlying observations.</p>
       </div>
     </section>
   </main>
@@ -135,7 +135,7 @@
   </footer>
 
   <script src="../lib.js?v=ridership-v1"></script>
-  <script src="app.js?v=ridership-v3"></script>
+  <script src="app.js?v=ridership-v4"></script>
   <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "0e36b12e46b04a69b5e9ff6883f6d23d"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
 </html>
