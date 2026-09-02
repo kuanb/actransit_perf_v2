@@ -84,7 +84,7 @@ func TestEstimateVehicleRiders(t *testing.T) {
 			name: "not crowded status band",
 			input: realtimeVehicleAttributes{DateTimeAPCReported: &fresh, VehicleCapacity: &capacity,
 				EstimatedOccupancyStatus: "Not Crowded"},
-			want: ptrInt64(10), source: "status_band",
+			want: ptrInt64(15), source: "status_band",
 		},
 		{
 			name: "some crowding status band",
@@ -96,7 +96,7 @@ func TestEstimateVehicleRiders(t *testing.T) {
 			name: "crowded status band",
 			input: realtimeVehicleAttributes{DateTimeAPCReported: &fresh, VehicleCapacity: &capacity,
 				EstimatedOccupancyStatus: "Crowded"},
-			want: ptrInt64(48), source: "status_band",
+			want: ptrInt64(45), source: "status_band",
 		},
 		{
 			name: "stale",
@@ -140,11 +140,11 @@ func TestBuildRidershipSnapshot(t *testing.T) {
 	if snapshot.Summary.ActiveVehicles != 2 || snapshot.Summary.APCReportingVehicles != 2 {
 		t.Fatalf("summary counts = %+v", snapshot.Summary)
 	}
-	if snapshot.MethodologyVersion != 2 {
-		t.Fatalf("methodology version = %d, want 2", snapshot.MethodologyVersion)
+	if snapshot.MethodologyVersion != 3 {
+		t.Fatalf("methodology version = %d, want 3", snapshot.MethodologyVersion)
 	}
-	if snapshot.Summary.EstimatedRiders == nil || *snapshot.Summary.EstimatedRiders != 58 {
-		t.Fatalf("estimated riders = %v, want 58", snapshot.Summary.EstimatedRiders)
+	if snapshot.Summary.EstimatedRiders == nil || *snapshot.Summary.EstimatedRiders != 60 {
+		t.Fatalf("estimated riders = %v, want 60", snapshot.Summary.EstimatedRiders)
 	}
 	if snapshot.Vehicles[0].TripID != "trip-1" {
 		t.Fatalf("trip id = %q, want trip-1", snapshot.Vehicles[0].TripID)

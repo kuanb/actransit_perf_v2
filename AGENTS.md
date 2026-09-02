@@ -284,8 +284,8 @@ trusting the chart — chart alignment periods can hide both gaps and bugs.
   currently populate them.** As of 2026-08-31, all active vehicles returned a
   fresh `DateTimeAPCReported`, capacity, and crowding status while
   `CurrentPassengerCount` and `EstimatedOccupancyPercentage` were null. Keep
-  those warehouse fields nullable. The live ridership page uses methodology v2
-  status-band estimates (20% / 60% / 95% of capacity) and automatically gives
+  those warehouse fields nullable. The live ridership page uses methodology v3
+  status-band estimates (30% / 60% / 90% of capacity) and automatically gives
   direct counts precedence if AC Transit begins returning them.
 
 - **Custom metric writes occasionally return gRPC `Internal` (code 13).**
