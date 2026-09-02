@@ -76,9 +76,9 @@
               <tr><th>Feed status</th><th>Rider estimate</th></tr>
             </thead>
             <tbody>
-              <tr><td><i class="status-not-crowded"></i>Not Crowded</td><td>35% of capacity</td></tr>
-              <tr><td><i class="status-some-crowding"></i>Some Crowding</td><td>75% of capacity</td></tr>
-              <tr><td><i class="status-crowded"></i>Crowded</td><td>100% of capacity</td></tr>
+              <tr><td><i class="status-not-crowded"></i>Not Crowded</td><td>20% of capacity</td></tr>
+              <tr><td><i class="status-some-crowding"></i>Some Crowding</td><td>60% of capacity</td></tr>
+              <tr><td><i class="status-crowded"></i>Crowded</td><td>95% of capacity</td></tr>
               <tr><td><i class="status-unavailable"></i>Null / unavailable</td><td>Excluded</td></tr>
             </tbody>
           </table>
@@ -123,7 +123,7 @@
         <h2 id="methodology-title">A live estimate built from AC Transit’s APC feed</h2>
       </div>
       <div class="methodology-copy">
-        <p>AC Transit publishes a recommended capacity, a fresh APC timestamp, and one of three crowding bands for each active vehicle. The feed currently leaves its direct passenger-count and occupancy-percentage fields empty, so this page models the bands as 35% of capacity for <strong>Not Crowded</strong>, 75% for <strong>Some Crowding</strong>, and 100% for <strong>Crowded</strong>.</p>
+        <p>AC Transit publishes a recommended capacity, a fresh APC timestamp, and one of three crowding bands for each active vehicle. The feed currently leaves its direct passenger-count and occupancy-percentage fields empty, so this page models the bands as 20% of capacity for <strong>Not Crowded</strong>, 60% for <strong>Some Crowding</strong>, and 95% for <strong>Crowded</strong>.</p>
         <p>If AC Transit begins returning direct counts, those values automatically take priority. Vehicles with APC data older than five minutes are excluded from the headline estimate. Missing minutes in the 24-hour chart use the mean of available observations within four minutes before or after. The raw source fields are retained for long-term analysis, so the model can be revised without losing the underlying observations.</p>
       </div>
     </section>

@@ -24,15 +24,15 @@ const (
 	ridershipHistoryObjectKey   = "ridership/24h.json"
 	ridershipBQTable            = "ridership_observations"
 	ridershipSchemaVersion      = 1
-	ridershipMethodologyVersion = 1
+	ridershipMethodologyVersion = 2
 	ridershipHistoryPoints      = 24 * 60
 	ridershipFreshnessWindow    = 5 * time.Minute
 )
 
 var ridershipStatusFactors = map[string]float64{
-	"not crowded":   0.35,
-	"some crowding": 0.75,
-	"crowded":       1.00,
+	"not crowded":   0.20,
+	"some crowding": 0.60,
+	"crowded":       0.95,
 }
 
 var ridershipTimestampLocation, ridershipTimestampLocationErr = time.LoadLocation("America/Los_Angeles")
