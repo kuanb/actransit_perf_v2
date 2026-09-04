@@ -52,7 +52,7 @@
       <figcaption>Agency-reported departure On-Time Performance from Attachment 1.</figcaption>
     </figure>
 
-    <p>The new first-timepoint KPI should be useful, but it is not ready to carry the weight of a 95 percent target. Staff found that oversized geofences were incorrectly marking on-time departures late: Hayward BART moved from 0.02 percent in January to 28.31 percent in June after its geofence was adjusted. The metric should stay, with a published data-quality flag for every location, while the remaining geofences are validated.</p>
+    <p>The new first-timepoint KPI is a promising addition. Staff explains that oversized geofences were marking on-time departures late: Hayward BART moved from 0.02 percent in January to 28.31 percent in June after its geofence was adjusted. Continued calibration should make the measure increasingly useful for managing terminal departures.</p>
 
     <aside class="callout positive">
       <h3>The report adds essential operational context</h3>
@@ -84,7 +84,7 @@
 
     <p>The near-perfect agreement on scheduled totals is reassuring: the two systems are looking at essentially the same service plan. The disagreement is in the numerator. Across May and June, AC Transit records 273,372 operated trips; the tracker identifies 265,657, a gap of 7,715 trips.</p>
 
-    <p>That gap is not proof that 7,715 additional trips were cancelled. A bus can run while carrying a missing, malformed, or unmatched trip identifier in GTFS-Realtime. The district also had a CAD/AVL reporting defect from March through early May. Conversely, an agency rule can classify service as operated even if riders experienced only a fragment of the trip. The right response is reconciliation: publish the trip-level match rate, the status of every unresolved record, and the health of the public real-time feed.</p>
+    <p>That gap is not proof that 7,715 additional trips were cancelled. The staff report measures service with internal operational systems, while the tracker can identify only service visible with a usable trip identifier in the public GTFS-Realtime feed. The district also reported a CAD/AVL issue from March through early May. These different observation methods can produce different absolute levels even when the broader trend aligns.</p>
 
     <p>The broader trend is no longer ambiguous. <a href="https://kpitest.actransit.org/">AC Transit’s public KPI series</a> lists July Service Operated at 89.93 percent; the tracker calculates 90.0 percent. In August the tracker falls again to 89.3 percent. The two systems diverge in May and June, then nearly converge on a much worse July result.</p>
 
@@ -170,7 +170,7 @@
 
     <p>Both the district headline and the tracker’s like-for-like Service Operated calculation are permissive. Once a trip is detected, it counts as operated. The tracker therefore publishes a separate partial-trip measure for observed trips that did not reach their last passenger-boarding stop. In June, 13.0 percent of detected Line 51A trips were partial, as were 6.3 percent on the 1T, 5.0 percent on Line 40, 5.6 percent on Line 57, and 6.5 percent on Line 72.</p>
 
-    <p>Some of those findings can result from lost tracking rather than a short turn. That is precisely why a public report should reconcile completion against dispatch and CAD/AVL records. A trip that runs one stop and a trip that completes its route should not be indistinguishable in the board’s only service-delivery percentage.</p>
+    <p>Some of those findings can result from lost tracking rather than a short turn. AC Transit’s internal dispatch and CAD/AVL records are better positioned to distinguish the two and support a completion metric. A trip that runs one stop and a trip that completes its route should not be indistinguishable in the board’s only service-delivery percentage.</p>
 
     <section class="recommendations" aria-labelledby="recommendations-title">
       <p class="eyebrow">A better board scorecard</p>
@@ -188,10 +188,6 @@
         <span class="recommendation-number">3</span>
         <div><h3>How long was the wait?</h3><p>Report headway deviation—including Headway CV—bunched arrivals, long gaps, expected wait, and spacing penalty for every frequent route. These measures should be mandatory for the trunkline incentive program.</p></div>
       </div>
-      <div class="recommendation">
-        <span class="recommendation-number">4</span>
-        <div><h3>Can the public trust the data?</h3><p>Reconcile the 7,715-trip May–June numerator difference, publish feed completeness and identifier-match rates, document metric revisions, and release machine-readable weekly data with sample sizes and coverage.</p></div>
-      </div>
     </section>
 
     <p class="closing">The district and independent tracker are not telling opposite stories. Both show a reliability problem that became much worse as spring turned into summer. The disagreement is about magnitude, the June OTP rebound, and what counts as success. Pairing the staff report’s operational facts with rider-experience measures would connect causes and constraints to the wait, uncertainty, and severe delays riders actually experience.</p>
@@ -200,7 +196,7 @@
       <h2 id="methodology-title">Methods, definitions, and sources</h2>
       <p>The packet covers January–June 2026. I reviewed the <a href="https://actransit.legistar.com/View.ashx?M=F&amp;ID=15831488&amp;GUID=A62E24CB-B072-437C-9846-177BA8C2D8F3">staff report</a>, <a href="https://actransit.legistar.com/View.ashx?M=F&amp;ID=15831468&amp;GUID=3CFDCB3D-AB63-4B0E-A099-1F6E48F2A3E1">KPI trends</a>, <a href="https://actransit.legistar.com/View.ashx?M=F&amp;ID=15831472&amp;GUID=F2582A22-E9CA-4F80-A720-A15617DFFFAB">service-reliability tables</a>, and <a href="https://actransit.legistar.com/View.ashx?M=F&amp;ID=15831467&amp;GUID=02B95DC0-A472-4B09-AC27-8E652C7A62B8">trunkline appendix</a>, all posted for Staff Report 26-330. The agency says its figures were extracted and verified as of July 22, 2026.</p>
       <p>Independent monthly calculations use the project’s public <a href="https://storage.googleapis.com/transit-203605-actransit-cache/stats/monthly/_index.json">monthly index</a>, <a href="https://storage.googleapis.com/transit-203605-actransit-cache/stats/_index.json">daily archive</a>, and <a href="https://storage.googleapis.com/transit-203605-actransit-cache/stats/published-kpis/latest.json">cached agency KPI series</a>, downloaded September 4. Coverage begins April 18, so April comparisons are partial; May through August are complete. The Service Operated comparison counts a trip after any identifying vehicle probe. The OTP proxy uses detected arrivals at interior, pickup-eligible GTFS timepoints within −1 to +5 minutes. The all-scheduled version counts missing timepoints as failures. On Time Service Delivered uses eligible scheduled intermediate pickup stops and a −1 to +7 minute rider window.</p>
-      <p>Delay-severity bands use all independently observed stop arrivals and count repeated stops on the same trip. Headway measures include scheduled gaps of no more than 40 minutes and observed gaps from 30 seconds through 90 minutes, grouped by service date, route, direction, stop, and hour. “Bunched” means less than 50 percent of scheduled headway; “long gap” means more than 150 percent. Independent non-observation can represent dropped service, partial service, identifier mismatch, or a public-feed failure, so it should trigger reconciliation rather than a claim about cause.</p>
+      <p>Delay-severity bands use all independently observed stop arrivals and count repeated stops on the same trip. Headway measures include scheduled gaps of no more than 40 minutes and observed gaps from 30 seconds through 90 minutes, grouped by service date, route, direction, stop, and hour. “Bunched” means less than 50 percent of scheduled headway; “long gap” means more than 150 percent. Independent non-observation can represent dropped service, partial service, identifier mismatch, or a public-feed failure, so it is described as a measurement rather than a claim about cause.</p>
     </aside>
 
     <aside class="author-note" aria-labelledby="author-note-title">
