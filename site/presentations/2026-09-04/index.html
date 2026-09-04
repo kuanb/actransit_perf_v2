@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A comparison of AC Transit’s September 2026 Service Reliability Report with independent service, punctuality, delay-severity, and bus-spacing measurements.">
+  <link rel="canonical" href="https://ac-transit.com/presentations/2026-09-04/">
+  <meta property="og:title" content="AC Transit confirms the reliability slide. Its scorecard still misses the wait.">
+  <meta property="og:description" content="The district and independent tracker agree service deteriorated, but disagree on thousands of operated trips and the June punctuality rebound.">
+  <meta property="og:type" content="article">
+  <meta property="og:image" content="https://ac-transit.com/presentations/2026-09-04/plots/spacing-regularity.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="AC Transit confirms the reliability slide. Its scorecard still misses the wait.">
+  <meta name="twitter:description" content="What the September 2026 reliability packet gets right, where it disagrees with independent data, and which rider-facing metrics are still missing.">
+  <meta name="twitter:image" content="https://ac-transit.com/presentations/2026-09-04/plots/spacing-regularity.png">
+  <title>AC Transit confirms the reliability slide. Its scorecard still misses the wait.</title>
+  <link rel="stylesheet" href="article.css">
+  <script src="../../independence-notice.js" defer></script>
+</head>
+<body>
+  <div class="topline"></div>
+  <div class="shell"><a class="back" href="../">← All presentations</a></div>
+
+  <header class="hero">
+    <div class="shell">
+      <p class="eyebrow">Independent analysis · September 4, 2026</p>
+      <h1>AC Transit confirms the reliability slide. Its scorecard still misses the wait.</h1>
+      <p class="dek">The district and independent tracker agree that service deteriorated through June. They disagree on thousands of operated trips and on a reported punctuality rebound—and the packet still does not measure long gaps, bunching, or how late the late buses are.</p>
+    </div>
+  </header>
+
+  <main class="article shell">
+    <p>AC Transit’s <a href="https://actransit.legistar.com/LegislationDetail.aspx?ID=8202029&amp;GUID=A01BF820-F42E-4072-9A6F-8D7CCFF991FC">September 9 Service Reliability Report</a> is unusually direct about the first half of 2026. Service Operated fell every month after February, 32,908 scheduled trips did not run, total operator unavailability remained above 30 percent, and the district’s new first-timepoint measure landed near 33 percent against a 95 percent target.</p>
+
+    <p>That is valuable candor. The packet also contains operational facts this independent project cannot reproduce: absence categories, operator headcount, road calls, passenger falls, bus cleanliness, log-on rates, and meal-break reliability. But its rider-facing picture remains incomplete. A single Service Operated percentage says little about short turns. A binary on-time percentage treats a bus 6 minutes late like one 36 minutes late. Neither measure says whether frequent buses arrived evenly or in pairs after a long gap.</p>
+
+    <section class="stat-grid" aria-label="Packet headline figures">
+      <div class="stat"><strong>96.18%</strong><span>official Service Operated average, January–June 2026</span></div>
+      <div class="stat"><strong>32,908</strong><span>scheduled trips AC Transit reports as not operated</span></div>
+      <div class="stat"><strong>33.37%</strong><span>first-timepoint departures within the district’s 0–1 minute window</span></div>
+      <div class="stat emphasis"><strong>7,715</strong><span>more May–June operated trips in agency records than the tracker detects</span></div>
+    </section>
+
+    <h2>What the packet says happened</h2>
+
+    <p>The operational story is coherent. Service Operated fell from 97.17 percent in January to 94.24 percent in June. Operator headcount fell from 1,253 in March to 1,222 in June, and operator unavailability averaged 32.39 percent against a target below 22.5 percent. Unscheduled unavailability—23.87 percent against a 14 percent target—was the larger problem. Staff attributes 14,416 missed trips, or 44 percent of all trips not operated, to operator unavailability.</p>
+
+    <p>The other headline looks better: agency On-Time Performance averaged 73.64 percent, up from 72.87 percent in the prior six months and close to the new 75 percent target. Staff credits February schedule changes and operator familiarity with the Realign network. Yet the monthly series is choppy rather than steadily improving: 72.19 percent in January, 74.43 in February, 72.52 in March, 74.75 in April, 73.25 in May, and 74.72 in June.</p>
+
+    <p>The new first-timepoint KPI should be useful, but it is not ready to carry the weight of a 95 percent target. Staff found that oversized geofences were incorrectly marking on-time departures late: Hayward BART moved from 0.02 percent in January to 28.31 percent in June after its geofence was adjusted. The metric should stay, with a published data-quality flag for every location, while the remaining geofences are validated.</p>
+
+    <aside class="callout positive">
+      <h3>The report adds essential context</h3>
+      <p>It connects missed service to headcount and absence categories; publishes operated and missed trips by route; introduces a first-timepoint departure measure; and reports fleet, safety, cleanliness, and workforce indicators. Those are genuine advantages over an outside observer working from GTFS and the public vehicle feed.</p>
+    </aside>
+
+    <h2>We agree on the slide, not its exact depth</h2>
+
+    <p>The independent tracker can make a close Service Operated comparison. It counts a scheduled GTFS trip as operated when the public vehicle feed identifies that trip at least once—the same deliberately permissive rule described on the project’s <a href="../../kpi-comparison/">KPI comparison page</a>. This is separate from the stricter rider-facing Trip delivery measure, which requires a detected stop arrival.</p>
+
+    <figure class="plot">
+      <img src="plots/service-operated-comparison.png" alt="Line chart comparing AC Transit’s reported Service Operated percentages from January through June 2026 with independent values available from April 18 onward. Both weaken, while the independent tracker is lower in April, May, and June.">
+      <figcaption>April is only a 13-day independent sample. May and June are complete months.</figcaption>
+    </figure>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Month</th><th>Scheduled trips<br>agency / tracker</th><th>Operated trips<br>agency / tracker</th><th>Agency SO</th><th>Tracker SO</th><th>Operated-trip difference</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><strong>May</strong></td><td>146,893 / 146,893</td><td>140,278 / 135,331</td><td>95.50%</td><td>92.1%</td><td class="negative">−4,947</td></tr>
+          <tr><td><strong>June</strong></td><td>141,229 / 141,226</td><td>133,094 / 130,326</td><td>94.24%</td><td>92.3%</td><td class="negative">−2,768</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>The near-perfect agreement on scheduled totals is reassuring: the two systems are looking at essentially the same service plan. The disagreement is in the numerator. Across May and June, AC Transit records 273,372 operated trips; the tracker identifies 265,657, a gap of 7,715 trips.</p>
+
+    <p>That gap is not proof that 7,715 additional trips were cancelled. A bus can run while carrying a missing, malformed, or unmatched trip identifier in GTFS-Realtime. The district also had a CAD/AVL reporting defect from March through early May. Conversely, an agency rule can classify service as operated even if riders experienced only a fragment of the trip. The right response is reconciliation: publish the trip-level match rate, the status of every unresolved record, and the health of the public real-time feed.</p>
+
+    <p>The broader trend is no longer ambiguous. <a href="https://kpitest.actransit.org/">AC Transit’s public KPI series</a> lists July Service Operated at 89.93 percent; the tracker calculates 90.0 percent. In August the tracker falls again to 89.3 percent. The two systems diverge in May and June, then nearly converge on a much worse July result.</p>
+
+    <h2>The June punctuality rebound does not appear in the arrival data</h2>
+
+    <p>The OTP comparison is useful but not like-for-like. AC Transit measures departures at designated timepoints. The tracker independently detects arrivals at interior GTFS timepoints and applies the same one-minute-early to five-minute-late window as a proxy. Origins and final terminals are excluded. This difference can create a stable level gap; the monthly direction is still worth comparing.</p>
+
+    <figure class="plot">
+      <img src="plots/on-time-comparison.png" alt="Line chart of agency departure On-Time Performance and two independent arrival proxies. AC Transit rises from 73.25 percent in May to 74.72 percent in June, while the independent operated-trip proxy falls from 67.5 to 66.9 percent and the all-scheduled proxy falls from 62.4 to 61.9 percent.">
+    </figure>
+
+    <div class="table-wrap compact-table">
+      <table>
+        <thead><tr><th>Month</th><th>AC Transit departure OTP</th><th>Tracker arrival proxy<br>operated trips</th><th>Tracker arrival proxy<br>all scheduled trips</th></tr></thead>
+        <tbody>
+          <tr><td><strong>April*</strong></td><td>74.75%</td><td>69.2%</td><td>65.8%</td></tr>
+          <tr><td><strong>May</strong></td><td>73.25%</td><td>67.5%</td><td>62.4%</td></tr>
+          <tr><td><strong>June</strong></td><td>74.72%</td><td>66.9%</td><td>61.9%</td></tr>
+        </tbody>
+      </table>
+      <p class="table-note">*Independent April data begins April 18.</p>
+    </div>
+
+    <p>From May to June, the agency series improves 1.47 percentage points. The independent operated-trip proxy worsens 0.6 points. The all-scheduled proxy—which treats timepoints on unobserved trips as failures—also worsens 0.5 points. This may reflect arrivals accumulating delay after an on-time departure, different timepoint definitions, real-time-data gaps, or all three. It does mean the packet should not describe one OTP percentage as the whole rider experience.</p>
+
+    <p>The all-scheduled denominator also exposes a structural blind spot. An operated-service punctuality measure can improve while Service Operated collapses because a cancelled trip contributes no late timepoints. Riders do not experience those as separate systems. They experience a bus that does or does not arrive within a usable window.</p>
+
+    <h2>A bus 10 minutes late is not the same as one 30 minutes late</h2>
+
+    <p>The packet reports whether a timepoint falls inside a binary window, but not how far outside it falls. The independent arrival distribution can separate moderate disruption from severe disruption. Across May through August, it records 1,156,469 observed stop arrivals between 10 and 29 minutes late and 67,611 at least 30 minutes late. These are stop-level observations, not unique buses—a severely late trip can contribute several late stops.</p>
+
+    <figure class="plot">
+      <img src="plots/late-severity.png" alt="Stacked bars show the share of independently observed stop arrivals that were 10 to 29 minutes late or at least 30 minutes late from May through August 2026. The combined share was highest in August.">
+    </figure>
+
+    <p>August is the clearest example. Only 0.2 percent of observed stop arrivals were at least 30 minutes late, but 6.2 percent were 10 to 29 minutes late. Both groups fail a binary OTP test; they impose very different costs on a rider. A useful board scorecard should report at least 5–9, 10–29, and 30-plus-minute delay bands, along with median and 95th-percentile delay.</p>
+
+    <aside class="metric-definition">
+      <p class="metric-kicker">A metric the packet should add</p>
+      <h3>On Time Service Delivered</h3>
+      <p>This project asks whether every eligible scheduled intermediate pickup stop was reached between one minute early and seven minutes late. Stops on unobserved trips remain in the denominator. The result fell from <strong>69.9 percent in May</strong> to <strong>68.7 in June</strong>, <strong>68.6 in July</strong>, and <strong>65.8 in August</strong>. The complement is service <em>outside rider window</em>; it is not a pure cancellation measure.</p>
+    </aside>
+
+    <h2>Neither Service Operated nor OTP measures the wait between buses</h2>
+
+    <p>Frequent service can look acceptable on both headline measures and still arrive in a pair after a long gap. The packet contains no headway regularity, bunching, long-gap, or expected-wait measure—not even for the twelve high-frequency lines receiving the Trunkline Incentive Program payment.</p>
+
+    <figure class="plot plot-wide">
+      <img src="plots/spacing-regularity.png" alt="Two charts show worsening independent bus-spacing measures from May through August 2026. Headway coefficient of variation rises from 0.21 to 0.23, and long gaps rise from 9.9 to 13.3 percent of comparable headways.">
+    </figure>
+
+    <p>The tracker compares successive arrivals at the same stop, on the same route and direction, within the same hour. A bunched arrival is less than half the scheduled headway; a long gap is more than one and a half times the scheduled headway. From May to August, Headway CV rose from 0.21 to 0.23, long gaps rose from 9.9 to 13.3 percent of comparable headways, and bunched arrivals rose from 3.3 to 3.7 percent. The spacing penalty—the extra expected wait attributable to uneven arrivals—rose from 0.8 to 1.0 minute systemwide.</p>
+
+    <p>Those averages understate the harm on an individual route and hour. The scorecard should publish spacing by route, direction, time of day, and location, then flag repeated two-bus gaps. That is the level at which line managers can act and riders can recognize their experience.</p>
+
+    <h2>The packet averages away the day and hour</h2>
+
+    <p>This is a valid and consequential omission. Attachment 2 breaks service out by month, service type, and route, but never crosses performance with weekday versus weekend, hour of day, peak versus evening, or direction. The agency can identify that Line 40 operated 89.9 percent of June service, but a rider cannot learn whether its failures were scattered randomly or concentrated during the same evening window.</p>
+
+    <div class="time-grid" aria-label="Examples of hidden time patterns from independent analyses">
+      <article><strong>26 of 38</strong><span>40-plus-minute gaps on seven busy lines began between 7 and 11 PM during an <a href="../2026-08-28/">August 24–27 screenline analysis</a>.</span></article>
+      <article><strong>4 of 4</strong><span>nights produced a 40-plus-minute Line 40 gap at Foothill and Fruitvale in that same four-day sample.</span></article>
+      <article><strong>80.7% / 52.6% / 64.7%</strong><span>of scheduled Line 51A evening trips were observed at a Broadway screenline on weekdays / Saturdays / Sundays and holidays in an <a href="../2026-08-19-line-51a/">April–August analysis</a>.</span></article>
+    </div>
+
+    <p>Those studies are illustrative, not direct estimates for the packet’s January–June period: one extends beyond June and the other is a four-day August sample. That is the point. Once only a six-month or monthly route average is published, the public cannot test whether a persistent day-and-hour pattern was already present. Future reliability attachments should include route × direction × day type × time-period tables, with enough underlying data to distinguish a recurring failure from a one-off incident.</p>
+
+    <h2>The trunkline appendix tells a more complicated story</h2>
+
+    <p>The staff narrative says trunkline Service Operated rose from 93.99 to 96.54 percent after the incentive program, described as a 2.71 percent improvement. Attachment 3 reports a different comparison: 94.29 to 96.18 percent for all program routes, a gain of 1.89 percentage points, or 94.07 to 96.23 for carry-over routes, a gain of 2.16 points. The universes or dates may differ, but the packet does not explain the discrepancy.</p>
+
+    <p>More importantly, the same appendix shows that trunkline OTP fell from 71.90 to 70.87 percent. Non-trunkline OTP fell more, from 75.68 to 73.76 percent, so the incentive may have prevented a larger deterioration. That is still different from demonstrating that trunkline service became more punctual or evenly spaced.</p>
+
+    <div class="route-grid" aria-label="Selected trunkline comparisons">
+      <article><span>Line 1T</span><strong>95.3% → 85.3%</strong><p>Agency Service Operated, January to June. The tracker records 82.3% in June.</p></article>
+      <article><span>Line 40</span><strong>97.4% → 89.9%</strong><p>Agency Service Operated, January to June. The tracker records 87.6% in June.</p></article>
+      <article><span>Line 51A</span><strong>96.4% → 90.9%</strong><p>Agency Service Operated, January to June. The tracker records 88.3% in June.</p></article>
+    </div>
+
+    <p>Broad pre/post averages and current monthly deterioration can both be true. The board needs both views. A program may improve the odds that a trip is staffed while still failing to prevent bunching, long waits, or worsening conditions at the end of the study period.</p>
+
+    <h2>“Operated” also needs a completion check</h2>
+
+    <p>Both the district headline and the tracker’s like-for-like Service Operated calculation are permissive. Once a trip is detected, it counts as operated. The tracker therefore publishes a separate partial-trip measure for observed trips that did not reach their last passenger-boarding stop. In June, 13.0 percent of detected Line 51A trips were partial, as were 6.3 percent on the 1T, 5.0 percent on Line 40, 5.6 percent on Line 57, and 6.5 percent on Line 72.</p>
+
+    <p>Some of those findings can result from lost tracking rather than a short turn. That is precisely why a public report should reconcile completion against dispatch and CAD/AVL records. A trip that runs one stop and a trip that completes its route should not be indistinguishable in the board’s only service-delivery percentage.</p>
+
+    <section class="recommendations" aria-labelledby="recommendations-title">
+      <p class="eyebrow">A better board scorecard</p>
+      <h2 id="recommendations-title">Keep the packet’s operational depth. Add the rider’s sequence of questions.</h2>
+
+      <div class="recommendation">
+        <span class="recommendation-number">1</span>
+        <div><h3>Did the bus run—and finish?</h3><p>Publish Service Operated with planned and operated counts, partial and short-turned trips, consecutive unobserved-trip windows, and cause codes. Break the results out by route, direction, and time of day.</p></div>
+      </div>
+      <div class="recommendation">
+        <span class="recommendation-number">2</span>
+        <div><h3>When did it reach riders?</h3><p>Keep departure OTP and first-timepoint OTP, then add On Time Service Delivered, 5–9, 10–29, and 30-plus-minute delay bands, plus median and 95th-percentile delay. Show operated-only and all-scheduled denominators side by side.</p></div>
+      </div>
+      <div class="recommendation">
+        <span class="recommendation-number">3</span>
+        <div><h3>How long was the wait?</h3><p>Report headway deviation—including Headway CV—bunched arrivals, long gaps, expected wait, and spacing penalty for every frequent route. These measures should be mandatory for the trunkline incentive program.</p></div>
+      </div>
+      <div class="recommendation">
+        <span class="recommendation-number">4</span>
+        <div><h3>Can the public trust the data?</h3><p>Reconcile the 7,715-trip May–June numerator difference, publish feed completeness and identifier-match rates, document metric revisions, and release machine-readable weekly data with sample sizes and coverage.</p></div>
+      </div>
+    </section>
+
+    <p class="closing">The district and independent tracker are not telling opposite stories. Both show a reliability problem that became much worse as spring turned into summer. The disagreement is about magnitude, the June OTP rebound, and what counts as success. AC Transit’s report can become far more useful by connecting the operational facts it already has to the wait, uncertainty, and severe delays riders actually experience.</p>
+
+    <aside class="methodology" aria-labelledby="methodology-title">
+      <h2 id="methodology-title">Methods, definitions, and sources</h2>
+      <p>The packet covers January–June 2026. I reviewed the <a href="https://actransit.legistar.com/View.ashx?M=F&amp;ID=15831488&amp;GUID=A62E24CB-B072-437C-9846-177BA8C2D8F3">staff report</a>, <a href="https://actransit.legistar.com/View.ashx?M=F&amp;ID=15831468&amp;GUID=3CFDCB3D-AB63-4B0E-A099-1F6E48F2A3E1">KPI trends</a>, <a href="https://actransit.legistar.com/View.ashx?M=F&amp;ID=15831472&amp;GUID=F2582A22-E9CA-4F80-A720-A15617DFFFAB">service-reliability tables</a>, and <a href="https://actransit.legistar.com/View.ashx?M=F&amp;ID=15831467&amp;GUID=02B95DC0-A472-4B09-AC27-8E652C7A62B8">trunkline appendix</a>, all posted for Staff Report 26-330. The agency says its figures were extracted and verified as of July 22, 2026.</p>
+      <p>Independent monthly calculations use the project’s public <a href="https://storage.googleapis.com/transit-203605-actransit-cache/stats/monthly/_index.json">monthly index</a>, <a href="https://storage.googleapis.com/transit-203605-actransit-cache/stats/_index.json">daily archive</a>, and <a href="https://storage.googleapis.com/transit-203605-actransit-cache/stats/published-kpis/latest.json">cached agency KPI series</a>, downloaded September 4. Coverage begins April 18, so April comparisons are partial; May through August are complete. The Service Operated comparison counts a trip after any identifying vehicle probe. The OTP proxy uses detected arrivals at interior, pickup-eligible GTFS timepoints within −1 to +5 minutes. The all-scheduled version counts missing timepoints as failures. On Time Service Delivered uses eligible scheduled intermediate pickup stops and a −1 to +7 minute rider window.</p>
+      <p>Delay-severity bands use all independently observed stop arrivals and count repeated stops on the same trip. Headway measures include scheduled gaps of no more than 40 minutes and observed gaps from 30 seconds through 90 minutes, grouped by service date, route, direction, stop, and hour. “Bunched” means less than 50 percent of scheduled headway; “long gap” means more than 150 percent. Independent non-observation can represent dropped service, partial service, identifier mismatch, or a public-feed failure, so it should trigger reconciliation rather than a claim about cause.</p>
+    </aside>
+
+    <aside class="author-note" aria-labelledby="author-note-title">
+      <h2 id="author-note-title">About the author</h2>
+      <p>Kuan Butts created the <a href="../../report-card/">AC Transit Report Card</a> and has been involved with <a href="https://www.oakrapidresponse.org/">TVRR</a> as an organizer and with <a href="https://transportoakland.org/">Transport Oakland</a> as a board member.</p>
+    </aside>
+  </main>
+
+  <footer class="footer"><div class="shell"><a href="../">← All presentations</a></div></footer>
+  <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "0e36b12e46b04a69b5e9ff6883f6d23d"}'></script><!-- End Cloudflare Web Analytics -->
+</body>
+</html>
