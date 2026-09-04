@@ -148,6 +148,27 @@ def plot_service_operated(ours):
     save_figure(fig, "service-operated-comparison.png")
 
 
+def plot_agency_otp_monthly():
+    months = list(AGENCY)
+    labels = [datetime.strptime(month, "%Y-%m").strftime("%b") for month in months]
+    values = [AGENCY[month]["otp_pct"] for month in months]
+
+    fig, axis = plt.subplots(figsize=(9.3, 4.6))
+    configure_axes(axis)
+    axis.plot(labels, values, color=COLORS["agency"], marker="o", linewidth=2.7)
+    axis.axhline(75, color=COLORS["muted"], linestyle=(0, (2, 3)), linewidth=1.4)
+    axis.set_ylim(70.8, 76)
+    axis.set_ylabel("Agency-reported OTP", color=COLORS["muted"])
+    axis.set_title("Agency OTP oscillated near its new 75% target", loc="left", color=COLORS["ink"], fontsize=17, fontweight="bold", pad=18)
+    axis.text(0, 1.02, "Departure On-Time Performance · January–June 2026", transform=axis.transAxes, color=COLORS["muted"], fontsize=10)
+    axis.text(5.03, 75, "75% target", va="center", color=COLORS["muted"], fontsize=9)
+    for index, value in enumerate(values):
+        offset = 9 if index % 2 == 0 else -17
+        axis.annotate(f"{value:.2f}%", (index, value), xytext=(0, offset), textcoords="offset points", ha="center", color=COLORS["agency"], fontsize=9)
+    fig.tight_layout()
+    save_figure(fig, "agency-otp-monthly.png")
+
+
 def plot_otp(monthly):
     months = list(AGENCY)
     labels = [datetime.strptime(month, "%Y-%m").strftime("%b") for month in months]
@@ -272,6 +293,7 @@ def main():
         writer.writerows(monthly)
 
     plot_service_operated(monthly)
+    plot_agency_otp_monthly()
     plot_otp(monthly)
     plot_late_severity(monthly)
     plot_spacing(monthly)
