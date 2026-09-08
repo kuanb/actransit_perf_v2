@@ -118,6 +118,10 @@ function render(data) {
   renderRouteLineChart(data);
   renderRouteDayGrid(data);
   renderAPIHealth(data.api_health);
+  const apiHealthSection = document.getElementById("api-health-section");
+  if (window.location.hash === "#api-health-section" && !apiHealthSection.hidden) {
+    requestAnimationFrame(() => apiHealthSection.scrollIntoView({ block: "start" }));
+  }
 }
 
 // ---- system summary cards + delay histogram (mirrors daily) ----
