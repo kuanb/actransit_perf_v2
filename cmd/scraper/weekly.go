@@ -76,6 +76,7 @@ type delayCell struct {
 type routeDailySD struct {
 	RouteID             string              `json:"route_id"`
 	AgencyKPI           agencyKPIStats      `json:"agency_kpi"`
+	AgencyKPIBreakdown  agencyKPIBreakdown  `json:"agency_kpi_by_day_type,omitempty"`
 	OverallP50DelayMin  *float64            `json:"overall_p50_delay_min"`
 	ByDay               []routeDailySDByDay `json:"by_day"`
 	Color               string              `json:"color"`
@@ -298,19 +299,20 @@ func aggregateDailyServiceDelivered(dailies []*dailyStats, weekStart civil.Date)
 // frontend can render the grid top-down without re-sorting.
 func aggregateRouteDailySD(dailies []*dailyStats, weekStart civil.Date, routeOverallSec map[string]float64) []routeDailySD {
 	type accum struct {
-		rid            string
-		color          string
-		textColor      string
-		byDay          [7]*float64
-		stopSDByDay    [7]*float64
-		stopNByDay     [7]int64
-		deliveredByDay [7]int64
-		scheduled      [7]int
-		gapWindows     int
-		gapDays        int
-		bunching       [7]*bunchingStats
-		agencyKPI      []agencyKPIStats
-		activeDays     int
+		rid             string
+		color           string
+		textColor       string
+		byDay           [7]*float64
+		stopSDByDay     [7]*float64
+		stopNByDay      [7]int64
+		deliveredByDay  [7]int64
+		scheduled       [7]int
+		gapWindows      int
+		gapDays         int
+		bunching        [7]*bunchingStats
+		agencyKPI       []agencyKPIStats
+		agencyBreakdown []agencyKPIBreakdown
+		activeDays      int
 	}
 	byRoute := make(map[string]*accum)
 
@@ -344,6 +346,7 @@ func aggregateRouteDailySD(dailies []*dailyStats, weekStart civil.Date, routeOve
 			a.scheduled[i] = r.ScheduledTrips
 			a.bunching[i] = r.Bunching
 			a.agencyKPI = append(a.agencyKPI, r.AgencyKPI)
+			a.agencyBreakdown = append(a.agencyBreakdown, r.AgencyKPIBreakdown)
 			a.activeDays++
 			if r.TwoBusGapWindows != nil {
 				a.gapWindows += *r.TwoBusGapWindows
@@ -421,6 +424,7 @@ func aggregateRouteDailySD(dailies []*dailyStats, weekStart civil.Date, routeOve
 		out = append(out, routeDailySD{
 			RouteID:             it.a.rid,
 			AgencyKPI:           aggregateAgencyKPIStats(it.a.agencyKPI),
+			AgencyKPIBreakdown:  aggregateAgencyKPIBreakdowns(it.a.agencyBreakdown),
 			OverallP50DelayMin:  p50Min,
 			ByDay:               byDay,
 			Color:               it.a.color,

@@ -102,11 +102,21 @@ func TestAggregateRouteDailySDClassifiesLimitedRoutes(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		gapWindows := i
 		stopSD := 75.0
+		kpi := emptyAgencyKPIStats()
+		kpi.ServiceOperated.ScheduledTrips = 10
+		kpi.ServiceOperated.OperatedTrips = 9
+		finalizeAgencyKPIStats(&kpi)
+		dayType := agencyKPIDayType(weekStart.AddDays(i))
 		dailies[i] = &dailyStats{Routes: []routeStats{
 			{RouteID: "99", ScheduledTrips: 8, StopSDPct: &stopSD, StopSDN: 20, StopSDDeliveredN: 15, TwoBusGapWindows: &gapWindows},
 			{RouteID: "1T", ScheduledTrips: 9},
 			{RouteID: "O", ScheduledTrips: 4},
-			{RouteID: "6", ScheduledTrips: 20},
+			{
+				RouteID:            "6",
+				ScheduledTrips:     20,
+				AgencyKPI:          kpi,
+				AgencyKPIBreakdown: agencyKPIBreakdown{dayType: {"morning": kpi}},
+			},
 		}}
 	}
 
@@ -144,6 +154,12 @@ func TestAggregateRouteDailySDClassifiesLimitedRoutes(t *testing.T) {
 	}
 	if got := byID["1T"].TwoBusGapWindows; got != nil {
 		t.Errorf("route 1T should omit incomplete two-bus gap data, got %d", *got)
+	}
+	if got := byID["6"].AgencyKPIBreakdown["weekday"]["morning"].ServiceOperated.ScheduledTrips; got != 40 {
+		t.Errorf("route 6 weekday morning scheduled trips = %d, want 40", got)
+	}
+	if got := byID["6"].AgencyKPIBreakdown["weekend"]["morning"].ServiceOperated.ScheduledTrips; got != 10 {
+		t.Errorf("route 6 weekend morning scheduled trips = %d, want 10", got)
 	}
 }
 

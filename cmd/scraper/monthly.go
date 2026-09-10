@@ -53,10 +53,11 @@ type percentageRange struct {
 }
 
 type monthlyRouteKPI struct {
-	RouteID   string         `json:"route_id"`
-	Color     string         `json:"color"`
-	TextColor string         `json:"text_color"`
-	AgencyKPI agencyKPIStats `json:"agency_kpi"`
+	RouteID            string             `json:"route_id"`
+	Color              string             `json:"color"`
+	TextColor          string             `json:"text_color"`
+	AgencyKPI          agencyKPIStats     `json:"agency_kpi"`
+	AgencyKPIBreakdown agencyKPIBreakdown `json:"agency_kpi_by_day_type,omitempty"`
 }
 
 func generateMonthlyStats(ctx context.Context, monthStart civil.Date) (*monthlyStats, error) {
@@ -133,10 +134,11 @@ func aggregateMonthlyStats(monthStart civil.Date, dailies []*dailyStats, generat
 	weekOrder := make([]string, 0, 6)
 	weeks := make(map[string]*weekAccum)
 	type routeAccum struct {
-		routeID   string
-		color     string
-		textColor string
-		values    []agencyKPIStats
+		routeID    string
+		color      string
+		textColor  string
+		values     []agencyKPIStats
+		breakdowns []agencyKPIBreakdown
 	}
 	routes := make(map[string]*routeAccum)
 	var systemValues []agencyKPIStats
@@ -182,6 +184,7 @@ func aggregateMonthlyStats(monthStart civil.Date, dailies []*dailyStats, generat
 				acc.textColor = route.TextColor
 			}
 			acc.values = append(acc.values, route.AgencyKPI)
+			acc.breakdowns = append(acc.breakdowns, route.AgencyKPIBreakdown)
 		}
 	}
 
@@ -203,10 +206,11 @@ func aggregateMonthlyStats(monthStart civil.Date, dailies []*dailyStats, generat
 	}
 	for _, route := range routes {
 		out.Routes = append(out.Routes, monthlyRouteKPI{
-			RouteID:   route.routeID,
-			Color:     route.color,
-			TextColor: route.textColor,
-			AgencyKPI: aggregateAgencyKPIStats(route.values),
+			RouteID:            route.routeID,
+			Color:              route.color,
+			TextColor:          route.textColor,
+			AgencyKPI:          aggregateAgencyKPIStats(route.values),
+			AgencyKPIBreakdown: aggregateAgencyKPIBreakdowns(route.breakdowns),
 		})
 	}
 	sort.Slice(out.Routes, func(i, j int) bool {

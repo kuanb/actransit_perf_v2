@@ -1,6 +1,8 @@
 const MONTHLY_INDEX_URL = `${GCS_BASE}/stats/monthly/_index.json`;
+const WEEKLY_INDEX_URL = `${GCS_BASE}/stats/weekly/_index.json`;
 const PUBLISHED_KPI_URL = `${GCS_BASE}/stats/published-kpis/latest.json`;
 let serviceOperatedChart;
+let serviceOperatedVolumeChart;
 let otpChart;
 
 function monthLabel(month) {
@@ -132,6 +134,81 @@ function comparisonChartOptions(values) {
   };
 }
 
+function renderServiceOperatedVolumeChart(months, servicePublished) {
+  const chronological = [...months].sort((a, b) => a.month.localeCompare(b.month));
+  const labels = chronological.map((month) => monthLabel(month.month));
+  const maxWeekSegments = Math.max(0, ...chronological.map((month) => (month.weeks || []).length));
+  const weekColors = ["#b9dcf5", "#8fc7ed", "#63b0e2", "#3b95d0", "#1971c2", "#114f89"];
+  const weekDatasets = Array.from({ length: maxWeekSegments }, (_, index) => ({
+    label: `Our calculation — week segment ${index + 1}`,
+    data: chronological.map((month) => month.weeks?.[index]?.agency_kpi?.service_operated?.operated_trips ?? 0),
+    backgroundColor: weekColors[index % weekColors.length],
+    borderColor: "#fff",
+    borderWidth: 0.5,
+    stack: "ours",
+    periods: chronological.map((month) => month.weeks?.[index] || null),
+  }));
+  const publishedPcts = chronological.map((month) => servicePublished.get(month.month)?.pct ?? null);
+  const publishedEquivalent = chronological.map((month, index) => {
+    const scheduled = month.agency_kpi.service_operated.scheduled_trips;
+    return publishedPcts[index] === null ? null : Math.round(scheduled * publishedPcts[index] / 100);
+  });
+  const publishedDataset = {
+    label: "AC Transit published % — equivalent on our planned total",
+    data: publishedEquivalent,
+    backgroundColor: "#e8590c",
+    borderColor: "#c44d08",
+    borderWidth: 1,
+    stack: "published",
+    publishedEquivalent: true,
+  };
+
+  if (serviceOperatedVolumeChart) serviceOperatedVolumeChart.destroy();
+  serviceOperatedVolumeChart = new Chart(document.getElementById("service-operated-volume-chart"), {
+    type: "bar",
+    data: { labels, datasets: [...weekDatasets, publishedDataset] },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: "nearest", intersect: true },
+      scales: {
+        x: { stacked: true, grid: { display: false } },
+        y: {
+          stacked: true,
+          beginAtZero: true,
+          ticks: {
+            callback: (value) => new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(value),
+          },
+          title: { display: true, text: "Operated trips" },
+        },
+      },
+      plugins: {
+        legend: {
+          position: "bottom",
+          labels: { usePointStyle: true, boxWidth: 8, padding: 14 },
+        },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              if (ctx.dataset.publishedEquivalent) {
+                return `${ctx.dataset.label}: ${intFmt(ctx.parsed.y)} trips (${pct(publishedPcts[ctx.dataIndex], 2)})`;
+              }
+              const period = ctx.dataset.periods[ctx.dataIndex];
+              const dates = period ? ` · ${shortDate(period.period_start)}–${shortDate(period.period_end)}` : "";
+              return `${ctx.dataset.label}${dates}: ${intFmt(ctx.parsed.y)} trips`;
+            },
+            footer: (items) => {
+              const month = chronological[items[0].dataIndex];
+              const service = month.agency_kpi.service_operated;
+              return `Our month: ${intFmt(service.operated_trips)} operated of ${intFmt(service.scheduled_trips)} planned`;
+            },
+          },
+        },
+      },
+    },
+  });
+}
+
 function weeklyChartPoints(months) {
   return months.flatMap((month) => {
     const weeks = (month.weeks || []).filter((week) => week.status !== "missing");
@@ -236,6 +313,7 @@ function renderComparisonCharts(months, servicePublished, otpPublished, weekly =
 function initializeComparisonCharts(months, servicePublished, otpPublished) {
   const toggle = document.getElementById("weekly-chart-toggle");
   renderComparisonCharts(months, servicePublished, otpPublished, toggle.checked);
+  renderServiceOperatedVolumeChart(months, servicePublished);
   toggle.addEventListener("change", () => {
     renderComparisonCharts(months, servicePublished, otpPublished, toggle.checked);
   });
@@ -244,7 +322,7 @@ function initializeComparisonCharts(months, servicePublished, otpPublished) {
 function sampleKPI(scheduledTrips, operatedTrips, partialTrips, onTime, operatedTimepoints, scheduledTimepoints) {
   const ratio = (n, d) => d ? Math.round(1000 * n / d) / 10 : null;
   return {
-    methodology_version: 1,
+    methodology_version: 2,
     service_operated: {
       scheduled_trips: scheduledTrips,
       operated_trips: operatedTrips,
@@ -260,6 +338,50 @@ function sampleKPI(scheduledTrips, operatedTrips, partialTrips, onTime, operated
       of_scheduled_pct: ratio(onTime, scheduledTimepoints),
     },
   };
+}
+
+function scaledKPI(stats, factor) {
+  const service = stats.service_operated;
+  const otp = stats.on_time_performance;
+  return sampleKPI(
+    Math.round(service.scheduled_trips * factor),
+    Math.round(service.operated_trips * factor),
+    Math.round(service.partial_trips * factor),
+    Math.round(otp.on_time_timepoints * factor),
+    Math.round(otp.operated_timepoints * factor),
+    Math.round(otp.scheduled_timepoints * factor),
+  );
+}
+
+function sampleBreakdown(stats) {
+  const periods = (factor) => ({
+    owl: scaledKPI(stats, factor * 0.05),
+    morning: scaledKPI(stats, factor * 0.24),
+    midday: scaledKPI(stats, factor * 0.31),
+    afternoon: scaledKPI(stats, factor * 0.25),
+    evening: scaledKPI(stats, factor * 0.15),
+  });
+  return { weekday: periods(0.72), weekend: periods(0.28) };
+}
+
+function sampleRoutes(scale = 1) {
+  const values = [
+    ["1T", "E15525", "FFFFFF", [820, 702, 35, 1930, 2790, 3240]],
+    ["18", "2B589C", "FFFFFF", [1020, 954, 29, 2480, 3510, 3890]],
+    ["40", "5C2D91", "FFFFFF", [910, 796, 42, 2010, 3060, 3490]],
+    ["51A", "008C95", "FFFFFF", [980, 885, 61, 2160, 3310, 3740]],
+    ["72", "D97706", "FFFFFF", [760, 718, 20, 1880, 2740, 3010]],
+  ];
+  return values.map(([routeID, color, textColor, counts]) => {
+    const stats = sampleKPI(...counts.map((value) => Math.round(value * scale)));
+    return {
+      route_id: routeID,
+      color,
+      text_color: textColor,
+      agency_kpi: stats,
+      agency_kpi_by_day_type: sampleBreakdown(stats),
+    };
+  });
 }
 
 function sampleRange(value, spread) {
@@ -287,6 +409,7 @@ function sampleMonth(month, ranges, totals) {
     month,
     status: "complete",
     agency_kpi: sampleKPI(...totals),
+    routes: sampleRoutes(totalDays / 7),
     weeks: ranges.map(([period_start, period_end], index) => {
       const agencyKPI = sampleKPI(...allocated.map((values) => values[index]));
       return {
@@ -305,21 +428,27 @@ function sampleMonth(month, ranges, totals) {
 }
 
 function localPreviewData() {
+  const months = [
+    sampleMonth("2026-07", [
+      ["2026-07-01", "2026-07-04"], ["2026-07-05", "2026-07-11"], ["2026-07-12", "2026-07-18"],
+      ["2026-07-19", "2026-07-25"], ["2026-07-26", "2026-07-31"],
+    ], [166000, 154000, 4200, 443000, 585000, 630000]),
+    sampleMonth("2026-06", [
+      ["2026-06-01", "2026-06-06"], ["2026-06-07", "2026-06-13"], ["2026-06-14", "2026-06-20"],
+      ["2026-06-21", "2026-06-27"], ["2026-06-28", "2026-06-30"],
+    ], [158830, 153090, 3130, 444900, 602100, 622200]),
+    sampleMonth("2026-05", [
+      ["2026-05-01", "2026-05-02"], ["2026-05-03", "2026-05-09"], ["2026-05-10", "2026-05-16"],
+      ["2026-05-17", "2026-05-23"], ["2026-05-24", "2026-05-30"], ["2026-05-31", "2026-05-31"],
+    ], [165000, 160500, 2800, 451000, 596500, 618000]),
+  ];
+  const weekly = [
+    { week_start: "2026-08-30", week_end: "2026-09-05", route_daily_service_delivered: sampleRoutes(1) },
+    { week_start: "2026-08-23", week_end: "2026-08-29", route_daily_service_delivered: sampleRoutes(0.97) },
+  ];
   return {
-    months: [
-      sampleMonth("2026-07", [
-        ["2026-07-01", "2026-07-04"], ["2026-07-05", "2026-07-11"], ["2026-07-12", "2026-07-18"],
-        ["2026-07-19", "2026-07-25"], ["2026-07-26", "2026-07-31"],
-      ], [166000, 154000, 4200, 443000, 585000, 630000]),
-      sampleMonth("2026-06", [
-        ["2026-06-01", "2026-06-06"], ["2026-06-07", "2026-06-13"], ["2026-06-14", "2026-06-20"],
-        ["2026-06-21", "2026-06-27"], ["2026-06-28", "2026-06-30"],
-      ], [158830, 153090, 3130, 444900, 602100, 622200]),
-      sampleMonth("2026-05", [
-        ["2026-05-01", "2026-05-02"], ["2026-05-03", "2026-05-09"], ["2026-05-10", "2026-05-16"],
-        ["2026-05-17", "2026-05-23"], ["2026-05-24", "2026-05-30"], ["2026-05-31", "2026-05-31"],
-      ], [165000, 160500, 2800, 451000, 596500, 618000]),
-    ],
+    months,
+    weekly,
     published: {
       fetched_at: "2026-08-29T17:00:00Z",
       service_operated: [
@@ -330,107 +459,353 @@ function localPreviewData() {
   };
 }
 
-function weeklyServiceOperated(month) {
-  const monthly = month.agency_kpi.service_operated;
-  return `
-    <div class="kpi-detail-inner">
-      <h3>${monthLabel(month.month)} weekly detail</h3>
-      <p class="muted kpi-month-detail">
-        Partial operated trips for the month: ${pct(monthly.partial_of_operated_pct)}
-        (${countRatio(monthly.partial_trips, monthly.operated_trips)} operated trips).
-      </p>
-      <table class="kpi-week-table">
-        <thead><tr><th>Period</th><th>Service Operated</th><th>Operated / planned</th><th>Partial operated trips</th></tr></thead>
-        <tbody>${month.weeks.map((week) => {
-          const metric = week.agency_kpi.service_operated;
-          return `<tr>
-            <td>${shortDate(week.period_start)}–${shortDate(week.period_end)}</td>
-            <td>${pct(metric.operated_pct)}</td>
-            <td>${countRatio(metric.operated_trips, metric.scheduled_trips)}</td>
-            <td>${pct(metric.partial_of_operated_pct)} (${intFmt(metric.partial_trips)})</td>
-          </tr>`;
-        }).join("")}</tbody>
-      </table>
-    </div>`;
+const KPI_TIME_PERIODS = [
+  { id: "owl", label: "Owl", hours: "12–6am" },
+  { id: "morning", label: "Morning", hours: "6–10am" },
+  { id: "midday", label: "Midday", hours: "10am–3pm" },
+  { id: "afternoon", label: "Afternoon", hours: "3–7pm" },
+  { id: "evening", label: "Evening", hours: "7pm–12am" },
+];
+const KPI_DAY_TYPES = [
+  { id: "weekday", label: "Weekday" },
+  { id: "weekend", label: "Weekend" },
+];
+const routeCollator = new Intl.Collator("en-US", { numeric: true, sensitivity: "base" });
+const routeTableState = {
+  frequency: "weekly",
+  indexes: { weekly: [], monthly: [] },
+  selected: { weekly: "", monthly: "" },
+  monthlyData: new Map(),
+  weeklyData: new Map(),
+  data: null,
+  filter: "",
+  sortKey: "service_operated",
+  sortDirection: "asc",
+  openRoutes: new Set(),
+  loadToken: 0,
+};
+
+function aggregateKPIValues(values) {
+  const totals = [0, 0, 0, 0, 0, 0];
+  for (const stats of values.filter(Boolean)) {
+    const service = stats.service_operated || {};
+    const otp = stats.on_time_performance || {};
+    totals[0] += Number(service.scheduled_trips) || 0;
+    totals[1] += Number(service.operated_trips) || 0;
+    totals[2] += Number(service.partial_trips) || 0;
+    totals[3] += Number(otp.on_time_timepoints) || 0;
+    totals[4] += Number(otp.operated_timepoints) || 0;
+    totals[5] += Number(otp.scheduled_timepoints) || 0;
+  }
+  return sampleKPI(...totals);
 }
 
-function weeklyOTP(month) {
-  return `
-    <div class="kpi-detail-inner">
-      <h3>${monthLabel(month.month)} weekly detail</h3>
-      <table class="kpi-week-table">
-        <thead><tr><th>Period</th><th>Operated trips</th><th>All scheduled</th><th>On-time / operated timepoints</th><th>Scheduled timepoints</th></tr></thead>
-        <tbody>${month.weeks.map((week) => {
-          const metric = week.agency_kpi.on_time_performance;
-          return `<tr>
-            <td>${shortDate(week.period_start)}–${shortDate(week.period_end)}</td>
-            <td>${pct(metric.of_operated_pct)}</td>
-            <td>${pct(metric.of_scheduled_pct)}</td>
-            <td>${countRatio(metric.on_time_timepoints, metric.operated_timepoints)}</td>
-            <td>${intFmt(metric.scheduled_timepoints)}</td>
-          </tr>`;
-        }).join("")}</tbody>
-      </table>
-    </div>`;
+function serviceOperatedDetailCell(stats) {
+  const metric = stats && stats.service_operated;
+  if (!metric || !metric.scheduled_trips) {
+    return `<td class="kpi-period-empty">—<small>No planned trips</small></td>`;
+  }
+  return `<td>
+    <strong>${pct(metric.operated_pct, 1, "—")}</strong>
+    <small>${countRatio(metric.operated_trips, metric.scheduled_trips)} trips</small>
+    <small>${intFmt(metric.partial_trips)} partial · ${pct(metric.partial_of_operated_pct, 1, "—")} of operated</small>
+  </td>`;
 }
 
-function renderServiceOperated(months, published) {
-  const tbody = document.querySelector("#service-operated-table tbody");
-  tbody.innerHTML = months.map((month) => {
-    const metric = month.agency_kpi.service_operated;
-    const external = published.get(month.month);
-    return `
-      <tr class="kpi-row" data-month="${month.month}" tabindex="0" role="button" aria-expanded="false">
-        <td>${monthLabel(month.month)}</td>
-        <td>${pct(metric.operated_pct)}</td>
-        <td>${pct(external && external.pct, 2, "Not published")}</td>
-        <td class="expand-cell" aria-hidden="true">▸</td>
-      </tr>
-      <tr class="kpi-detail" data-detail-month="${month.month}" hidden>
-        <td colspan="4">${weeklyServiceOperated(month)}</td>
-      </tr>`;
+function otpDetailCell(stats) {
+  const metric = stats && stats.on_time_performance;
+  if (!metric || !metric.scheduled_timepoints) {
+    return `<td class="kpi-period-empty">—<small>No eligible timepoints</small></td>`;
+  }
+  return `<td>
+    <strong>${pct(metric.of_operated_pct, 1, "—")}</strong>
+    <small>${countRatio(metric.on_time_timepoints, metric.operated_timepoints)} operated-service timepoints</small>
+    <small>${pct(metric.of_scheduled_pct, 1, "—")} of all scheduled · n=${intFmt(metric.scheduled_timepoints)}</small>
+  </td>`;
+}
+
+function timeBreakdownTable(route, metricName) {
+  const breakdown = route.agency_kpi_by_day_type || {};
+  const renderCell = metricName === "service_operated" ? serviceOperatedDetailCell : otpDetailCell;
+  const rows = KPI_DAY_TYPES.map((dayType) => {
+    const periods = breakdown[dayType.id] || {};
+    const allDay = aggregateKPIValues(Object.values(periods));
+    return `<tr>
+      <th scope="row">${dayType.label}</th>
+      ${KPI_TIME_PERIODS.map((period) => renderCell(periods[period.id])).join("")}
+      ${renderCell(allDay)}
+    </tr>`;
   }).join("");
-  attachExpansion(tbody);
+  return `<div class="table-wrap kpi-period-table-wrap">
+    <table class="kpi-period-table">
+      <thead><tr>
+        <th>Day type</th>
+        ${KPI_TIME_PERIODS.map((period) => `<th>${period.label}<small>${period.hours}</small></th>`).join("")}
+        <th>All day</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
 }
 
-function renderOTP(months, published) {
-  const tbody = document.querySelector("#otp-table tbody");
-  tbody.innerHTML = months.map((month) => {
-    const metric = month.agency_kpi.on_time_performance;
-    const external = published.get(month.month);
-    return `
-      <tr class="kpi-row" data-month="${month.month}" tabindex="0" role="button" aria-expanded="false">
-        <td>${monthLabel(month.month)}</td>
-        <td>${pct(metric.of_operated_pct)}</td>
-        <td>${pct(metric.of_scheduled_pct)}</td>
-        <td>${pct(external && external.pct, 2, "Not published")}</td>
-        <td class="expand-cell" aria-hidden="true">▸</td>
-      </tr>
-      <tr class="kpi-detail" data-detail-month="${month.month}" hidden>
-        <td colspan="5">${weeklyOTP(month)}</td>
-      </tr>`;
-  }).join("");
-  attachExpansion(tbody);
+function routeDetailHTML(route) {
+  const service = route.agency_kpi.service_operated;
+  const otp = route.agency_kpi.on_time_performance;
+  const hasBreakdown = route.agency_kpi_by_day_type && Object.keys(route.agency_kpi_by_day_type).length;
+  const breakdownHTML = hasBreakdown
+    ? `<div class="kpi-route-metric-detail">
+        <h3>Service Operated by time of day</h3>
+        <p class="muted">Trips are grouped by their scheduled first departure. Partial trips count as operated and are reported separately.</p>
+        ${timeBreakdownTable(route, "service_operated")}
+      </div>
+      <div class="kpi-route-metric-detail">
+        <h3>On-Time Performance by time of day</h3>
+        <p class="muted">The prominent value uses eligible timepoints on operated trips. Each cell also shows the all-scheduled result.</p>
+        ${timeBreakdownTable(route, "on_time_performance")}
+      </div>`
+    : `<p class="warning kpi-breakdown-warning">Time-of-day detail has not been generated for this period yet.</p>`;
+  return `<div class="kpi-route-detail-inner">
+    <div class="kpi-route-count-summary">
+      <div><span>Service Operated</span><strong>${countRatio(service.operated_trips, service.scheduled_trips)} planned trips</strong></div>
+      <div><span>Partial operated trips</span><strong>${intFmt(service.partial_trips)} · ${pct(service.partial_of_operated_pct, 1, "—")}</strong></div>
+      <div><span>On-time timepoints</span><strong>${countRatio(otp.on_time_timepoints, otp.operated_timepoints)} on operated trips</strong></div>
+      <div><span>All scheduled OTP</span><strong>${pct(otp.of_scheduled_pct, 1, "—")} · n=${intFmt(otp.scheduled_timepoints)}</strong></div>
+    </div>
+    ${breakdownHTML}
+  </div>`;
 }
 
-function attachExpansion(tbody) {
-  const toggle = (row) => {
-    const detail = tbody.querySelector(`[data-detail-month="${row.dataset.month}"]`);
-    const open = row.getAttribute("aria-expanded") !== "true";
-    row.setAttribute("aria-expanded", String(open));
-    row.classList.toggle("is-open", open);
-    row.querySelector(".expand-cell").textContent = open ? "▾" : "▸";
-    detail.hidden = !open;
-  };
-  tbody.querySelectorAll(".kpi-row").forEach((row) => {
-    row.addEventListener("click", () => toggle(row));
-    row.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        toggle(row);
-      }
-    });
+function routesForSelectedPeriod() {
+  if (!routeTableState.data) return [];
+  if (routeTableState.frequency === "weekly") {
+    return routeTableState.data.route_daily_service_delivered || [];
+  }
+  return routeTableState.data.routes || [];
+}
+
+function routeSortValue(route, key) {
+  if (key === "route_id") return route.route_id || "";
+  if (key === "service_operated") return route.agency_kpi?.service_operated?.operated_pct;
+  return route.agency_kpi?.on_time_performance?.of_operated_pct;
+}
+
+function sortedFilteredRoutes() {
+  const query = routeTableState.filter.toLowerCase().trim();
+  const routes = routesForSelectedPeriod().filter((route) =>
+    !query || String(route.route_id || "").toLowerCase().includes(query)
+  );
+  routes.sort((a, b) => {
+    const av = routeSortValue(a, routeTableState.sortKey);
+    const bv = routeSortValue(b, routeTableState.sortKey);
+    if (av === null || av === undefined) return bv === null || bv === undefined ? 0 : 1;
+    if (bv === null || bv === undefined) return -1;
+    const compared = routeTableState.sortKey === "route_id"
+      ? routeCollator.compare(String(av), String(bv))
+      : Number(av) - Number(bv);
+    return routeTableState.sortDirection === "asc" ? compared : -compared;
   });
+  return routes;
+}
+
+function renderRouteTable() {
+  const tbody = document.querySelector("#kpi-route-table tbody");
+  const routes = sortedFilteredRoutes();
+  if (!routes.length) {
+    tbody.innerHTML = `<tr><td colspan="4" class="muted">No routes match this filter.</td></tr>`;
+  } else {
+    tbody.innerHTML = routes.map((route) => {
+      const routeID = String(route.route_id);
+      const open = routeTableState.openRoutes.has(routeID);
+      const servicePct = route.agency_kpi?.service_operated?.operated_pct;
+      const otpPct = route.agency_kpi?.on_time_performance?.of_operated_pct;
+      return `<tr class="kpi-route-row ${open ? "is-open" : ""}" data-route-id="${routeID}" tabindex="0" role="button" aria-expanded="${open}">
+          <td>${routeBadge(route)}${limitedRouteTag(route)}</td>
+          <td class="kpi-overall-value">${pct(servicePct, 1, "—")}</td>
+          <td class="kpi-overall-value">${pct(otpPct, 1, "—")}</td>
+          <td class="expand-cell" aria-hidden="true">${open ? "▾" : "▸"}</td>
+        </tr>
+        <tr class="kpi-route-detail" ${open ? "" : "hidden"}>
+          <td colspan="4">${routeDetailHTML(route)}</td>
+        </tr>`;
+    }).join("");
+  }
+  const total = routesForSelectedPeriod().length;
+  document.getElementById("kpi-route-count").textContent = routeTableState.filter
+    ? `${routes.length} of ${total} routes`
+    : `${total} routes`;
+  document.querySelectorAll("#kpi-route-table th[data-sort]").forEach((th) => {
+    th.classList.toggle("sorted-asc", th.dataset.sort === routeTableState.sortKey && routeTableState.sortDirection === "asc");
+    th.classList.toggle("sorted-desc", th.dataset.sort === routeTableState.sortKey && routeTableState.sortDirection === "desc");
+  });
+}
+
+function isoDate(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function weekLabel(weekEnd) {
+  const end = new Date(`${weekEnd}T00:00:00Z`);
+  const start = new Date(end);
+  start.setUTCDate(start.getUTCDate() - 6);
+  return `${shortDate(isoDate(start))}–${shortDate(weekEnd)}, ${end.getUTCFullYear()}`;
+}
+
+function selectedPeriodLabel() {
+  const data = routeTableState.data;
+  if (!data) return "";
+  return routeTableState.frequency === "weekly"
+    ? `Week ${shortDate(data.week_start)}–${shortDate(data.week_end)}, ${data.week_end.slice(0, 4)} · Sunday–Saturday`
+    : `${monthLabel(data.month)} · calendar month`;
+}
+
+function updateRouteTableURL() {
+  const url = new URL(window.location.href);
+  url.searchParams.set("view", routeTableState.frequency);
+  if (routeTableState.frequency === "weekly") {
+    url.searchParams.set("week_end", routeTableState.selected.weekly);
+    url.searchParams.delete("month");
+  } else {
+    url.searchParams.set("month", routeTableState.selected.monthly);
+    url.searchParams.delete("week_end");
+  }
+  window.history.replaceState({}, "", url);
+}
+
+function renderRoutePeriodControls() {
+  const frequency = routeTableState.frequency;
+  const keys = routeTableState.indexes[frequency];
+  const selected = routeTableState.selected[frequency];
+  const selectedIndex = keys.indexOf(selected);
+  const select = document.getElementById("kpi-period-select");
+  select.innerHTML = keys.map((key) => {
+    const label = frequency === "weekly" ? weekLabel(key) : monthLabel(key);
+    return `<option value="${key}" ${key === selected ? "selected" : ""}>${label}</option>`;
+  }).join("");
+  document.getElementById("kpi-period-older").disabled = selectedIndex < 0 || selectedIndex >= keys.length - 1;
+  document.getElementById("kpi-period-newer").disabled = selectedIndex <= 0;
+  for (const option of ["weekly", "monthly"]) {
+    const button = document.getElementById(`kpi-view-${option}`);
+    const active = option === frequency;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
+  }
+}
+
+async function loadSelectedRoutePeriod() {
+  const frequency = routeTableState.frequency;
+  const key = routeTableState.selected[frequency];
+  const token = ++routeTableState.loadToken;
+  routeTableState.openRoutes.clear();
+  routeTableState.data = null;
+  renderRoutePeriodControls();
+  document.getElementById("kpi-route-period").textContent = "Loading route KPI data…";
+  const cache = frequency === "weekly" ? routeTableState.weeklyData : routeTableState.monthlyData;
+  try {
+    let data = cache.get(key);
+    if (!data && frequency === "weekly") {
+      data = await fetchJSON(`${GCS_BASE}/stats/weekly/${key}.json`);
+      cache.set(key, data);
+    }
+    if (!data) throw new Error("period data is unavailable");
+    if (token !== routeTableState.loadToken) return;
+    routeTableState.data = data;
+    document.getElementById("kpi-route-period").textContent = selectedPeriodLabel();
+    renderRouteTable();
+    updateRouteTableURL();
+  } catch (error) {
+    if (token !== routeTableState.loadToken) return;
+    document.getElementById("kpi-route-period").textContent = `Couldn't load this period: ${error.message}.`;
+    document.querySelector("#kpi-route-table tbody").innerHTML =
+      `<tr><td colspan="4" class="warning">Route KPI data is unavailable for this period.</td></tr>`;
+  }
+}
+
+function changeSelectedPeriod(offset) {
+  const frequency = routeTableState.frequency;
+  const keys = routeTableState.indexes[frequency];
+  const current = keys.indexOf(routeTableState.selected[frequency]);
+  const next = current + offset;
+  if (next < 0 || next >= keys.length) return;
+  routeTableState.selected[frequency] = keys[next];
+  loadSelectedRoutePeriod();
+}
+
+function setRouteFrequency(frequency) {
+  if (frequency === routeTableState.frequency || !routeTableState.indexes[frequency].length) return;
+  routeTableState.frequency = frequency;
+  loadSelectedRoutePeriod();
+}
+
+function toggleRouteDetail(row) {
+  const routeID = row.dataset.routeId;
+  if (routeTableState.openRoutes.has(routeID)) routeTableState.openRoutes.delete(routeID);
+  else routeTableState.openRoutes.add(routeID);
+  renderRouteTable();
+  const replacement = document.querySelector(`.kpi-route-row[data-route-id="${routeID}"]`);
+  if (replacement) replacement.focus();
+}
+
+function wireRouteTableControls() {
+  document.getElementById("kpi-view-weekly").addEventListener("click", () => setRouteFrequency("weekly"));
+  document.getElementById("kpi-view-monthly").addEventListener("click", () => setRouteFrequency("monthly"));
+  document.getElementById("kpi-period-older").addEventListener("click", () => changeSelectedPeriod(1));
+  document.getElementById("kpi-period-newer").addEventListener("click", () => changeSelectedPeriod(-1));
+  document.getElementById("kpi-period-select").addEventListener("change", (event) => {
+    routeTableState.selected[routeTableState.frequency] = event.target.value;
+    loadSelectedRoutePeriod();
+  });
+  const filter = document.getElementById("kpi-route-filter");
+  filter.addEventListener("input", () => {
+    routeTableState.filter = filter.value;
+    renderRouteTable();
+  });
+  document.getElementById("kpi-route-filter-clear").addEventListener("click", () => {
+    filter.value = "";
+    routeTableState.filter = "";
+    renderRouteTable();
+    filter.focus();
+  });
+  document.querySelector("#kpi-route-table thead").addEventListener("click", (event) => {
+    const th = event.target.closest("th[data-sort]");
+    if (!th) return;
+    if (routeTableState.sortKey === th.dataset.sort) {
+      routeTableState.sortDirection = routeTableState.sortDirection === "asc" ? "desc" : "asc";
+    } else {
+      routeTableState.sortKey = th.dataset.sort;
+      routeTableState.sortDirection = "asc";
+    }
+    renderRouteTable();
+  });
+  const tbody = document.querySelector("#kpi-route-table tbody");
+  tbody.addEventListener("click", (event) => {
+    const row = event.target.closest(".kpi-route-row");
+    if (row) toggleRouteDetail(row);
+  });
+  tbody.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const row = event.target.closest(".kpi-route-row");
+    if (!row) return;
+    event.preventDefault();
+    toggleRouteDetail(row);
+  });
+}
+
+async function initializeRouteTable(weeks, months, weeklyData = []) {
+  routeTableState.indexes.weekly = [...weeks];
+  routeTableState.indexes.monthly = months.map((month) => month.month);
+  routeTableState.monthlyData = new Map(months.map((month) => [month.month, month]));
+  routeTableState.weeklyData = new Map(weeklyData.map((week) => [week.week_end, week]));
+  const params = new URLSearchParams(window.location.search);
+  const requestedWeek = params.get("week_end");
+  const requestedMonth = params.get("month");
+  routeTableState.selected.weekly = weeks.includes(requestedWeek) ? requestedWeek : weeks[0] || "";
+  routeTableState.selected.monthly = routeTableState.indexes.monthly.includes(requestedMonth)
+    ? requestedMonth
+    : routeTableState.indexes.monthly[0] || "";
+  const requestedFrequency = params.get("view");
+  routeTableState.frequency = requestedFrequency === "monthly" || !weeks.length ? "monthly" : "weekly";
+  wireRouteTableControls();
+  await loadSelectedRoutePeriod();
 }
 
 async function loadComparison() {
@@ -439,16 +814,16 @@ async function loadComparison() {
     const servicePublished = publishedMap(preview.published.service_operated);
     const otpPublished = publishedMap(preview.published.on_time_performance);
     initializeComparisonCharts(preview.months, servicePublished, otpPublished);
-    renderServiceOperated(preview.months, servicePublished);
-    renderOTP(preview.months, otpPublished);
+    await initializeRouteTable(preview.weekly.map((week) => week.week_end), preview.months, preview.weekly);
     document.getElementById("meta").textContent = "Local preview data · May–July 2026";
     return;
   }
-  const [index, published] = await Promise.all([
+  const [monthlyIndex, weeklyIndex, published] = await Promise.all([
     fetchJSON(MONTHLY_INDEX_URL),
+    fetchJSON(WEEKLY_INDEX_URL),
     fetchJSON(PUBLISHED_KPI_URL).catch(() => ({ service_operated: [], on_time_performance: [] })),
   ]);
-  const monthFiles = await Promise.all((index.months || []).map((month) =>
+  const monthFiles = await Promise.all((monthlyIndex.months || []).map((month) =>
     fetchJSON(`${GCS_BASE}/stats/monthly/${month}.json`).catch(() => null)
   ));
   const completeMonths = monthFiles
@@ -457,8 +832,7 @@ async function loadComparison() {
   const servicePublished = publishedMap(published.service_operated);
   const otpPublished = publishedMap(published.on_time_performance);
   initializeComparisonCharts(completeMonths, servicePublished, otpPublished);
-  renderServiceOperated(completeMonths, servicePublished);
-  renderOTP(completeMonths, otpPublished);
+  await initializeRouteTable(weeklyIndex.weeks || [], completeMonths);
 
   const fetched = new Date(published.fetched_at);
   const publishedText = Number.isNaN(fetched.getTime())

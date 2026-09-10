@@ -141,7 +141,7 @@ func regenerateDailyAgencyKPI(ctx context.Context, serviceDate civil.Date) (bool
 	if err != nil {
 		return false, err
 	}
-	system, routes, err := calculateDailyAgencyKPI(
+	system, routes, breakdowns, err := calculateDailyAgencyKPI(
 		ctx,
 		zr,
 		serviceDate,
@@ -161,6 +161,7 @@ func regenerateDailyAgencyKPI(ctx context.Context, serviceDate civil.Date) (bool
 			routeKPI = emptyAgencyKPIStats()
 		}
 		daily.Routes[i].AgencyKPI = routeKPI
+		daily.Routes[i].AgencyKPIBreakdown = breakdowns[routeID]
 		seen[routeID] = struct{}{}
 	}
 	colors, err := loadRouteColors(zr)
@@ -173,10 +174,11 @@ func regenerateDailyAgencyKPI(ctx context.Context, serviceDate civil.Date) (bool
 		}
 		color := colors[routeID]
 		daily.Routes = append(daily.Routes, routeStats{
-			RouteID:   routeID,
-			AgencyKPI: stats,
-			Color:     color.color,
-			TextColor: color.text,
+			RouteID:            routeID,
+			AgencyKPI:          stats,
+			AgencyKPIBreakdown: breakdowns[routeID],
+			Color:              color.color,
+			TextColor:          color.text,
 		})
 	}
 	daily.GeneratedAt = time.Now().UTC()
@@ -216,6 +218,7 @@ func regenerateWeeklyAgencyKPI(ctx context.Context, weekEnd civil.Date) (bool, e
 	}
 	var systemValues []agencyKPIStats
 	routeValues := make(map[string][]agencyKPIStats)
+	routeBreakdowns := make(map[string][]agencyKPIBreakdown)
 	for _, daily := range dailies {
 		if daily == nil {
 			continue
@@ -223,18 +226,21 @@ func regenerateWeeklyAgencyKPI(ctx context.Context, weekEnd civil.Date) (bool, e
 		systemValues = append(systemValues, daily.AgencyKPI)
 		for _, route := range daily.Routes {
 			routeValues[route.RouteID] = append(routeValues[route.RouteID], route.AgencyKPI)
+			routeBreakdowns[route.RouteID] = append(routeBreakdowns[route.RouteID], route.AgencyKPIBreakdown)
 		}
 	}
 	weekly.AgencyKPI = aggregateAgencyKPIStats(systemValues)
 	for i := range weekly.RouteDailyServiceDelivered {
 		routeID := weekly.RouteDailyServiceDelivered[i].RouteID
 		weekly.RouteDailyServiceDelivered[i].AgencyKPI = aggregateAgencyKPIStats(routeValues[routeID])
+		weekly.RouteDailyServiceDelivered[i].AgencyKPIBreakdown = aggregateAgencyKPIBreakdowns(routeBreakdowns[routeID])
 		delete(routeValues, routeID)
 	}
 	for routeID, values := range routeValues {
 		weekly.RouteDailyServiceDelivered = append(weekly.RouteDailyServiceDelivered, routeDailySD{
-			RouteID:   routeID,
-			AgencyKPI: aggregateAgencyKPIStats(values),
+			RouteID:            routeID,
+			AgencyKPI:          aggregateAgencyKPIStats(values),
+			AgencyKPIBreakdown: aggregateAgencyKPIBreakdowns(routeBreakdowns[routeID]),
 		})
 	}
 	weekly.GeneratedAt = time.Now().UTC()

@@ -20,7 +20,13 @@ func TestAggregateMonthlyStatsUsesCalendarMonthWeekSegments(t *testing.T) {
 		finalizeAgencyKPIStats(&kpi)
 		dailies[i] = &dailyStats{
 			AgencyKPI: kpi,
-			Routes:    []routeStats{{RouteID: "R1", AgencyKPI: kpi, Color: "112233", TextColor: "FFFFFF"}},
+			Routes: []routeStats{{
+				RouteID:            "R1",
+				AgencyKPI:          kpi,
+				AgencyKPIBreakdown: agencyKPIBreakdown{agencyKPIDayType(month.AddDays(i)): {"morning": kpi}},
+				Color:              "112233",
+				TextColor:          "FFFFFF",
+			}},
 		}
 	}
 	generatedAt := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
@@ -45,6 +51,10 @@ func TestAggregateMonthlyStatsUsesCalendarMonthWeekSegments(t *testing.T) {
 	}
 	if len(got.Routes) != 1 || got.Routes[0].AgencyKPI.ServiceOperated.OperatedTrips != 17 {
 		t.Fatalf("route aggregation = %+v", got.Routes)
+	}
+	weekendMorning := got.Routes[0].AgencyKPIBreakdown["weekend"]["morning"]
+	if weekendMorning.ServiceOperated.OperatedTrips != 17 || weekendMorning.ServiceOperated.ScheduledTrips != 20 {
+		t.Fatalf("route time breakdown = %+v", weekendMorning)
 	}
 }
 

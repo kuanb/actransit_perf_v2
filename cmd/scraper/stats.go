@@ -109,34 +109,35 @@ type notCompletedDistribution struct {
 }
 
 type routeStats struct {
-	RouteID          string         `json:"route_id"`
-	AgencyKPI        agencyKPIStats `json:"agency_kpi"`
-	TripsObserved    int64          `json:"trips_observed"`
-	Observations     int64          `json:"observations"`
-	OnTimePct        float64        `json:"on_time_pct"`
-	Within5MinPct    float64        `json:"within_5min_pct"`
-	Within7MinPct    float64        `json:"within_7min_pct"`
-	LatePct          float64        `json:"late_pct"`
-	EarlyPct         float64        `json:"early_pct"`
-	P5DelayMinutes   *float64       `json:"p5_delay_minutes"`
-	P25DelayMinutes  *float64       `json:"p25_delay_minutes"`
-	P50DelayMinutes  *float64       `json:"p50_delay_minutes"`
-	P75DelayMinutes  *float64       `json:"p75_delay_minutes"`
-	P95DelayMinutes  *float64       `json:"p95_delay_minutes"`
-	P50DistortionPct *float64       `json:"p50_distortion_pct"`
-	P95DistortionPct *float64       `json:"p95_distortion_pct"`
-	AvgSpeedMph      float64        `json:"avg_speed_mph"`
-	Color            string         `json:"color"`
-	TextColor        string         `json:"text_color"`
-	ScheduledTrips   int            `json:"scheduled_trips"`
-	RanTrips         int            `json:"ran_trips"`
-	Limited          bool           `json:"limited"`
-	TripDeliveryPct  *float64       `json:"trip_delivery_pct"`
-	StopSDPct        *float64       `json:"stop_sd_pct,omitempty"`
-	StopSDN          int64          `json:"stop_sd_n,omitempty"`
-	StopSDDeliveredN int64          `json:"stop_sd_delivered_n,omitempty"`
-	TwoBusGapWindows *int           `json:"two_bus_gap_windows,omitempty"`
-	Bunching         *bunchingStats `json:"bunching,omitempty"`
+	RouteID            string             `json:"route_id"`
+	AgencyKPI          agencyKPIStats     `json:"agency_kpi"`
+	AgencyKPIBreakdown agencyKPIBreakdown `json:"agency_kpi_by_day_type,omitempty"`
+	TripsObserved      int64              `json:"trips_observed"`
+	Observations       int64              `json:"observations"`
+	OnTimePct          float64            `json:"on_time_pct"`
+	Within5MinPct      float64            `json:"within_5min_pct"`
+	Within7MinPct      float64            `json:"within_7min_pct"`
+	LatePct            float64            `json:"late_pct"`
+	EarlyPct           float64            `json:"early_pct"`
+	P5DelayMinutes     *float64           `json:"p5_delay_minutes"`
+	P25DelayMinutes    *float64           `json:"p25_delay_minutes"`
+	P50DelayMinutes    *float64           `json:"p50_delay_minutes"`
+	P75DelayMinutes    *float64           `json:"p75_delay_minutes"`
+	P95DelayMinutes    *float64           `json:"p95_delay_minutes"`
+	P50DistortionPct   *float64           `json:"p50_distortion_pct"`
+	P95DistortionPct   *float64           `json:"p95_distortion_pct"`
+	AvgSpeedMph        float64            `json:"avg_speed_mph"`
+	Color              string             `json:"color"`
+	TextColor          string             `json:"text_color"`
+	ScheduledTrips     int                `json:"scheduled_trips"`
+	RanTrips           int                `json:"ran_trips"`
+	Limited            bool               `json:"limited"`
+	TripDeliveryPct    *float64           `json:"trip_delivery_pct"`
+	StopSDPct          *float64           `json:"stop_sd_pct,omitempty"`
+	StopSDN            int64              `json:"stop_sd_n,omitempty"`
+	StopSDDeliveredN   int64              `json:"stop_sd_delivered_n,omitempty"`
+	TwoBusGapWindows   *int               `json:"two_bus_gap_windows,omitempty"`
+	Bunching           *bunchingStats     `json:"bunching,omitempty"`
 }
 
 type bqStatsStats struct {
@@ -189,7 +190,7 @@ func generateDailyStats(ctx context.Context, serviceDate civil.Date) (*dailyStat
 	for tripID := range tripProgress {
 		ranTrips[tripID] = struct{}{}
 	}
-	agencyKPI, routeAgencyKPI, err := calculateDailyAgencyKPI(
+	agencyKPI, routeAgencyKPI, routeAgencyKPIBreakdowns, err := calculateDailyAgencyKPI(
 		ctx,
 		zr,
 		serviceDate,
@@ -284,6 +285,7 @@ func generateDailyStats(ctx context.Context, serviceDate civil.Date) (*dailyStat
 			routeKPI = emptyAgencyKPIStats()
 		}
 		routes[i].AgencyKPI = routeKPI
+		routes[i].AgencyKPIBreakdown = routeAgencyKPIBreakdowns[rid]
 		routes[i].Bunching = routeBunching[rid]
 		if routes[i].Bunching == nil {
 			routes[i].Bunching = finalizeBunchingStats(bunchingAccumulator{}, nil, nil, time.Now().UTC(), 1, 1)

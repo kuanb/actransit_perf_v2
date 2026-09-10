@@ -41,8 +41,9 @@ The performance tracker writes completed trips to BigQuery. Daily, weekly,
 and monthly generators combine those observations with the GTFS schedule and
 publish report JSON under `stats/`. The agency-comparison fields reproduce AC
 Transit's Service Operated and On-Time Performance definitions from independent
-data. A daily `/refresh-published-kpis` job imports AC Transit's published
-monthly values for side-by-side comparison.
+data, including route-level weekday/weekend time-of-day breakdowns. A daily
+`/refresh-published-kpis` job imports AC Transit's published monthly values for
+side-by-side comparison.
 
 ## Design docs
 

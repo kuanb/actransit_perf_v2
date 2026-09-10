@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AC Transit KPI comparison</title>
-  <link rel="stylesheet" href="../styles.css?v=kpi-comparison-v3">
+  <link rel="stylesheet" href="../styles.css?v=kpi-comparison-v5">
   <script src="../independence-notice.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 </head>
@@ -50,12 +50,18 @@
       as a failure. This proxy is deliberately labeled because it is not the same underlying CAD/AVL measurement
       used by AC Transit.
     </p>
+    <p>
+      <strong>Route detail:</strong> weekday means Monday–Friday and weekend means Saturday–Sunday, based on the
+      GTFS service date. Service Operated is grouped by each trip’s scheduled first departure; OTP is grouped by
+      each timepoint’s scheduled arrival. The display periods are Owl (midnight–6 a.m.), Morning (6–10 a.m.),
+      Midday (10 a.m.–3 p.m.), Afternoon (3–7 p.m.), and Evening (7 p.m.–midnight).
+    </p>
   </section>
 
   <main id="kpi-content">
     <div class="kpi-chart-controls">
       <label class="kpi-weekly-toggle" for="weekly-chart-toggle">
-        <input id="weekly-chart-toggle" type="checkbox">
+        <input id="weekly-chart-toggle" type="checkbox" checked>
         <span>
           <strong>Show weekly points</strong>
           <small>Both charts · shaded bands show each week’s daily minimum–maximum</small>
@@ -65,23 +71,23 @@
     <section aria-labelledby="service-operated-title">
       <h2 id="service-operated-title">Service Operated</h2>
       <p class="muted defn">
-        Operated planned trips divided by all planned trips. Select a month to see count-weighted weekly segments
-        and the share of operated trips that were partial.
+        Operated planned trips divided by all planned trips. Monthly and weekly percentages are recomputed from
+        trip counts rather than averaging daily percentages.
       </p>
       <div class="kpi-comparison-chart">
         <canvas id="service-operated-chart" role="img" aria-label="Monthly Service Operated percentages calculated by this project and reported by AC Transit"></canvas>
       </div>
-      <table id="service-operated-table" class="kpi-comparison-table">
-        <thead>
-          <tr>
-            <th>Month</th>
-            <th>Our Service Operated</th>
-            <th>AC Transit reported</th>
-            <th class="expand-th"><span class="sr-only">Expand</span></th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
+      <div class="kpi-volume-heading">
+        <h3>Monthly trip volume behind Service Operated</h3>
+        <p class="muted defn">
+          Blue bars are our calculated operated-trip counts, stacked by each week segment in the month. Orange bars
+          apply AC Transit’s published percentage to our GTFS planned-trip total for scale; they are inferred
+          equivalents, not trip counts published by AC Transit.
+        </p>
+      </div>
+      <div class="kpi-comparison-chart kpi-service-volume-chart">
+        <canvas id="service-operated-volume-chart" role="img" aria-label="Monthly Service Operated trip volumes, with this project's operated trips stacked by week and AC Transit's percentage shown as an equivalent count"></canvas>
+      </div>
     </section>
 
     <section aria-labelledby="otp-title">
@@ -93,18 +99,51 @@
       <div class="kpi-comparison-chart">
         <canvas id="otp-chart" role="img" aria-label="Monthly On-Time Performance percentages using operated trips, all scheduled trips, and AC Transit's published values"></canvas>
       </div>
-      <table id="otp-table" class="kpi-comparison-table">
-        <thead>
-          <tr>
-            <th>Month</th>
-            <th>Our OTP — operated trips</th>
-            <th>Our OTP — all scheduled</th>
-            <th>AC Transit reported</th>
-            <th class="expand-th"><span class="sr-only">Expand</span></th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
+    </section>
+
+    <section class="kpi-route-section" aria-labelledby="route-kpi-title">
+      <div class="kpi-route-heading">
+        <div>
+          <h2 id="route-kpi-title">Route KPI summary</h2>
+          <p id="route-kpi-description" class="muted defn">
+            Overall independent KPI estimates for each line. Select a route for weekday, weekend, time-of-day,
+            and underlying count detail.
+          </p>
+        </div>
+        <div class="kpi-period-nav" aria-label="Select reporting period">
+          <button id="kpi-period-older" type="button">← Older</button>
+          <label>
+            <span class="sr-only">Reporting period</span>
+            <select id="kpi-period-select"></select>
+          </label>
+          <button id="kpi-period-newer" type="button">Newer →</button>
+        </div>
+      </div>
+
+      <div class="kpi-route-controls">
+        <div class="kpi-frequency-toggle" role="group" aria-label="Reporting frequency">
+          <button id="kpi-view-weekly" type="button" aria-pressed="true">Weekly</button>
+          <button id="kpi-view-monthly" type="button" aria-pressed="false">Monthly</button>
+        </div>
+        <input id="kpi-route-filter" type="text" placeholder="Filter routes…" autocomplete="off" aria-label="Filter routes">
+        <button id="kpi-route-filter-clear" type="button">Clear</button>
+        <span id="kpi-route-count" class="muted"></span>
+      </div>
+
+      <div id="kpi-route-period" class="kpi-route-period muted" aria-live="polite"></div>
+      <div class="table-wrap bounded-table-wrap kpi-route-table-wrap">
+        <table id="kpi-route-table" class="kpi-comparison-table" aria-describedby="route-kpi-description">
+          <thead>
+            <tr>
+              <th data-sort="route_id">Route</th>
+              <th data-sort="service_operated">Service Operated</th>
+              <th data-sort="on_time_performance">On-Time Performance</th>
+              <th class="expand-th"><span class="sr-only">Expand</span></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </section>
   </main>
 
@@ -117,7 +156,7 @@
   </footer>
 
   <script src="../lib.js?v=bunching-v4"></script>
-  <script src="app.js?v=kpi-comparison-v5"></script>
+  <script src="app.js?v=kpi-comparison-v7"></script>
   <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "0e36b12e46b04a69b5e9ff6883f6d23d"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
 </html>
