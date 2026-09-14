@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AC Transit KPI comparison</title>
-  <link rel="stylesheet" href="../styles.css?v=kpi-comparison-v5">
+  <link rel="stylesheet" href="../styles.css?v=kpi-comparison-v6">
   <script src="../independence-notice.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 </head>
@@ -78,11 +78,17 @@
         <canvas id="service-operated-chart" role="img" aria-label="Monthly Service Operated percentages calculated by this project and reported by AC Transit"></canvas>
       </div>
       <div class="kpi-volume-heading">
-        <h3>Monthly trip volume behind Service Operated</h3>
+        <div class="kpi-volume-heading-row">
+          <h3>Monthly trip volume behind Service Operated</h3>
+          <div class="kpi-volume-toggle" role="group" aria-label="Trip volume shown">
+            <button type="button" class="is-active" data-volume-mode="delivered" aria-pressed="true">Trips delivered</button>
+            <button type="button" data-volume-mode="not-delivered" aria-pressed="false">Trips not delivered</button>
+          </div>
+        </div>
         <p class="muted defn">
-          Blue bars are our calculated operated-trip counts, stacked by each week segment in the month. Orange bars
-          apply AC Transit’s published percentage to our GTFS planned-trip total for scale; they are inferred
-          equivalents, not trip counts published by AC Transit.
+          Blue bars are our calculated counts, stacked by each week segment in the month. Orange bars apply AC
+          Transit’s published percentage, or its complement, to our GTFS planned-trip total for scale; they are
+          inferred equivalents, not trip counts published by AC Transit.
         </p>
       </div>
       <div class="kpi-comparison-chart kpi-service-volume-chart">
@@ -156,7 +162,7 @@
   </footer>
 
   <script src="../lib.js?v=bunching-v4"></script>
-  <script src="app.js?v=kpi-comparison-v7"></script>
+  <script src="app.js?v=kpi-comparison-v8"></script>
   <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "0e36b12e46b04a69b5e9ff6883f6d23d"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
 </html>

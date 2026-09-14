@@ -907,8 +907,37 @@ footer a:hover {
   background: #fff;
 }
 .kpi-volume-heading { margin-top: 30px; }
-.kpi-volume-heading h3 { margin: 0 0 5px; font-size: 17px; }
+.kpi-volume-heading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 5px;
+}
+.kpi-volume-heading h3 { margin: 0; font-size: 17px; }
 .kpi-volume-heading .defn { margin-bottom: 0; }
+.kpi-volume-toggle {
+  flex: 0 0 auto;
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid #b9d4ea;
+  border-radius: 8px;
+  background: #f4f9fd;
+}
+.kpi-volume-toggle button {
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #33404c;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.kpi-volume-toggle button:hover { background: #e4f0fa; }
+.kpi-volume-toggle button:focus-visible { outline: 2px solid #1971c2; outline-offset: 1px; }
+.kpi-volume-toggle button.is-active { background: #1971c2; color: #fff; }
+.kpi-volume-toggle button.is-active:hover { background: #145a9e; }
 .kpi-service-volume-chart { height: 360px; }
 .kpi-comparison-table td { font-size: 15px; }
 .kpi-route-section { margin-top: 34px; }
@@ -1046,6 +1075,7 @@ footer a:hover {
 
 @media (max-width: 640px) {
   .kpi-comparison-chart { height: 280px; padding: 10px; }
+  .kpi-volume-heading-row { align-items: flex-start; flex-direction: column; }
   .kpi-route-heading { display: block; }
   .kpi-period-nav { justify-content: flex-start; margin-top: 12px; }
   .kpi-period-nav select { max-width: 170px; }

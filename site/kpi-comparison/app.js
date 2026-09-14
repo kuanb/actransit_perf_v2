@@ -134,14 +134,21 @@ function comparisonChartOptions(values) {
   };
 }
 
-function renderServiceOperatedVolumeChart(months, servicePublished) {
+function renderServiceOperatedVolumeChart(months, servicePublished, mode = "delivered") {
   const chronological = [...months].sort((a, b) => a.month.localeCompare(b.month));
   const labels = chronological.map((month) => monthLabel(month.month));
+  const notDelivered = mode === "not-delivered";
+  const tripCount = (service) => notDelivered
+    ? service.scheduled_trips - service.operated_trips
+    : service.operated_trips;
   const maxWeekSegments = Math.max(0, ...chronological.map((month) => (month.weeks || []).length));
   const weekColors = ["#b9dcf5", "#8fc7ed", "#63b0e2", "#3b95d0", "#1971c2", "#114f89"];
   const weekDatasets = Array.from({ length: maxWeekSegments }, (_, index) => ({
     label: `Our calculation — week segment ${index + 1}`,
-    data: chronological.map((month) => month.weeks?.[index]?.agency_kpi?.service_operated?.operated_trips ?? 0),
+    data: chronological.map((month) => {
+      const service = month.weeks?.[index]?.agency_kpi?.service_operated;
+      return service ? tripCount(service) : 0;
+    }),
     backgroundColor: weekColors[index % weekColors.length],
     borderColor: "#fff",
     borderWidth: 0.5,
@@ -151,10 +158,15 @@ function renderServiceOperatedVolumeChart(months, servicePublished) {
   const publishedPcts = chronological.map((month) => servicePublished.get(month.month)?.pct ?? null);
   const publishedEquivalent = chronological.map((month, index) => {
     const scheduled = month.agency_kpi.service_operated.scheduled_trips;
-    return publishedPcts[index] === null ? null : Math.round(scheduled * publishedPcts[index] / 100);
+    if (publishedPcts[index] === null) return null;
+    const operated = Math.round(scheduled * publishedPcts[index] / 100);
+    return notDelivered ? scheduled - operated : operated;
   });
+  const publishedDisplayPcts = publishedPcts.map((value) =>
+    value === null || !notDelivered ? value : 100 - value
+  );
   const publishedDataset = {
-    label: "AC Transit published % — equivalent on our planned total",
+    label: `AC Transit published % — equivalent ${notDelivered ? "not delivered" : "delivered"}`,
     data: publishedEquivalent,
     backgroundColor: "#e8590c",
     borderColor: "#c44d08",
@@ -179,7 +191,7 @@ function renderServiceOperatedVolumeChart(months, servicePublished) {
           ticks: {
             callback: (value) => new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(value),
           },
-          title: { display: true, text: "Operated trips" },
+          title: { display: true, text: notDelivered ? "Trips not delivered" : "Trips delivered" },
         },
       },
       plugins: {
@@ -191,7 +203,7 @@ function renderServiceOperatedVolumeChart(months, servicePublished) {
           callbacks: {
             label: (ctx) => {
               if (ctx.dataset.publishedEquivalent) {
-                return `${ctx.dataset.label}: ${intFmt(ctx.parsed.y)} trips (${pct(publishedPcts[ctx.dataIndex], 2)})`;
+                return `${ctx.dataset.label}: ${intFmt(ctx.parsed.y)} trips (${pct(publishedDisplayPcts[ctx.dataIndex], 2)})`;
               }
               const period = ctx.dataset.periods[ctx.dataIndex];
               const dates = period ? ` · ${shortDate(period.period_start)}–${shortDate(period.period_end)}` : "";
@@ -200,13 +212,18 @@ function renderServiceOperatedVolumeChart(months, servicePublished) {
             footer: (items) => {
               const month = chronological[items[0].dataIndex];
               const service = month.agency_kpi.service_operated;
-              return `Our month: ${intFmt(service.operated_trips)} operated of ${intFmt(service.scheduled_trips)} planned`;
+              const label = notDelivered ? "not delivered" : "delivered";
+              return `Our month: ${intFmt(tripCount(service))} ${label} of ${intFmt(service.scheduled_trips)} planned`;
             },
           },
         },
       },
     },
   });
+  document.getElementById("service-operated-volume-chart").setAttribute(
+    "aria-label",
+    `Monthly Service Operated trip volumes showing trips ${notDelivered ? "not delivered" : "delivered"}`,
+  );
 }
 
 function weeklyChartPoints(months) {
@@ -316,6 +333,16 @@ function initializeComparisonCharts(months, servicePublished, otpPublished) {
   renderServiceOperatedVolumeChart(months, servicePublished);
   toggle.addEventListener("change", () => {
     renderComparisonCharts(months, servicePublished, otpPublished, toggle.checked);
+  });
+  document.querySelectorAll("[data-volume-mode]").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll("[data-volume-mode]").forEach((option) => {
+        const active = option === button;
+        option.classList.toggle("is-active", active);
+        option.setAttribute("aria-pressed", String(active));
+      });
+      renderServiceOperatedVolumeChart(months, servicePublished, button.dataset.volumeMode);
+    });
   });
 }
 
