@@ -1,9 +1,12 @@
 const MONTHLY_INDEX_URL = `${GCS_BASE}/stats/monthly/_index.json`;
 const WEEKLY_INDEX_URL = `${GCS_BASE}/stats/weekly/_index.json`;
 const PUBLISHED_KPI_URL = `${GCS_BASE}/stats/published-kpis/latest.json`;
+const routeEmbed = new URLSearchParams(window.location.search).get("embed") === "routes";
 let serviceOperatedChart;
 let serviceOperatedVolumeChart;
 let otpChart;
+
+if (routeEmbed) document.body.classList.add("kpi-routes-embed");
 
 function monthLabel(month) {
   const [year, number] = month.split("-").map(Number);
@@ -696,6 +699,9 @@ function updateRouteTableURL() {
     url.searchParams.delete("week_end");
   }
   window.history.replaceState({}, "", url);
+  const fullComparisonURL = new URL(url);
+  fullComparisonURL.searchParams.delete("embed");
+  document.getElementById("kpi-full-comparison-link").href = fullComparisonURL;
 }
 
 function renderRoutePeriodControls() {
@@ -838,9 +844,11 @@ async function initializeRouteTable(weeks, months, weeklyData = []) {
 async function loadComparison() {
   if (isLocal) {
     const preview = localPreviewData();
-    const servicePublished = publishedMap(preview.published.service_operated);
-    const otpPublished = publishedMap(preview.published.on_time_performance);
-    initializeComparisonCharts(preview.months, servicePublished, otpPublished);
+    if (!routeEmbed) {
+      const servicePublished = publishedMap(preview.published.service_operated);
+      const otpPublished = publishedMap(preview.published.on_time_performance);
+      initializeComparisonCharts(preview.months, servicePublished, otpPublished);
+    }
     await initializeRouteTable(preview.weekly.map((week) => week.week_end), preview.months, preview.weekly);
     document.getElementById("meta").textContent = "Local preview data · May–July 2026";
     return;
@@ -856,9 +864,11 @@ async function loadComparison() {
   const completeMonths = monthFiles
     .filter((month) => month && month.status === "complete" && month.agency_kpi)
     .sort((a, b) => b.month.localeCompare(a.month));
-  const servicePublished = publishedMap(published.service_operated);
-  const otpPublished = publishedMap(published.on_time_performance);
-  initializeComparisonCharts(completeMonths, servicePublished, otpPublished);
+  if (!routeEmbed) {
+    const servicePublished = publishedMap(published.service_operated);
+    const otpPublished = publishedMap(published.on_time_performance);
+    initializeComparisonCharts(completeMonths, servicePublished, otpPublished);
+  }
   await initializeRouteTable(weeklyIndex.weeks || [], completeMonths);
 
   const fetched = new Date(published.fetched_at);
