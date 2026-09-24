@@ -772,22 +772,52 @@ footer a:hover {
 /* ---- report card ---- */
 .coverage-card {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+  align-items: center;
+  gap: 12px;
   margin-bottom: 18px;
-  padding: 12px 16px;
-  border: 1px solid #b9d4ea;
-  border-radius: 10px;
-  background: #f4f9fd;
-  color: #33404c;
-  font-size: 14px;
+  padding: 13px 16px;
+  border: 1px solid #e4d0a6;
+  border-left: 4px solid #d8952c;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #fff8e9 0%, #fffdf8 75%);
+  box-shadow: 0 4px 14px rgba(120, 79, 18, 0.08);
+  color: #493e2f;
+}
+.coverage-card-icon {
+  display: grid;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 50%;
+  background: #f8e8c4;
+  box-shadow: 0 2px 6px rgba(120, 79, 18, 0.12);
+  font-size: 20px;
+  transform: rotate(-4deg);
+}
+.coverage-card-copy {
+  display: flex;
+  flex-direction: column;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 14.5px;
+  line-height: 1.35;
+}
+.coverage-card-label {
+  margin-bottom: 1px;
+  color: #9a641e;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 .coverage-card a {
-  color: #1971c2;
+  color: #8b4d18;
   font-weight: 700;
-  text-decoration: none;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
 }
-.coverage-card a:hover { text-decoration: underline; }
+.coverage-card a:hover { color: #60300e; }
 
 .agency-hero { margin-bottom: 28px; }
 .agency-card {
