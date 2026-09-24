@@ -776,10 +776,14 @@ footer a:hover {
   gap: 12px;
   margin-bottom: 18px;
   padding: 13px 16px;
-  border: 1px solid #e4d0a6;
-  border-left: 4px solid #d8952c;
+  border: 1px solid #d9bd82;
   border-radius: 12px;
-  background: linear-gradient(135deg, #fff8e9 0%, #fffdf8 75%);
+  background-color: #fffaf0;
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(139, 77, 24, 0.08) 0.7px, transparent 0.8px),
+    linear-gradient(135deg, rgba(255, 248, 233, 0.92) 0%, rgba(255, 253, 248, 0.92) 75%);
+  background-repeat: repeat, no-repeat;
+  background-size: 9px 9px, 100% 100%;
   box-shadow: 0 4px 14px rgba(120, 79, 18, 0.08);
   color: #493e2f;
 }
