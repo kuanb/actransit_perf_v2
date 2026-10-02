@@ -7,7 +7,7 @@ const WINDOW_DAYS = 28;
 const IDEAL_SPEED_MPH = 13;
 const HISTORY_MONTHS = 6;
 const HISTORY_STEP_DAYS = 7;
-const HISTORY_FETCH_BATCH = 24;
+const LOAD_BATCH_DAYS = 7;
 const BUNCHING_PROGRESS_POINTS = [10, 25, 40, 55, 70, 85];
 const BUNCHING_METHODOLOGY_VERSION = 3;
 const BUNCHING_MAX_FREQUENCY_MIN = 40;
@@ -440,40 +440,60 @@ function bunchingGradeWarning(bunching, unit = "service days") {
   return `Bunching is not eligible for grading in this window. ${suffix}`;
 }
 
-function renderAgencyHero(a) {
+function renderAgencyHero(a, progress = { complete: true, percent: 100 }) {
   const el = document.getElementById("agency-hero");
   if (!el) return;
-  if (a.score == null) { el.hidden = true; return; }
-  const g = scoreColor(a.score);
-  const grade = letterGrade(a.score);
+  const complete = progress.complete !== false;
+  const showGrade = complete && a.score != null;
+  const g = showGrade ? scoreColor(a.score) : { bg: "#315f7d", fg: "#ffffff" };
+  const progressPct = Math.max(0, Math.min(100, Number(progress.percent) || 0));
   const hasBunching = a.headway_cv != null;
-  const bunchingWarning = bunchingGradeWarning(a.bunching, "route-days");
+  const bunchingWarning = progress.currentWindowReady
+    ? bunchingGradeWarning(a.bunching, "route-days")
+    : "";
   const speedPct = a.avg_speed_mph == null ? null : Math.min(100, (a.avg_speed_mph / IDEAL_SPEED_MPH) * 100);
   const stat = (label, val, sub = "") =>
     `<div class="agency-stat"><span class="as-val">${val}</span><span class="as-label">${label}</span>${sub ? `<span class="as-sub">${sub}</span>` : ""}</div>`;
+  const gradeContent = showGrade
+    ? `<div class="agency-grade-letter">${letterGrade(a.score)}</div>
+        <div class="agency-grade-score">${fmt(a.score)}<span> / 100</span></div>`
+    : complete
+      ? `<div class="agency-grade-loading">Unavailable</div>
+          <div class="agency-grade-score">No score</div>`
+      : `<div class="agency-grade-loading">Calculating</div>
+          <div class="agency-grade-score">${fmt(progressPct, 0)}<span>% loaded</span></div>`;
+  const loadingStatus = !complete
+    ? `<div class="agency-loading-status" role="status" aria-live="polite">${progress.status || "Loading performance data…"}</div>`
+    : "";
+  const progressBar = !complete
+    ? `<div class="agency-grade-progress" role="progressbar" aria-label="Report card loading progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${fmt(progressPct, 0)}">
+        <span style="width:${progressPct}%"></span>
+      </div>`
+    : "";
   el.innerHTML = `
     <div class="agency-card">
-      <div class="agency-grade" style="background:${g.bg};color:${g.fg}">
-        <div class="agency-grade-letter">${grade}</div>
-        <div class="agency-grade-score">${fmt(a.score)}<span> / 100</span></div>
+      <div class="agency-grade${complete ? "" : " is-loading"}" style="background:${g.bg};color:${g.fg}">
+        ${gradeContent}
+        ${progressBar}
       </div>
       <div class="agency-body">
         <div class="agency-title">Agency-wide grade</div>
         <div class="agency-sub">Non-limited routes over the last four weeks, weighted by each route's share of measured trip-stops. Lettered Transbay routes remain included.${a.bunching_grade_eligible ? ` Bus spacing contributes ${BUNCHING_GRADE_WEIGHT}% of the score.` : ""}</div>
+        ${loadingStatus}
         ${bunchingWarning ? `<div class="grade-data-warning" role="status"><strong>Bunching excluded from this grade.</strong> ${bunchingWarning}</div>` : ""}
         <div class="agency-stats">
           ${stat("On Time Service Delivered", a.stop_sd_pct == null ? "—" : fmt(a.stop_sd_pct) + "%")}
           ${stat("On time (≤3 min)", a.on_time_pct == null ? "—" : fmt(a.on_time_pct) + "%")}
           ${stat("p95 delay", a.p95_delay_minutes == null ? "—" : fmt(a.p95_delay_minutes) + " min")}
-          ${stat("Avg speed", fmt(a.avg_speed_mph) + " mph", speedPct == null ? "" : `${fmt(speedPct, 0)}% of ideal`)}
+          ${stat("Avg speed", a.avg_speed_mph == null ? "—" : fmt(a.avg_speed_mph) + " mph", speedPct == null ? "" : `${fmt(speedPct, 0)}% of ideal`)}
           ${hasBunching
             ? stat("Headway CV", fmt(a.headway_cv, 2), a.bunching_grade_eligible
               ? `${fmt(bunchingScore(a.headway_cv), 0)} / 100 sub-score`
               : "not used in this grade")
             : stat("Headway CV", "—", "not used in this grade")}
           ${hasBunching ? stat("Bunched arrivals", `${fmt(a.bunched_headway_pct)}%`) : ""}
-          ${hasBunching ? stat("Spacing penalty", `+${fmt(a.spacing_penalty_min)} min`) : ""}
-          ${stat("Routes graded", intFmt(a.routes))}
+          ${hasBunching && a.spacing_penalty_min != null ? stat("Spacing penalty", `+${fmt(a.spacing_penalty_min)} min`) : ""}
+          ${stat(complete ? "Routes graded" : "Routes included", intFmt(a.routes))}
           ${stat("Unique trips", intFmt(a.trips))}
           ${stat("Stops measured", intFmt(a.observations))}
         </div>
@@ -509,20 +529,6 @@ function historyEndpointIndexes(dates) {
     indexes.push(i);
   }
   return indexes;
-}
-
-async function fetchDailyHistory(dates, dailyByDate) {
-  const missing = dates.filter((date) => !dailyByDate.has(date));
-  for (let i = 0; i < missing.length; i += HISTORY_FETCH_BATCH) {
-    const batch = missing.slice(i, i + HISTORY_FETCH_BATCH);
-    const payloads = await Promise.all(batch.map(async (date) => {
-      const daily = await fetchJSON(`${GCS_BASE}/stats/${date}.json`).catch(() => null);
-      return [date, daily];
-    }));
-    for (const [date, daily] of payloads) {
-      if (daily) dailyByDate.set(date, daily);
-    }
-  }
 }
 
 function historyDateLabel(date) {
@@ -606,8 +612,21 @@ function componentHistoryChartOptions(values, yTitle, tooltipLabel) {
   };
 }
 
+const gradeHistoryCharts = new Map();
+
+function renderHistoryChart(canvasID, config) {
+  const existing = gradeHistoryCharts.get(canvasID);
+  if (existing) {
+    existing.data = config.data;
+    existing.options = config.options;
+    existing.update("none");
+    return;
+  }
+  gradeHistoryCharts.set(canvasID, new Chart(document.getElementById(canvasID), config));
+}
+
 function renderComponentHistoryChart(canvasID, labels, values, label, color, fillColor, yTitle, tooltipLabel) {
-  new Chart(document.getElementById(canvasID), {
+  renderHistoryChart(canvasID, {
     type: "line",
     data: {
       labels,
@@ -628,26 +647,33 @@ function renderComponentHistoryChart(canvasID, labels, values, label, color, fil
   });
 }
 
-function renderGradeHistory(points, topRoutes) {
+function renderGradeHistory(points, topRoutes, progress = { complete: true }) {
   const agencyMeta = document.getElementById("agency-history-meta");
   const routeMeta = document.getElementById("route-history-meta");
   const componentMeta = document.getElementById("component-history-meta");
   if (!points.length) {
-    agencyMeta.textContent = "Not enough daily data for a complete four-week historical point yet.";
-    routeMeta.textContent = "Not enough daily data for a complete four-week historical point yet.";
-    componentMeta.textContent = "Not enough daily data for a complete four-week historical point yet.";
+    const message = progress.complete
+      ? "Not enough daily data for a complete four-week historical point yet."
+      : `Loading newest to oldest · ${progress.completedBatches || 0} of ${progress.totalBatches || 0} weekly batches`;
+    agencyMeta.textContent = message;
+    routeMeta.textContent = message;
+    componentMeta.textContent = message;
     return;
   }
 
   const labels = points.map((point) => historyDateLabel(point.endDate));
   const first = historyDateLabel(points[0].endDate);
   const last = historyDateLabel(points[points.length - 1].endDate);
-  agencyMeta.textContent = `${points.length} weekly points · ${first}–${last}`;
-  routeMeta.textContent = `Top 10 by scheduled trips in the current four-week window · ${first}–${last}`;
-  componentMeta.textContent = `${points.length} weekly points · ${first}–${last} · each point is a trailing four-week window`;
+  const loadingPrefix = progress.complete
+    ? ""
+    : `Loading newest to oldest · ${progress.completedBatches} of ${progress.totalBatches} weekly batches · `;
+  const pointsLabel = `${points.length} weekly points${progress.complete ? "" : " ready"}`;
+  agencyMeta.textContent = `${loadingPrefix}${pointsLabel} · ${first}–${last}`;
+  routeMeta.textContent = `${loadingPrefix}Top 10 by scheduled trips in the current four-week window · ${first}–${last}`;
+  componentMeta.textContent = `${loadingPrefix}${pointsLabel} · ${first}–${last} · each point is a trailing four-week window`;
   const agencyScores = points.map((point) => point.agencyScore);
 
-  new Chart(document.getElementById("agency-grade-history"), {
+  renderHistoryChart("agency-grade-history", {
     type: "line",
     data: {
       labels,
@@ -680,7 +706,7 @@ function renderGradeHistory(points, topRoutes) {
     pointHoverRadius: 5,
     spanGaps: false,
   }));
-  new Chart(document.getElementById("route-grade-history"), {
+  renderHistoryChart("route-grade-history", {
     type: "line",
     data: {
       labels,
@@ -727,21 +753,8 @@ function renderGradeHistory(points, topRoutes) {
   );
 }
 
-async function loadGradeHistory(dates, currentDailies, currentRoutes) {
+function gradeHistoryData(dates, dailyByDate, currentRoutes) {
   const endpointIndexes = historyEndpointIndexes(dates);
-  if (!endpointIndexes.length) {
-    renderGradeHistory([], []);
-    return;
-  }
-
-  const lastEndpoint = endpointIndexes[endpointIndexes.length - 1];
-  const neededDates = dates.slice(0, lastEndpoint + WINDOW_DAYS);
-  const dailyByDate = new Map(
-    currentDailies.filter((daily) => daily && daily.service_date)
-      .map((daily) => [daily.service_date, daily])
-  );
-  await fetchDailyHistory(neededDates, dailyByDate);
-
   const topRoutes = [...currentRoutes]
     .filter((route) => route.score != null)
     .sort((a, b) => b.scheduled_runs - a.scheduled_runs)
@@ -767,7 +780,7 @@ async function loadGradeHistory(dates, currentDailies, currentRoutes) {
     };
   }).filter((point) => point && point.agencyScore != null).reverse();
 
-  renderGradeHistory(points, topRoutes);
+  return { points, topRoutes };
 }
 
 function renderBunchingMethodology() {
@@ -1040,6 +1053,13 @@ async function load() {
   if (yearEl) yearEl.textContent = new Date().getFullYear();
 
   renderGradeLegend();
+  renderBunchingMethodology();
+  renderAgencyHero(aggregateAgency([]), {
+    complete: false,
+    percent: 0,
+    currentWindowReady: false,
+    status: "Loading stats index…",
+  });
 
   const [dates, weekEnd] = await Promise.all([loadDailyIndex(), latestWeekEnd()]);
   if (!dates.length) {
@@ -1050,37 +1070,77 @@ async function load() {
     return;
   }
 
-  const recent = dates.slice(0, WINDOW_DAYS);
-  const dailies = (await Promise.all(
-    recent.map((d) =>
-      fetchJSON(`${GCS_BASE}/stats/${d}.json`).catch(() => null)
-    )
-  )).filter(Boolean);
+  const endpointIndexes = historyEndpointIndexes(dates);
+  const neededDateCount = endpointIndexes.length
+    ? endpointIndexes[endpointIndexes.length - 1] + WINDOW_DAYS
+    : Math.min(WINDOW_DAYS, dates.length);
+  const neededDates = dates.slice(0, neededDateCount);
+  const currentDates = dates.slice(0, Math.min(WINDOW_DAYS, dates.length));
+  const totalBatches = Math.ceil(neededDates.length / LOAD_BATCH_DAYS);
+  const dailyByDate = new Map();
+  let currentRoutes = [];
+  let includedRoutes = [];
+  let agency = aggregateAgency([]);
+  let currentWindowReady = false;
+  let reportRendered = false;
 
-  const routes = aggregateRoutes(dailies).filter((r) => r.score != null);
-  const includedRoutes = routes.filter((r) => !isLimitedRoute(r));
+  for (let i = 0; i < neededDates.length; i += LOAD_BATCH_DAYS) {
+    const batch = neededDates.slice(i, i + LOAD_BATCH_DAYS);
+    const payloads = await Promise.all(batch.map(async (date) => {
+      const daily = await fetchJSON(`${GCS_BASE}/stats/${date}.json`).catch(() => null);
+      return [date, daily];
+    }));
+    for (const [date, daily] of payloads) {
+      if (daily) dailyByDate.set(date, daily);
+    }
 
-  const agency = aggregateAgency(includedRoutes);
-  renderAgencyHero(agency);
-  renderBunchingSection(routes, agency);
-  renderBunchingMethodology();
+    const processedDates = Math.min(i + batch.length, neededDates.length);
+    const completedBatches = Math.ceil(processedDates / LOAD_BATCH_DAYS);
+    currentWindowReady = processedDates >= currentDates.length;
+    const complete = processedDates >= neededDates.length;
+    const currentDailies = currentDates.map((date) => dailyByDate.get(date)).filter(Boolean);
+    currentRoutes = aggregateRoutes(currentDailies).filter((route) => route.score != null);
+    includedRoutes = currentRoutes.filter((route) => !isLimitedRoute(route));
+    agency = aggregateAgency(includedRoutes);
 
-  const observed = dailies
-    .map((d) => d.service_date)
-    .filter(Boolean)
-    .sort();
-  const first = observed[0];
-  const last = observed[observed.length - 1];
-  document.getElementById("meta").textContent =
-    `Last ${dailies.length} service days` +
-    (first && last ? ` · ${first} → ${last}` : "") +
-    ` · ${includedRoutes.length} routes included` +
-    (routes.length > includedRoutes.length
-      ? ` · ${routes.length - includedRoutes.length} limited routes hidden`
-      : "");
+    const currentDaysProcessed = Math.min(processedDates, currentDates.length);
+    const status = currentWindowReady
+      ? `Current four-week totals ready · loading history week ${completedBatches} of ${totalBatches}`
+      : `Loading current four-week totals · ${currentDaysProcessed} of ${currentDates.length} service days`;
+    renderAgencyHero(agency, {
+      complete,
+      percent: 100 * processedDates / neededDates.length,
+      currentWindowReady,
+      status,
+    });
 
-  render(routes, weekEnd);
-  await loadGradeHistory(dates, dailies, routes);
+    const observed = currentDailies
+      .map((daily) => daily.service_date)
+      .filter(Boolean)
+      .sort();
+    const first = observed[0];
+    const last = observed[observed.length - 1];
+    document.getElementById("meta").textContent =
+      `${complete ? "Last" : "Loading ·"} ${currentDailies.length} service days` +
+      (first && last ? ` · ${first} → ${last}` : "") +
+      ` · ${includedRoutes.length} routes included` +
+      (currentRoutes.length > includedRoutes.length
+        ? ` · ${currentRoutes.length - includedRoutes.length} limited routes hidden`
+        : "");
+
+    if (currentWindowReady && !reportRendered) {
+      renderBunchingSection(currentRoutes, agency);
+      render(currentRoutes, weekEnd);
+      reportRendered = true;
+    }
+
+    const history = gradeHistoryData(dates, dailyByDate, currentRoutes);
+    renderGradeHistory(history.points, history.topRoutes, {
+      complete,
+      completedBatches,
+      totalBatches,
+    });
+  }
 }
 
 function render(routes, weekEnd) {

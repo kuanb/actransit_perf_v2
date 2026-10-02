@@ -836,6 +836,7 @@ footer a:hover {
   box-shadow: 0 10px 34px rgba(20, 50, 90, 0.10);
 }
 .agency-grade {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -844,12 +845,20 @@ footer a:hover {
   padding: 20px 26px;
   border-radius: 16px;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
 }
+.agency-grade.is-loading { min-height: 108px; }
 .agency-grade-letter {
   font-size: 68px;
   font-weight: 800;
   line-height: 0.95;
   letter-spacing: -0.02em;
+}
+.agency-grade-loading {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 .agency-grade-score {
   font-size: 20px;
@@ -858,9 +867,32 @@ footer a:hover {
   font-variant-numeric: tabular-nums;
 }
 .agency-grade-score span { font-size: 13px; font-weight: 600; opacity: 0.85; }
+.agency-grade-progress {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.22);
+}
+.agency-grade-progress span {
+  display: block;
+  height: 100%;
+  border-radius: 0 4px 4px 0;
+  background: #fff;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.55);
+  transition: width 220ms ease;
+}
 .agency-body { flex: 1; min-width: 280px; }
 .agency-title { font-size: 24px; font-weight: 800; letter-spacing: -0.01em; }
 .agency-sub { color: #5a6b7b; font-size: 13px; margin: 4px 0 16px; max-width: 60ch; }
+.agency-loading-status {
+  margin: -6px 0 14px;
+  color: #315f7d;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
 .grade-data-warning {
   margin: -5px 0 14px;
   padding: 9px 11px;
