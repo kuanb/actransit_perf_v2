@@ -493,10 +493,12 @@ function bunchingGradeWarning(bunching, unit = "service days") {
 }
 
 let skippedServiceChart = null;
+let skippedServiceChartSummary = skippedServiceSummary(new Map());
 
 function renderSkippedServiceChart(summary) {
   const canvas = document.getElementById("agency-skipped-service-chart");
   if (!canvas || !summary.weeks.length) return;
+  skippedServiceChartSummary = summary;
   const labels = summary.weeks.map((week) => historyDateLabel(week.startDate));
   const values = summary.weeks.map((week) => week.dropped);
   const backgroundColors = summary.weeks.map((week) =>
@@ -505,6 +507,16 @@ function renderSkippedServiceChart(summary) {
   const borderColors = summary.weeks.map((week) =>
     week.days === 7 ? "rgb(142, 24, 30)" : "rgb(194, 107, 18)"
   );
+
+  if (skippedServiceChart) {
+    skippedServiceChart.data.labels = labels;
+    skippedServiceChart.data.datasets[0].data = values;
+    skippedServiceChart.data.datasets[0].backgroundColor = backgroundColors;
+    skippedServiceChart.data.datasets[0].borderColor = borderColors;
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    skippedServiceChart.update(reduceMotion ? "none" : undefined);
+    return;
+  }
 
   skippedServiceChart = new Chart(canvas, {
     type: "bar",
@@ -523,6 +535,10 @@ function renderSkippedServiceChart(summary) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      animation: {
+        duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 320,
+        easing: "easeOutQuart",
+      },
       interaction: { mode: "index", intersect: false },
       scales: {
         x: {
@@ -541,17 +557,17 @@ function renderSkippedServiceChart(summary) {
         tooltip: {
           callbacks: {
             title: (items) => {
-              const week = summary.weeks[items[0].dataIndex];
+              const week = skippedServiceChartSummary.weeks[items[0].dataIndex];
               return `${historyDateLabel(week.startDate)}–${historyDateLabel(week.endDate)}`;
             },
             label: (ctx) => `${intFmt(ctx.parsed.y)} scheduled trips not run`,
             afterLabel: (ctx) => {
-              const week = summary.weeks[ctx.dataIndex];
+              const week = skippedServiceChartSummary.weeks[ctx.dataIndex];
               const pct = week.scheduled ? 100 * week.dropped / week.scheduled : 0;
               return `${fmt(pct)}% of ${intFmt(week.scheduled)} scheduled trips`;
             },
             footer: (items) => {
-              const week = summary.weeks[items[0].dataIndex];
+              const week = skippedServiceChartSummary.weeks[items[0].dataIndex];
               return week.days === 7 ? "7 service days" : `${week.days} service days loaded · partial week`;
             },
           },
@@ -564,10 +580,6 @@ function renderSkippedServiceChart(summary) {
 function renderAgencyHero(a, progress = { complete: true, percent: 100 }, skippedService = skippedServiceSummary(new Map())) {
   const el = document.getElementById("agency-hero");
   if (!el) return;
-  if (skippedServiceChart) {
-    skippedServiceChart.destroy();
-    skippedServiceChart = null;
-  }
   const complete = progress.complete !== false;
   const showGrade = complete && a.score != null;
   const g = showGrade ? scoreColor(a.score) : { bg: "#315f7d", fg: "#ffffff" };
@@ -605,8 +617,31 @@ function renderAgencyHero(a, progress = { complete: true, percent: 100 }, skippe
   const skippedScreenReaderSummary = skippedService.weeks.map((week) =>
     `Week of ${historyDateLabel(week.startDate)}: ${intFmt(week.dropped)} scheduled trips not run.`
   ).join(" ");
-  el.innerHTML = `
-    <div class="agency-card">
+  if (!el.querySelector(".agency-card")) {
+    el.innerHTML = `
+      <div class="agency-card">
+        <div class="agency-summary-shell"></div>
+        <section class="agency-skipped-service" aria-labelledby="agency-skipped-service-title">
+          <div class="agency-skipped-service-heading">
+            <div>
+              <div class="agency-skipped-service-kicker">Skipped service</div>
+              <h2 id="agency-skipped-service-title" class="agency-skipped-service-total">
+                <strong id="agency-skipped-service-total-value">—</strong>
+                <span>scheduled trips not run</span>
+              </h2>
+            </div>
+            <p id="agency-skipped-service-context" class="agency-skipped-service-context">Loading scheduled-trip totals…</p>
+          </div>
+          <div class="agency-skipped-service-canvas">
+            <canvas id="agency-skipped-service-chart" role="img" aria-label="Weekly scheduled bus trips that were not run"></canvas>
+          </div>
+          <p class="agency-skipped-service-note">Each bar is a Sunday–Saturday week. Amber bars are partial weeks at the edge of the loaded history.</p>
+          <p id="agency-skipped-service-screen-reader-summary" class="sr-only"></p>
+        </section>
+      </div>`;
+  }
+
+  el.querySelector(".agency-summary-shell").innerHTML = `
       <div class="agency-grade${complete ? "" : " is-loading"}" style="background:${g.bg};color:${g.fg}">
         ${gradeContent}
         ${progressBar}
@@ -632,29 +667,15 @@ function renderAgencyHero(a, progress = { complete: true, percent: 100 }, skippe
           ${stat("Unique trips", intFmt(a.trips))}
           ${stat("Stops measured", intFmt(a.observations))}
         </div>
-      </div>
-      <section class="agency-skipped-service" aria-labelledby="agency-skipped-service-title">
-        <div class="agency-skipped-service-heading">
-          <div>
-            <div class="agency-skipped-service-kicker">Skipped service</div>
-            <h2 id="agency-skipped-service-title" class="agency-skipped-service-total">
-              <strong>${hasSkippedService ? intFmt(skippedService.totalDropped) : "—"}</strong>
-              <span>scheduled trips not run</span>
-            </h2>
-          </div>
-          <p class="agency-skipped-service-context">
-            ${hasSkippedService
-              ? `${skippedPct == null ? "—" : fmt(skippedPct)}% of ${intFmt(skippedService.totalScheduled)} scheduled trips · ${intFmt(skippedService.totalDays)} service days loaded · ${skippedPeriod}`
-              : "Loading scheduled-trip totals…"}
-          </p>
-        </div>
-        <div class="agency-skipped-service-canvas">
-          <canvas id="agency-skipped-service-chart" role="img" aria-label="Weekly scheduled bus trips that were not run"></canvas>
-        </div>
-        <p class="agency-skipped-service-note">Each bar is a Sunday–Saturday week. Amber bars are partial weeks at the edge of the loaded history.</p>
-        <p class="sr-only">${skippedScreenReaderSummary}</p>
-      </section>
-    </div>`;
+      </div>`;
+
+  document.getElementById("agency-skipped-service-total-value").textContent = hasSkippedService
+    ? intFmt(skippedService.totalDropped)
+    : "—";
+  document.getElementById("agency-skipped-service-context").textContent = hasSkippedService
+    ? `${skippedPct == null ? "—" : fmt(skippedPct)}% of ${intFmt(skippedService.totalScheduled)} scheduled trips · ${intFmt(skippedService.totalDays)} service days loaded · ${skippedPeriod}`
+    : "Loading scheduled-trip totals…";
+  document.getElementById("agency-skipped-service-screen-reader-summary").textContent = skippedScreenReaderSummary;
   el.hidden = false;
   renderSkippedServiceChart(skippedService);
 }

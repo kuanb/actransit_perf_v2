@@ -835,6 +835,14 @@ footer a:hover {
   border: 1px solid #e2e8f0;
   box-shadow: 0 10px 34px rgba(20, 50, 90, 0.10);
 }
+.agency-summary-shell {
+  display: flex;
+  flex: 1 0 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 26px;
+  min-width: 0;
+}
 .agency-grade {
   position: relative;
   display: flex;
