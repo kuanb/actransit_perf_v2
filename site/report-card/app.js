@@ -527,14 +527,14 @@ function skippedServiceHatchPattern(canvas) {
   return canvas.getContext("2d").createPattern(tile, "repeat");
 }
 
-function renderSkippedServiceChart(summary) {
+function renderSkippedServiceChart(summary, showProjection) {
   const canvas = document.getElementById("agency-skipped-service-chart");
   if (!canvas || !summary.weeks.length) return;
   skippedServiceChartSummary = summary;
   const labels = summary.weeks.map((week) => historyDateLabel(week.startDate));
   const values = summary.weeks.map((week) => week.dropped);
   const projectedAdds = summary.weeks.map((week) =>
-    Math.max(0, skippedServiceProjection(week, summary.weeks).total - week.dropped)
+    showProjection ? Math.max(0, skippedServiceProjection(week, summary.weeks).total - week.dropped) : 0
   );
   const hatchPattern = skippedServiceHatchPattern(canvas);
   const backgroundColors = summary.weeks.map((week) =>
@@ -682,6 +682,7 @@ function renderAgencyHero(a, progress = { complete: true, percent: 100 }, skippe
   const skippedScreenReaderSummary = skippedService.weeks.map((week) => {
     const observed = `${intFmt(week.dropped)} scheduled trips not run`;
     if (week.days === 7) return `Week of ${historyDateLabel(week.startDate)}: ${observed}.`;
+    if (!complete) return `Week of ${historyDateLabel(week.startDate)}: ${observed} so far.`;
     const projection = skippedServiceProjection(week, skippedService.weeks);
     const capStatus = projection.capped ? " after applying the 110% cap" : "";
     return `Week of ${historyDateLabel(week.startDate)}: ${observed} so far; ${intFmt(projection.total)} projected for seven days${capStatus}.`;
@@ -704,7 +705,7 @@ function renderAgencyHero(a, progress = { complete: true, percent: 100 }, skippe
           <div class="agency-skipped-service-canvas">
             <canvas id="agency-skipped-service-chart" role="img" aria-label="Weekly scheduled bus trips that were not run"></canvas>
           </div>
-          <p class="agency-skipped-service-note">Each bar is a Sunday–Saturday week. Amber bars are partial weeks; hatched extensions linearly project their loaded daily average across seven days, capped at 110% of the highest observed week.</p>
+          <p id="agency-skipped-service-note" class="agency-skipped-service-note"></p>
           <p id="agency-skipped-service-screen-reader-summary" class="sr-only"></p>
         </section>
       </div>`;
@@ -744,9 +745,12 @@ function renderAgencyHero(a, progress = { complete: true, percent: 100 }, skippe
   document.getElementById("agency-skipped-service-context").textContent = hasSkippedService
     ? `${skippedPct == null ? "—" : fmt(skippedPct)}% of ${intFmt(skippedService.totalScheduled)} scheduled trips · ${intFmt(skippedService.totalDays)} service days loaded · ${skippedPeriod}`
     : "Loading scheduled-trip totals…";
+  document.getElementById("agency-skipped-service-note").textContent = complete
+    ? "Each bar is a Sunday–Saturday week. Amber bars are partial weeks; hatched extensions linearly project their loaded daily average across seven days, capped at 110% of the highest observed week."
+    : "Each bar is a Sunday–Saturday week. Amber bars are partial weeks; projections appear after the complete history is loaded.";
   document.getElementById("agency-skipped-service-screen-reader-summary").textContent = skippedScreenReaderSummary;
   el.hidden = false;
-  renderSkippedServiceChart(skippedService);
+  renderSkippedServiceChart(skippedService, complete);
 }
 
 function renderGradeLegend() {
