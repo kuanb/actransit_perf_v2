@@ -495,12 +495,39 @@ function bunchingGradeWarning(bunching, unit = "service days") {
 let skippedServiceChart = null;
 let skippedServiceChartSummary = skippedServiceSummary(new Map());
 
+function skippedServiceProjectedTotal(week) {
+  if (!week || week.days <= 0 || week.days >= 7) return week ? week.dropped : 0;
+  return Math.round(week.dropped * 7 / week.days);
+}
+
+function skippedServiceHatchPattern(canvas) {
+  const tile = document.createElement("canvas");
+  tile.width = 10;
+  tile.height = 10;
+  const tileContext = tile.getContext("2d");
+  tileContext.fillStyle = "rgba(232, 140, 35, 0.12)";
+  tileContext.fillRect(0, 0, tile.width, tile.height);
+  tileContext.strokeStyle = "rgba(155, 91, 12, 0.9)";
+  tileContext.lineWidth = 1.5;
+  tileContext.beginPath();
+  tileContext.moveTo(-2, 10);
+  tileContext.lineTo(10, -2);
+  tileContext.moveTo(3, 13);
+  tileContext.lineTo(13, 3);
+  tileContext.stroke();
+  return canvas.getContext("2d").createPattern(tile, "repeat");
+}
+
 function renderSkippedServiceChart(summary) {
   const canvas = document.getElementById("agency-skipped-service-chart");
   if (!canvas || !summary.weeks.length) return;
   skippedServiceChartSummary = summary;
   const labels = summary.weeks.map((week) => historyDateLabel(week.startDate));
   const values = summary.weeks.map((week) => week.dropped);
+  const projectedAdds = summary.weeks.map((week) =>
+    Math.max(0, skippedServiceProjectedTotal(week) - week.dropped)
+  );
+  const hatchPattern = skippedServiceHatchPattern(canvas);
   const backgroundColors = summary.weeks.map((week) =>
     week.days === 7 ? "rgba(173, 30, 35, 0.82)" : "rgba(232, 140, 35, 0.78)"
   );
@@ -513,6 +540,8 @@ function renderSkippedServiceChart(summary) {
     skippedServiceChart.data.datasets[0].data = values;
     skippedServiceChart.data.datasets[0].backgroundColor = backgroundColors;
     skippedServiceChart.data.datasets[0].borderColor = borderColors;
+    skippedServiceChart.data.datasets[1].data = projectedAdds;
+    skippedServiceChart.data.datasets[1].backgroundColor = hatchPattern;
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     skippedServiceChart.update(reduceMotion ? "none" : undefined);
     return;
@@ -530,6 +559,16 @@ function renderSkippedServiceChart(summary) {
         borderWidth: 1,
         borderRadius: 4,
         maxBarThickness: 34,
+        stack: "trips",
+      }, {
+        label: "Projected additional trips not run",
+        data: projectedAdds,
+        backgroundColor: hatchPattern,
+        borderColor: "rgb(194, 107, 18)",
+        borderWidth: 1,
+        borderRadius: 4,
+        maxBarThickness: 34,
+        stack: "trips",
       }],
     },
     options: {
@@ -542,11 +581,13 @@ function renderSkippedServiceChart(summary) {
       interaction: { mode: "index", intersect: false },
       scales: {
         x: {
+          stacked: true,
           grid: { display: false },
           ticks: { maxRotation: 0, autoSkipPadding: 14 },
           title: { display: true, text: "Week starting" },
         },
         y: {
+          stacked: true,
           beginAtZero: true,
           ticks: { precision: 0 },
           title: { display: true, text: "Trips not run" },
@@ -555,20 +596,33 @@ function renderSkippedServiceChart(summary) {
       plugins: {
         legend: { display: false },
         tooltip: {
+          filter: (item) => Number(item.raw) > 0,
           callbacks: {
             title: (items) => {
               const week = skippedServiceChartSummary.weeks[items[0].dataIndex];
               return `${historyDateLabel(week.startDate)}–${historyDateLabel(week.endDate)}`;
             },
-            label: (ctx) => `${intFmt(ctx.parsed.y)} scheduled trips not run`,
+            label: (ctx) => {
+              const week = skippedServiceChartSummary.weeks[ctx.dataIndex];
+              if (ctx.datasetIndex === 1) {
+                return `Projected additional: ${intFmt(ctx.parsed.y)} trips`;
+              }
+              const suffix = week.days === 7 ? "" : " so far";
+              return `${intFmt(ctx.parsed.y)} scheduled trips not run${suffix}`;
+            },
             afterLabel: (ctx) => {
               const week = skippedServiceChartSummary.weeks[ctx.dataIndex];
+              if (ctx.datasetIndex === 1) {
+                return `Projected full week: ${intFmt(skippedServiceProjectedTotal(week))} trips not run`;
+              }
               const pct = week.scheduled ? 100 * week.dropped / week.scheduled : 0;
               return `${fmt(pct)}% of ${intFmt(week.scheduled)} scheduled trips`;
             },
             footer: (items) => {
               const week = skippedServiceChartSummary.weeks[items[0].dataIndex];
-              return week.days === 7 ? "7 service days" : `${week.days} service days loaded · partial week`;
+              return week.days === 7
+                ? "7 service days"
+                : `Linear projection from ${week.days} loaded service ${week.days === 1 ? "day" : "days"}`;
             },
           },
         },
@@ -614,9 +668,11 @@ function renderAgencyHero(a, progress = { complete: true, percent: 100 }, skippe
   const skippedPeriod = skippedService.firstDate && skippedService.lastDate
     ? `${historyDateLabel(skippedService.firstDate)}–${historyDateLabel(skippedService.lastDate)}`
     : "Waiting for daily reports";
-  const skippedScreenReaderSummary = skippedService.weeks.map((week) =>
-    `Week of ${historyDateLabel(week.startDate)}: ${intFmt(week.dropped)} scheduled trips not run.`
-  ).join(" ");
+  const skippedScreenReaderSummary = skippedService.weeks.map((week) => {
+    const observed = `${intFmt(week.dropped)} scheduled trips not run`;
+    if (week.days === 7) return `Week of ${historyDateLabel(week.startDate)}: ${observed}.`;
+    return `Week of ${historyDateLabel(week.startDate)}: ${observed} so far; ${intFmt(skippedServiceProjectedTotal(week))} projected for seven days.`;
+  }).join(" ");
   if (!el.querySelector(".agency-card")) {
     el.innerHTML = `
       <div class="agency-card">
@@ -635,7 +691,7 @@ function renderAgencyHero(a, progress = { complete: true, percent: 100 }, skippe
           <div class="agency-skipped-service-canvas">
             <canvas id="agency-skipped-service-chart" role="img" aria-label="Weekly scheduled bus trips that were not run"></canvas>
           </div>
-          <p class="agency-skipped-service-note">Each bar is a Sunday–Saturday week. Amber bars are partial weeks at the edge of the loaded history.</p>
+          <p class="agency-skipped-service-note">Each bar is a Sunday–Saturday week. Amber bars are partial weeks; hatched extensions linearly project their loaded daily average across seven days.</p>
           <p id="agency-skipped-service-screen-reader-summary" class="sr-only"></p>
         </section>
       </div>`;
