@@ -926,6 +926,74 @@ footer a:hover {
 }
 .as-sub { font-size: 11px; color: #9aa7b3; margin-top: 1px; }
 
+.agency-skipped-service {
+  flex: 1 0 100%;
+  min-width: 0;
+  padding-top: 22px;
+  border-top: 1px solid #d7e1ea;
+}
+.agency-skipped-service-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 14px;
+}
+.agency-skipped-service-kicker {
+  color: #9b2026;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.agency-skipped-service-total {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 2px 0 0;
+  line-height: 1;
+}
+.agency-skipped-service-total strong {
+  color: #ad1e23;
+  font-size: clamp(42px, 6vw, 68px);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+}
+.agency-skipped-service-total span {
+  color: #273b4e;
+  font-size: clamp(19px, 2.5vw, 28px);
+  font-weight: 750;
+  letter-spacing: -0.02em;
+}
+.agency-skipped-service-context {
+  max-width: 38ch;
+  margin: 0 0 5px;
+  color: #5a6b7b;
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: right;
+}
+.agency-skipped-service-canvas {
+  position: relative;
+  height: 250px;
+  padding: 10px 12px 2px;
+  border: 1px solid #e1e7ed;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.88);
+}
+.agency-skipped-service-note {
+  margin: 8px 2px 0;
+  color: #748494;
+  font-size: 11px;
+}
+
+@media (max-width: 640px) {
+  .agency-skipped-service-heading { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .agency-skipped-service-context { margin-bottom: 0; text-align: left; }
+  .agency-skipped-service-canvas { height: 225px; padding: 8px 4px 2px; }
+}
+
 .report-intro {
   margin-bottom: 24px;
 }

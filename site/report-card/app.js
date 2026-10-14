@@ -415,6 +415,58 @@ function aggregateAgency(routes) {
   return agency;
 }
 
+function skippedServiceSummary(dailyByDate) {
+  const byWeek = new Map();
+  let totalDropped = 0;
+  let totalScheduled = 0;
+  let totalDays = 0;
+  let firstDate = "";
+  let lastDate = "";
+
+  for (const [date, daily] of dailyByDate.entries()) {
+    const compliance = daily && daily.schedule_compliance;
+    if (!compliance) continue;
+    const scheduled = Number(compliance.scheduled_trips) || 0;
+    const dropped = Number(compliance.dropped_trips) || 0;
+    const serviceDate = new Date(`${date}T00:00:00Z`);
+    if (Number.isNaN(serviceDate.getTime())) continue;
+
+    const weekStart = new Date(serviceDate);
+    weekStart.setUTCDate(weekStart.getUTCDate() - weekStart.getUTCDay());
+    const weekEnd = new Date(weekStart);
+    weekEnd.setUTCDate(weekEnd.getUTCDate() + 6);
+    const weekStartDate = weekStart.toISOString().slice(0, 10);
+    let week = byWeek.get(weekStartDate);
+    if (!week) {
+      week = {
+        startDate: weekStartDate,
+        endDate: weekEnd.toISOString().slice(0, 10),
+        scheduled: 0,
+        dropped: 0,
+        days: 0,
+      };
+      byWeek.set(weekStartDate, week);
+    }
+    week.scheduled += scheduled;
+    week.dropped += dropped;
+    week.days += 1;
+    totalDropped += dropped;
+    totalScheduled += scheduled;
+    totalDays += 1;
+    if (!firstDate || date < firstDate) firstDate = date;
+    if (!lastDate || date > lastDate) lastDate = date;
+  }
+
+  return {
+    weeks: [...byWeek.values()].sort((a, b) => a.startDate.localeCompare(b.startDate)),
+    totalDropped,
+    totalScheduled,
+    totalDays,
+    firstDate,
+    lastDate,
+  };
+}
+
 function bunchingGradeWarning(bunching, unit = "service days") {
   if (!bunching) {
     return `Bunching data is missing for this four-week window. Its ${BUNCHING_GRADE_WEIGHT}% grade component is not used; the other available components are renormalized.`;
@@ -440,9 +492,82 @@ function bunchingGradeWarning(bunching, unit = "service days") {
   return `Bunching is not eligible for grading in this window. ${suffix}`;
 }
 
-function renderAgencyHero(a, progress = { complete: true, percent: 100 }) {
+let skippedServiceChart = null;
+
+function renderSkippedServiceChart(summary) {
+  const canvas = document.getElementById("agency-skipped-service-chart");
+  if (!canvas || !summary.weeks.length) return;
+  const labels = summary.weeks.map((week) => historyDateLabel(week.startDate));
+  const values = summary.weeks.map((week) => week.dropped);
+  const backgroundColors = summary.weeks.map((week) =>
+    week.days === 7 ? "rgba(173, 30, 35, 0.82)" : "rgba(232, 140, 35, 0.78)"
+  );
+  const borderColors = summary.weeks.map((week) =>
+    week.days === 7 ? "rgb(142, 24, 30)" : "rgb(194, 107, 18)"
+  );
+
+  skippedServiceChart = new Chart(canvas, {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [{
+        label: "Scheduled trips not run",
+        data: values,
+        backgroundColor: backgroundColors,
+        borderColor: borderColors,
+        borderWidth: 1,
+        borderRadius: 4,
+        maxBarThickness: 34,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { maxRotation: 0, autoSkipPadding: 14 },
+          title: { display: true, text: "Week starting" },
+        },
+        y: {
+          beginAtZero: true,
+          ticks: { precision: 0 },
+          title: { display: true, text: "Trips not run" },
+        },
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            title: (items) => {
+              const week = summary.weeks[items[0].dataIndex];
+              return `${historyDateLabel(week.startDate)}–${historyDateLabel(week.endDate)}`;
+            },
+            label: (ctx) => `${intFmt(ctx.parsed.y)} scheduled trips not run`,
+            afterLabel: (ctx) => {
+              const week = summary.weeks[ctx.dataIndex];
+              const pct = week.scheduled ? 100 * week.dropped / week.scheduled : 0;
+              return `${fmt(pct)}% of ${intFmt(week.scheduled)} scheduled trips`;
+            },
+            footer: (items) => {
+              const week = summary.weeks[items[0].dataIndex];
+              return week.days === 7 ? "7 service days" : `${week.days} service days loaded · partial week`;
+            },
+          },
+        },
+      },
+    },
+  });
+}
+
+function renderAgencyHero(a, progress = { complete: true, percent: 100 }, skippedService = skippedServiceSummary(new Map())) {
   const el = document.getElementById("agency-hero");
   if (!el) return;
+  if (skippedServiceChart) {
+    skippedServiceChart.destroy();
+    skippedServiceChart = null;
+  }
   const complete = progress.complete !== false;
   const showGrade = complete && a.score != null;
   const g = showGrade ? scoreColor(a.score) : { bg: "#315f7d", fg: "#ffffff" };
@@ -470,6 +595,16 @@ function renderAgencyHero(a, progress = { complete: true, percent: 100 }) {
         <span style="width:${progressPct}%"></span>
       </div>`
     : "";
+  const hasSkippedService = skippedService.totalDays > 0;
+  const skippedPct = skippedService.totalScheduled > 0
+    ? 100 * skippedService.totalDropped / skippedService.totalScheduled
+    : null;
+  const skippedPeriod = skippedService.firstDate && skippedService.lastDate
+    ? `${historyDateLabel(skippedService.firstDate)}–${historyDateLabel(skippedService.lastDate)}`
+    : "Waiting for daily reports";
+  const skippedScreenReaderSummary = skippedService.weeks.map((week) =>
+    `Week of ${historyDateLabel(week.startDate)}: ${intFmt(week.dropped)} scheduled trips not run.`
+  ).join(" ");
   el.innerHTML = `
     <div class="agency-card">
       <div class="agency-grade${complete ? "" : " is-loading"}" style="background:${g.bg};color:${g.fg}">
@@ -498,8 +633,30 @@ function renderAgencyHero(a, progress = { complete: true, percent: 100 }) {
           ${stat("Stops measured", intFmt(a.observations))}
         </div>
       </div>
+      <section class="agency-skipped-service" aria-labelledby="agency-skipped-service-title">
+        <div class="agency-skipped-service-heading">
+          <div>
+            <div class="agency-skipped-service-kicker">Skipped service</div>
+            <h2 id="agency-skipped-service-title" class="agency-skipped-service-total">
+              <strong>${hasSkippedService ? intFmt(skippedService.totalDropped) : "—"}</strong>
+              <span>scheduled trips not run</span>
+            </h2>
+          </div>
+          <p class="agency-skipped-service-context">
+            ${hasSkippedService
+              ? `${skippedPct == null ? "—" : fmt(skippedPct)}% of ${intFmt(skippedService.totalScheduled)} scheduled trips · ${intFmt(skippedService.totalDays)} service days loaded · ${skippedPeriod}`
+              : "Loading scheduled-trip totals…"}
+          </p>
+        </div>
+        <div class="agency-skipped-service-canvas">
+          <canvas id="agency-skipped-service-chart" role="img" aria-label="Weekly scheduled bus trips that were not run"></canvas>
+        </div>
+        <p class="agency-skipped-service-note">Each bar is a Sunday–Saturday week. Amber bars are partial weeks at the edge of the loaded history.</p>
+        <p class="sr-only">${skippedScreenReaderSummary}</p>
+      </section>
     </div>`;
   el.hidden = false;
+  renderSkippedServiceChart(skippedService);
 }
 
 function renderGradeLegend() {
@@ -1059,7 +1216,7 @@ async function load() {
     percent: 0,
     currentWindowReady: false,
     status: "Loading stats index…",
-  });
+  }, skippedServiceSummary(new Map()));
 
   const [dates, weekEnd] = await Promise.all([loadDailyIndex(), latestWeekEnd()]);
   if (!dates.length) {
@@ -1112,7 +1269,7 @@ async function load() {
       percent: 100 * processedDates / neededDates.length,
       currentWindowReady,
       status,
-    });
+    }, skippedServiceSummary(dailyByDate));
 
     const observed = currentDailies
       .map((daily) => daily.service_date)
