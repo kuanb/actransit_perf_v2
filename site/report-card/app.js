@@ -642,7 +642,12 @@ function renderSkippedServiceChart(summary, showProjection) {
   });
 }
 
-function renderAgencyHero(a, progress = { complete: true, percent: 100 }, skippedService = skippedServiceSummary(new Map())) {
+function renderAgencyHero(
+  a,
+  progress = { complete: true, percent: 100 },
+  skippedService = skippedServiceSummary(new Map()),
+  currentWindowService = skippedServiceSummary(new Map())
+) {
   const el = document.getElementById("agency-hero");
   if (!el) return;
   const complete = progress.complete !== false;
@@ -679,6 +684,13 @@ function renderAgencyHero(a, progress = { complete: true, percent: 100 }, skippe
   const skippedPeriod = skippedService.firstDate && skippedService.lastDate
     ? `${historyDateLabel(skippedService.firstDate)}–${historyDateLabel(skippedService.lastDate)}`
     : "Waiting for daily reports";
+  const currentWindowDays = currentWindowService.totalDays;
+  const currentWindowScope = progress.currentWindowReady
+    ? "all routes · latest 4 weeks"
+    : `all routes · ${currentWindowDays} of ${WINDOW_DAYS} days loaded`;
+  const currentWindowDroppedPct = currentWindowService.totalScheduled
+    ? 100 * currentWindowService.totalDropped / currentWindowService.totalScheduled
+    : null;
   const skippedScreenReaderSummary = skippedService.weeks.map((week) => {
     const observed = `${intFmt(week.dropped)} scheduled trips not run`;
     if (week.days === 7) return `Week of ${historyDateLabel(week.startDate)}: ${observed}.`;
@@ -734,7 +746,8 @@ function renderAgencyHero(a, progress = { complete: true, percent: 100 }, skippe
           ${hasBunching ? stat("Bunched arrivals", `${fmt(a.bunched_headway_pct)}%`) : ""}
           ${hasBunching && a.spacing_penalty_min != null ? stat("Spacing penalty", `+${fmt(a.spacing_penalty_min)} min`) : ""}
           ${stat(complete ? "Routes graded" : "Routes included", intFmt(a.routes))}
-          ${stat("Unique trips", intFmt(a.trips))}
+          ${stat("Scheduled trips", currentWindowDays ? intFmt(currentWindowService.totalScheduled) : "—", currentWindowScope)}
+          ${stat("Dropped / not observed", currentWindowDays ? intFmt(currentWindowService.totalDropped) : "—", currentWindowDroppedPct == null ? "loading four-week total…" : `${fmt(currentWindowDroppedPct)}% of scheduled${progress.currentWindowReady ? "" : " so far"}`)}
           ${stat("Stops measured", intFmt(a.observations))}
         </div>
       </div>`;
@@ -1358,12 +1371,17 @@ async function load() {
     const status = currentWindowReady
       ? `Current four-week totals ready · loading history week ${completedBatches} of ${totalBatches}`
       : `Loading current four-week totals · ${currentDaysProcessed} of ${currentDates.length} service days`;
+    const currentDailyByDate = new Map(
+      currentDates
+        .filter((date) => dailyByDate.has(date))
+        .map((date) => [date, dailyByDate.get(date)])
+    );
     renderAgencyHero(agency, {
       complete,
       percent: 100 * processedDates / neededDates.length,
       currentWindowReady,
       status,
-    }, skippedServiceSummary(dailyByDate));
+    }, skippedServiceSummary(dailyByDate), skippedServiceSummary(currentDailyByDate));
 
     const observed = currentDailies
       .map((daily) => daily.service_date)
