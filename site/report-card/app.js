@@ -14,6 +14,7 @@ const BUNCHING_MAX_FREQUENCY_MIN = 40;
 const BUNCHING_MIN_CV_WEIGHT = 100;
 const BUNCHING_MIN_CV_COVERAGE = 0.10;
 const BUNCHING_GRADE_WEIGHT = 35;
+const SKIPPED_SERVICE_PROJECTION_CAP_RATIO = 1.10;
 
 // Composite weights. Components with no data for a route are dropped and
 // the remaining weights renormalized at score time.
@@ -495,9 +496,17 @@ function bunchingGradeWarning(bunching, unit = "service days") {
 let skippedServiceChart = null;
 let skippedServiceChartSummary = skippedServiceSummary(new Map());
 
-function skippedServiceProjectedTotal(week) {
-  if (!week || week.days <= 0 || week.days >= 7) return week ? week.dropped : 0;
-  return Math.round(week.dropped * 7 / week.days);
+function skippedServiceProjection(week, weeks) {
+  if (!week || week.days <= 0 || week.days >= 7) {
+    return { total: week ? week.dropped : 0, capped: false };
+  }
+  const rawTotal = Math.round(week.dropped * 7 / week.days);
+  const periodMax = Math.max(0, ...weeks.map((candidate) => candidate.dropped));
+  const limit = Math.floor(periodMax * SKIPPED_SERVICE_PROJECTION_CAP_RATIO);
+  return {
+    total: Math.min(rawTotal, limit),
+    capped: rawTotal > limit,
+  };
 }
 
 function skippedServiceHatchPattern(canvas) {
@@ -525,7 +534,7 @@ function renderSkippedServiceChart(summary) {
   const labels = summary.weeks.map((week) => historyDateLabel(week.startDate));
   const values = summary.weeks.map((week) => week.dropped);
   const projectedAdds = summary.weeks.map((week) =>
-    Math.max(0, skippedServiceProjectedTotal(week) - week.dropped)
+    Math.max(0, skippedServiceProjection(week, summary.weeks).total - week.dropped)
   );
   const hatchPattern = skippedServiceHatchPattern(canvas);
   const backgroundColors = summary.weeks.map((week) =>
@@ -613,7 +622,9 @@ function renderSkippedServiceChart(summary) {
             afterLabel: (ctx) => {
               const week = skippedServiceChartSummary.weeks[ctx.dataIndex];
               if (ctx.datasetIndex === 1) {
-                return `Projected full week: ${intFmt(skippedServiceProjectedTotal(week))} trips not run`;
+                const projection = skippedServiceProjection(week, skippedServiceChartSummary.weeks);
+                const suffix = projection.capped ? " · 110% cap applied" : "";
+                return `Projected full week: ${intFmt(projection.total)} trips not run${suffix}`;
               }
               const pct = week.scheduled ? 100 * week.dropped / week.scheduled : 0;
               return `${fmt(pct)}% of ${intFmt(week.scheduled)} scheduled trips`;
@@ -671,7 +682,9 @@ function renderAgencyHero(a, progress = { complete: true, percent: 100 }, skippe
   const skippedScreenReaderSummary = skippedService.weeks.map((week) => {
     const observed = `${intFmt(week.dropped)} scheduled trips not run`;
     if (week.days === 7) return `Week of ${historyDateLabel(week.startDate)}: ${observed}.`;
-    return `Week of ${historyDateLabel(week.startDate)}: ${observed} so far; ${intFmt(skippedServiceProjectedTotal(week))} projected for seven days.`;
+    const projection = skippedServiceProjection(week, skippedService.weeks);
+    const capStatus = projection.capped ? " after applying the 110% cap" : "";
+    return `Week of ${historyDateLabel(week.startDate)}: ${observed} so far; ${intFmt(projection.total)} projected for seven days${capStatus}.`;
   }).join(" ");
   if (!el.querySelector(".agency-card")) {
     el.innerHTML = `
@@ -691,7 +704,7 @@ function renderAgencyHero(a, progress = { complete: true, percent: 100 }, skippe
           <div class="agency-skipped-service-canvas">
             <canvas id="agency-skipped-service-chart" role="img" aria-label="Weekly scheduled bus trips that were not run"></canvas>
           </div>
-          <p class="agency-skipped-service-note">Each bar is a Sunday–Saturday week. Amber bars are partial weeks; hatched extensions linearly project their loaded daily average across seven days.</p>
+          <p class="agency-skipped-service-note">Each bar is a Sunday–Saturday week. Amber bars are partial weeks; hatched extensions linearly project their loaded daily average across seven days, capped at 110% of the highest observed week.</p>
           <p id="agency-skipped-service-screen-reader-summary" class="sr-only"></p>
         </section>
       </div>`;
