@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AC Transit route report card</title>
-  <link rel="stylesheet" href="../styles.css?v=report-card-service-volume-v1">
+  <link rel="stylesheet" href="../styles.css?v=report-card-v2">
   <script src="../independence-notice.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 </head>
@@ -23,6 +23,12 @@
     </nav>
   </header>
 
+  <div class="report-view-switch" role="group" aria-label="Report card view">
+    <span>Report card view</span>
+    <button type="button" data-report-view="v2" aria-pressed="true">V2</button>
+    <button type="button" data-report-view="legacy" aria-pressed="false">Legacy</button>
+  </div>
+
   <aside class="coverage-card" aria-label="Press coverage">
     <span class="coverage-card-icon" aria-hidden="true">📰</span>
     <div class="coverage-card-copy">
@@ -33,6 +39,48 @@
       </span>
     </div>
   </aside>
+
+  <section id="report-v2-overview" class="report-v2-overview" hidden aria-labelledby="v2-report-title">
+    <div class="v2-report-hero">
+      <div class="v2-grade-block">
+        <p class="v2-eyebrow">Trailing four-week report card</p>
+        <div id="v2-grade" class="v2-grade is-loading" aria-live="polite">
+          <strong id="v2-grade-letter">—</strong>
+          <span id="v2-grade-score">Calculating</span>
+        </div>
+      </div>
+      <div class="v2-hero-copy">
+        <h1 id="v2-report-title">How AC Transit service is performing</h1>
+        <p id="v2-report-period" class="v2-report-period">Loading the latest 28 service days…</p>
+        <p id="v2-report-summary" class="v2-report-summary">The grade combines the four rider-facing factors shown below.</p>
+        <a href="#v2-grade-breakdown">See what drives the grade ↓</a>
+      </div>
+    </div>
+
+    <article class="v2-missed-service" aria-labelledby="v2-missed-title">
+      <div>
+        <p class="v2-eyebrow">What riders may feel first</p>
+        <h2 id="v2-missed-title"><strong id="v2-missed-pct">—</strong> of scheduled trips were dropped or not observed</h2>
+        <p id="v2-missed-count" class="v2-missed-count">Loading scheduled-trip totals…</p>
+      </div>
+      <div class="v2-missed-scale" role="img" aria-labelledby="v2-missed-scale-label">
+        <div><span id="v2-missed-scale-fill"></span></div>
+        <p id="v2-missed-scale-label">Loading service-delivery share…</p>
+      </div>
+      <details>
+        <summary>Counts and data note</summary>
+        <p id="v2-missed-detail">Loading supporting counts…</p>
+        <p>Missed trips are not a separate fifth grade factor. For routes included in the grade, their missing scheduled stops lower <strong>On Time Service Delivered</strong>; they do not receive an additional weight.</p>
+      </details>
+    </article>
+  </section>
+
+  <section id="v2-grade-breakdown" class="v2-grade-breakdown" hidden aria-labelledby="v2-grade-breakdown-title">
+    <p class="v2-eyebrow">What drives the result</p>
+    <h2 id="v2-grade-breakdown-title">Four factors make up the grade</h2>
+    <p id="v2-formula-summary" class="v2-breakdown-intro">Each factor earns a 0–100 sub-score. Its weighted point contribution adds to the overall score.</p>
+    <div id="v2-factor-list" class="v2-factor-list"></div>
+  </section>
 
   <section id="agency-hero" class="agency-hero" hidden></section>
 
@@ -53,6 +101,7 @@
   </section>
 
   <section id="grade-history" aria-labelledby="grade-history-title">
+    <p class="v2-only v2-section-question">How has the result changed?</p>
     <h2 id="grade-history-title">Grade history</h2>
     <p class="muted defn">Each point is the same trailing four-week score used above, sampled every seven service days. History starts once a complete 28-day evaluation window is available.</p>
     <div class="grade-history-grid">
@@ -263,6 +312,7 @@
   </section>
 
   <section id="score-methodology-section">
+    <p class="v2-only v2-section-question">What are the exact scoring rules?</p>
     <h2>How the score is computed</h2>
     <div id="score-methodology">
       <p class="muted defn">The composite score blends four metrics over the trailing four-week window:</p>
@@ -277,7 +327,8 @@
     <div id="grade-legend" class="grade-legend"></div>
   </section>
 
-  <section>
+  <section id="route-report-card-section">
+    <p class="v2-only v2-section-question">Where does performance differ?</p>
     <h2>Route report card</h2>
     <p class="muted">Sorted best-to-worst by composite score. Click a column header to re-sort. Click any row to expand the full metric breakdown, or <em>Route page</em> for the per-route analysis.</p>
     <p class="muted defn">The agency grade and table hide routes averaging fewer than 10 scheduled runs per active service day. Lettered Transbay routes are always included.</p>
@@ -322,7 +373,7 @@
   </footer>
 
   <script src="../lib.js?v=api-health-v1"></script>
-  <script src="app.js?v=report-card-service-volume-v1"></script>
+  <script src="app.js?v=report-card-v2"></script>
   <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "0e36b12e46b04a69b5e9ff6883f6d23d"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
 </html>

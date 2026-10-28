@@ -15,6 +15,7 @@ const BUNCHING_MIN_CV_WEIGHT = 100;
 const BUNCHING_MIN_CV_COVERAGE = 0.10;
 const BUNCHING_GRADE_WEIGHT = 35;
 const SKIPPED_SERVICE_PROJECTION_CAP_RATIO = 1.10;
+const REPORT_VIEW_STORAGE_KEY = "actransit-report-card-view";
 
 // Composite weights. Components with no data for a route are dropped and
 // the remaining weights renormalized at score time.
@@ -24,6 +25,49 @@ const WEIGHTS = {
   speed: 15,
   bunching: BUNCHING_GRADE_WEIGHT,
 };
+
+function selectedReportView() {
+  const requested = new URLSearchParams(window.location.search).get("view");
+  if (requested === "v2" || requested === "legacy") return requested;
+  try {
+    return localStorage.getItem(REPORT_VIEW_STORAGE_KEY) === "legacy" ? "legacy" : "v2";
+  } catch (_error) {
+    return "v2";
+  }
+}
+
+function applyReportView(view, persist = false) {
+  const next = view === "legacy" ? "legacy" : "v2";
+  document.body.classList.toggle("report-card-v2", next === "v2");
+  for (const el of document.querySelectorAll("[data-report-view]")) {
+    el.setAttribute("aria-pressed", String(el.dataset.reportView === next));
+  }
+  document.getElementById("report-v2-overview").hidden = next !== "v2";
+  document.getElementById("v2-grade-breakdown").hidden = next !== "v2";
+  if (persist) {
+    try {
+      localStorage.setItem(REPORT_VIEW_STORAGE_KEY, next);
+    } catch (_error) {
+      // The toggle still works when browser storage is unavailable.
+    }
+    const url = new URL(window.location.href);
+    if (next === "legacy") url.searchParams.set("view", "legacy");
+    else url.searchParams.delete("view");
+    window.history.replaceState(null, "", url);
+  }
+  if (next === "v2") {
+    window.requestAnimationFrame(() => {
+      for (const chart of gradeHistoryCharts.values()) chart.resize();
+    });
+  }
+}
+
+function initializeReportView() {
+  applyReportView(selectedReportView());
+  for (const button of document.querySelectorAll("[data-report-view]")) {
+    button.addEventListener("click", () => applyReportView(button.dataset.reportView, true));
+  }
+}
 
 // Letter-grade bands keyed by inclusive lower bound. Standard US scale:
 // A+ 97-100, A 93-96, A- 90-92, repeating through D, then F below 60.
@@ -363,17 +407,57 @@ function bunchingScore(cv) {
   return clamp(100 * (1 - Number(cv)));
 }
 
+function compositeComponents(metrics) {
+  const components = [
+    {
+      id: "stop_sd",
+      label: "On Time Service Delivered",
+      weight: WEIGHTS.stop_sd,
+      score: metrics.stop_sd_pct == null ? null : clamp(metrics.stop_sd_pct),
+    },
+    {
+      id: "on_time",
+      label: "On time within 3 minutes",
+      weight: WEIGHTS.on_time,
+      score: metrics.on_time_pct == null ? null : clamp(metrics.on_time_pct),
+    },
+    {
+      id: "speed",
+      label: "Speed vs. 13 mph ideal",
+      weight: WEIGHTS.speed,
+      score: metrics.avg_speed_mph == null
+        ? null
+        : clamp((metrics.avg_speed_mph / IDEAL_SPEED_MPH) * 100),
+    },
+    {
+      id: "bunching",
+      label: "Bus spacing and bunching",
+      weight: WEIGHTS.bunching,
+      score: metrics.bunching_grade_eligible && metrics.headway_cv != null
+        ? bunchingScore(metrics.headway_cv)
+        : null,
+    },
+  ];
+  const availableWeight = components.reduce(
+    (sum, component) => sum + (component.score == null ? 0 : component.weight),
+    0
+  );
+  return components.map((component) => ({
+    ...component,
+    effectiveWeight: component.score == null || !availableWeight
+      ? 0
+      : 100 * component.weight / availableWeight,
+    contribution: component.score == null || !availableWeight
+      ? 0
+      : component.score * component.weight / availableWeight,
+  }));
+}
+
 function compositeScore(metrics) {
-  const { stop_sd_pct, on_time_pct, avg_speed_mph, headway_cv } = metrics;
-  const parts = [];
-  if (stop_sd_pct != null) parts.push([WEIGHTS.stop_sd, clamp(stop_sd_pct)]);
-  if (on_time_pct != null) parts.push([WEIGHTS.on_time, clamp(on_time_pct)]);
-  if (avg_speed_mph != null) parts.push([WEIGHTS.speed, clamp((avg_speed_mph / IDEAL_SPEED_MPH) * 100)]);
-  if (metrics.bunching_grade_eligible && headway_cv != null) {
-    parts.push([WEIGHTS.bunching, bunchingScore(headway_cv)]);
-  }
-  const wsum = parts.reduce((s, [w]) => s + w, 0);
-  return wsum ? parts.reduce((s, [w, v]) => s + w * v, 0) / wsum : null;
+  const available = compositeComponents(metrics).filter((component) => component.score != null);
+  return available.length
+    ? available.reduce((sum, component) => sum + component.contribution, 0)
+    : null;
 }
 
 // Agency-wide rollup: each per-route metric averaged across routes, weighted
@@ -640,6 +724,208 @@ function renderSkippedServiceChart(summary, showProjection) {
       },
     },
   });
+}
+
+function reportPeriodLabel(firstDate, lastDate) {
+  if (!firstDate || !lastDate) return "Loading the latest 28 service days…";
+  const format = new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+  return `${format.format(new Date(`${firstDate}T00:00:00Z`))}–${format.format(new Date(`${lastDate}T00:00:00Z`))}`;
+}
+
+function buildV2FactorList() {
+  const el = document.getElementById("v2-factor-list");
+  if (!el || el.children.length) return;
+  const factors = [
+    {
+      id: "stop_sd",
+      number: "01",
+      name: "On Time Service Delivered",
+      description: "Did scheduled service reach riders close enough to the timetable to be useful?",
+      explanation: "This factor measures eligible scheduled intermediate passenger-pickup stops reached from 1 minute early through 7 minutes late. Scheduled stops on trips that were dropped or not observed remain outside the rider window.",
+      chartLabel: "On Time Service Delivered sub-score over time",
+    },
+    {
+      id: "on_time",
+      number: "02",
+      name: "On time within 3 minutes",
+      description: "When a bus was observed, how often did it arrive just after its scheduled time?",
+      explanation: "This factor measures observed arrivals from the scheduled time through 3 minutes late. It is narrower than the rider window and does not include early arrivals.",
+      chartLabel: "On-time sub-score over time",
+    },
+    {
+      id: "speed",
+      number: "03",
+      name: "Speed vs. 13 mph ideal",
+      description: "How quickly did buses move between measured stops?",
+      explanation: "The average per-leg speed is divided by the 13 mph ideal and converted to a 0–100 sub-score. The sub-score is capped at 100, so faster-than-ideal service does not add extra credit.",
+      chartLabel: "Speed sub-score over time",
+    },
+    {
+      id: "bunching",
+      number: "04",
+      name: "Bus spacing and bunching",
+      description: "Did buses arrive at even intervals, or in clumps followed by long gaps?",
+      explanation: "The sub-score is 100 × (1 − headway CV), clamped to 0–100. Comparisons stay within the same route, direction, stop, and hour, and only scheduled headways of 40 minutes or less are eligible.",
+      chartLabel: "Bus-spacing sub-score over time",
+    },
+  ];
+  el.innerHTML = factors.map((factor) => `
+    <details class="v2-factor" data-factor="${factor.id}">
+      <summary>
+        <span class="v2-factor-number">${factor.number}</span>
+        <span class="v2-factor-heading">
+          <strong>${factor.name}</strong>
+          <small id="v2-factor-${factor.id}-performance">Loading performance…</small>
+        </span>
+        <span id="v2-factor-${factor.id}-grade" class="v2-factor-grade">—</span>
+        <span class="v2-factor-math">
+          <span><b id="v2-factor-${factor.id}-weight">—</b> weight</span>
+          <span><b id="v2-factor-${factor.id}-contribution">—</b> points</span>
+        </span>
+        <span class="v2-factor-chevron" aria-hidden="true">+</span>
+      </summary>
+      <div class="v2-factor-detail">
+        <div class="v2-factor-explanation">
+          <p><strong>${factor.description}</strong></p>
+          <p>${factor.explanation}</p>
+          <div id="v2-factor-${factor.id}-support" class="v2-factor-support"></div>
+        </div>
+        <div class="v2-factor-chart">
+          <h3>Trailing four-week trend</h3>
+          <p>Each point uses the same 28-day calculation as the report card.</p>
+          <div><canvas id="v2-${factor.id}-history" role="img" aria-label="${factor.chartLabel}"></canvas></div>
+        </div>
+      </div>
+    </details>
+  `).join("");
+  for (const detail of el.querySelectorAll("details")) {
+    detail.addEventListener("toggle", () => {
+      if (!detail.open) return;
+      const chart = gradeHistoryCharts.get(`v2-${detail.dataset.factor}-history`);
+      if (chart) window.requestAnimationFrame(() => chart.resize());
+    });
+  }
+}
+
+function renderV2Factor(component, agency) {
+  const performance = document.getElementById(`v2-factor-${component.id}-performance`);
+  const grade = document.getElementById(`v2-factor-${component.id}-grade`);
+  const weight = document.getElementById(`v2-factor-${component.id}-weight`);
+  const contribution = document.getElementById(`v2-factor-${component.id}-contribution`);
+  const support = document.getElementById(`v2-factor-${component.id}-support`);
+  if (!performance || !grade || !weight || !contribution || !support) return;
+
+  if (component.score == null) {
+    performance.textContent = "Not available for this evaluation window";
+    grade.textContent = "N/A";
+    grade.removeAttribute("style");
+    weight.textContent = "0%";
+    contribution.textContent = "0.0";
+  } else {
+    if (component.id === "stop_sd") performance.textContent = `${fmt(agency.stop_sd_pct)}% reached the rider window`;
+    if (component.id === "on_time") performance.textContent = `${fmt(agency.on_time_pct)}% of observed arrivals`;
+    if (component.id === "speed") performance.textContent = `${fmt(agency.avg_speed_mph)} mph average · ${fmt(component.score)} / 100 sub-score`;
+    if (component.id === "bunching") performance.textContent = `Headway CV ${fmt(agency.headway_cv, 2)} · ${fmt(component.score)} / 100 sub-score`;
+    const color = scoreColor(component.score);
+    grade.textContent = letterGrade(component.score);
+    grade.style.background = color.bg;
+    grade.style.color = color.fg;
+    weight.textContent = `${fmt(component.effectiveWeight, 1)}%`;
+    contribution.textContent = fmt(component.contribution);
+  }
+
+  const baseWeightNote = Math.abs(component.effectiveWeight - component.weight) > 0.05
+    ? `<div><dt>Published weight</dt><dd>${component.weight}% before missing-factor renormalization</dd></div>`
+    : "";
+  if (component.id === "stop_sd") {
+    support.innerHTML = `<dl>
+      <div><dt>Current sub-score</dt><dd>${component.score == null ? "—" : `${fmt(component.score)} / 100`}</dd></div>
+      <div><dt>Agency rollup weighting</dt><dd>${intFmt(agency.observations)} measured trip-stops across ${intFmt(agency.routes)} included routes</dd></div>
+      <div><dt>Rider window</dt><dd>1 minute early through 7 minutes late</dd></div>
+      ${baseWeightNote}
+    </dl>`;
+  }
+  if (component.id === "on_time") {
+    support.innerHTML = `<dl>
+      <div><dt>Current sub-score</dt><dd>${component.score == null ? "—" : `${fmt(component.score)} / 100`}</dd></div>
+      <div><dt>Observed stops measured</dt><dd>${intFmt(agency.observations)}</dd></div>
+      <div><dt>Supporting measure</dt><dd>p95 delay ${agency.p95_delay_minutes == null ? "—" : `${fmt(agency.p95_delay_minutes)} min`} · not separately weighted</dd></div>
+      ${baseWeightNote}
+    </dl>`;
+  }
+  if (component.id === "speed") {
+    support.innerHTML = `<dl>
+      <div><dt>Measured average</dt><dd>${agency.avg_speed_mph == null ? "—" : `${fmt(agency.avg_speed_mph)} mph`}</dd></div>
+      <div><dt>Current sub-score</dt><dd>${component.score == null ? "—" : `${fmt(component.score)} / 100`}</dd></div>
+      <div><dt>Scoring formula</dt><dd>average speed ÷ ${IDEAL_SPEED_MPH} mph × 100, capped at 100</dd></div>
+      ${baseWeightNote}
+    </dl>`;
+  }
+  if (component.id === "bunching") {
+    const warning = component.score == null ? bunchingGradeWarning(agency.bunching, "route-days") : "";
+    support.innerHTML = `<dl>
+      <div><dt>Current sub-score</dt><dd>${component.score == null ? "—" : `${fmt(component.score)} / 100`}</dd></div>
+      <div><dt>Comparable headways</dt><dd>${intFmt(agency.headway_n)}</dd></div>
+      <div><dt>Supporting measures</dt><dd>${agency.bunched_headway_pct == null ? "—" : `${fmt(agency.bunched_headway_pct)}% bunched`} · ${agency.long_gap_pct == null ? "—" : `${fmt(agency.long_gap_pct)}% long gaps`} · not separately weighted</dd></div>
+      ${warning ? `<div class="v2-factor-warning"><dt>Why it is not scored</dt><dd>${warning}</dd></div>` : ""}
+      ${baseWeightNote}
+    </dl>`;
+  }
+}
+
+function renderV2(agency, progress, currentWindowService, period = {}) {
+  buildV2FactorList();
+  const gradeReady = progress.currentWindowReady && agency.score != null;
+  const gradeEl = document.getElementById("v2-grade");
+  const gradeLetter = document.getElementById("v2-grade-letter");
+  const gradeScore = document.getElementById("v2-grade-score");
+  gradeEl.classList.toggle("is-loading", !gradeReady);
+  if (gradeReady) {
+    const color = scoreColor(agency.score);
+    gradeEl.style.background = color.bg;
+    gradeEl.style.color = color.fg;
+    gradeLetter.textContent = letterGrade(agency.score);
+    gradeScore.textContent = `${fmt(agency.score)} / 100`;
+  } else {
+    gradeEl.removeAttribute("style");
+    gradeLetter.textContent = "—";
+    gradeScore.textContent = progress.status || "Calculating";
+  }
+
+  document.getElementById("v2-report-period").textContent = gradeReady
+    ? `${reportPeriodLabel(period.firstDate, period.lastDate)} · ${period.days} service days`
+    : reportPeriodLabel(period.firstDate, period.lastDate);
+  document.getElementById("v2-report-summary").textContent = gradeReady
+    ? `${agency.stop_sd_pct == null ? "The rider-window factor is unavailable" : `${fmt(agency.stop_sd_pct)}% of eligible scheduled stops reached riders from 1 minute early through 7 minutes late`}. The overall grade is the weighted total of the available factor scores below.`
+    : "The grade combines the four rider-facing factors shown below.";
+
+  const missedPct = currentWindowService.totalScheduled > 0
+    ? 100 * currentWindowService.totalDropped / currentWindowService.totalScheduled
+    : null;
+  const deliveredPct = missedPct == null ? null : 100 - missedPct;
+  document.getElementById("v2-missed-pct").textContent = missedPct == null ? "—" : `${fmt(missedPct)}%`;
+  document.getElementById("v2-missed-count").textContent = missedPct == null
+    ? "Loading scheduled-trip totals…"
+    : `${intFmt(currentWindowService.totalDropped)} of ${intFmt(currentWindowService.totalScheduled)} scheduled trips did not run or were not visible in realtime data.`;
+  document.getElementById("v2-missed-scale-fill").style.width = `${missedPct == null ? 0 : clamp(missedPct)}%`;
+  document.getElementById("v2-missed-scale-label").textContent = missedPct == null
+    ? "Loading service-delivery share…"
+    : `${fmt(deliveredPct)}% observed running · ${fmt(missedPct)}% dropped / not observed`;
+  document.getElementById("v2-missed-detail").textContent = missedPct == null
+    ? "Loading supporting counts…"
+    : `${intFmt(currentWindowService.totalDays)} service days · ${intFmt(currentWindowService.totalScheduled)} scheduled trips · ${intFmt(currentWindowService.totalScheduled - currentWindowService.totalDropped)} observed running · ${intFmt(currentWindowService.totalDropped)} dropped / not observed.`;
+
+  const components = compositeComponents(agency);
+  const missing = components.filter((component) => component.score == null);
+  document.getElementById("v2-formula-summary").textContent = missing.length
+    ? `${missing.map((component) => component.label).join(" and ")} ${missing.length === 1 ? "is" : "are"} unavailable, so ${missing.length === 1 ? "its base weight is" : "their base weights are"} omitted and the available factor weights are renormalized to 100%. Displayed values are rounded; scoring uses full precision.`
+    : "Each factor earns a 0–100 sub-score. Sub-score × weight gives its point contribution; the four contributions add to the overall score. Agency factor values weight route results by measured trip-stops. Displayed values are rounded; scoring uses full precision.";
+  for (const component of components) renderV2Factor(component, agency);
 }
 
 function renderAgencyHero(
@@ -1015,6 +1301,48 @@ function renderGradeHistory(points, topRoutes, progress = { complete: true }) {
       return `Bus-spacing score: ${fmt(ctx.parsed.y)} / 100 · headway CV ${fmt(cv, 2)}`;
     }
   );
+  const factorHistory = [
+    {
+      id: "stop_sd",
+      values: serviceDelivered,
+      label: "On Time Service Delivered sub-score",
+      color: "#5f3dc4",
+      fill: "rgba(95, 61, 196, 0.12)",
+    },
+    {
+      id: "on_time",
+      values: onTime,
+      label: "On-time sub-score",
+      color: "#2b8a3e",
+      fill: "rgba(43, 138, 62, 0.12)",
+    },
+    {
+      id: "speed",
+      values: points.map((point) => point.agencyComponents.speedScore),
+      label: "Speed sub-score",
+      color: "#1971c2",
+      fill: "rgba(25, 113, 194, 0.12)",
+    },
+    {
+      id: "bunching",
+      values: spacingScores,
+      label: "Bus-spacing sub-score",
+      color: "#e8590c",
+      fill: "rgba(232, 89, 12, 0.12)",
+    },
+  ];
+  for (const factor of factorHistory) {
+    renderComponentHistoryChart(
+      `v2-${factor.id}-history`,
+      labels,
+      factor.values,
+      factor.label,
+      factor.color,
+      factor.fill,
+      "Sub-score / 100",
+      (ctx) => `${factor.label}: ${fmt(ctx.parsed.y)} / 100 (${letterGrade(ctx.parsed.y)})`
+    );
+  }
 }
 
 function gradeHistoryData(dates, dailyByDate, currentRoutes) {
@@ -1037,6 +1365,9 @@ function gradeHistoryData(dates, dailyByDate, currentRoutes) {
       agencyComponents: {
         stopSDPct: agency.stop_sd_pct,
         onTimePct: agency.on_time_pct,
+        speedScore: agency.avg_speed_mph == null
+          ? null
+          : clamp(100 * agency.avg_speed_mph / IDEAL_SPEED_MPH),
         bunchingScore: bunchingEligible ? bunchingScore(agency.headway_cv) : null,
         headwayCV: bunchingEligible ? agency.headway_cv : null,
       },
@@ -1316,14 +1647,19 @@ async function load() {
   const yearEl = document.getElementById("footer-year");
   if (yearEl) yearEl.textContent = new Date().getFullYear();
 
+  initializeReportView();
   renderGradeLegend();
   renderBunchingMethodology();
-  renderAgencyHero(aggregateAgency([]), {
+  const initialProgress = {
     complete: false,
     percent: 0,
     currentWindowReady: false,
     status: "Loading stats index…",
-  }, skippedServiceSummary(new Map()));
+  };
+  const emptyAgency = aggregateAgency([]);
+  const emptyService = skippedServiceSummary(new Map());
+  renderAgencyHero(emptyAgency, initialProgress, emptyService);
+  renderV2(emptyAgency, initialProgress, emptyService);
 
   const [dates, weekEnd] = await Promise.all([loadDailyIndex(), latestWeekEnd()]);
   if (!dates.length) {
@@ -1376,19 +1712,31 @@ async function load() {
         .filter((date) => dailyByDate.has(date))
         .map((date) => [date, dailyByDate.get(date)])
     );
-    renderAgencyHero(agency, {
-      complete,
-      percent: 100 * processedDates / neededDates.length,
-      currentWindowReady,
-      status,
-    }, skippedServiceSummary(dailyByDate), skippedServiceSummary(currentDailyByDate));
-
+    const currentWindowService = skippedServiceSummary(currentDailyByDate);
     const observed = currentDailies
       .map((daily) => daily.service_date)
       .filter(Boolean)
       .sort();
     const first = observed[0];
     const last = observed[observed.length - 1];
+    const progress = {
+      complete,
+      percent: 100 * processedDates / neededDates.length,
+      currentWindowReady,
+      status,
+    };
+    renderAgencyHero(
+      agency,
+      progress,
+      skippedServiceSummary(dailyByDate),
+      currentWindowService
+    );
+    renderV2(agency, progress, currentWindowService, {
+      firstDate: first,
+      lastDate: last,
+      days: currentDailies.length,
+    });
+
     document.getElementById("meta").textContent =
       `${complete ? "Last" : "Loading ·"} ${currentDailies.length} service days` +
       (first && last ? ` · ${first} → ${last}` : "") +
