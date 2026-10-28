@@ -58,6 +58,7 @@ function applyReportView(view, persist = false) {
   if (next === "v2") {
     window.requestAnimationFrame(() => {
       for (const chart of gradeHistoryCharts.values()) chart.resize();
+      if (v2MissedDailyChart) v2MissedDailyChart.resize();
     });
   }
 }
@@ -107,6 +108,22 @@ async function loadDailyIndex() {
   } catch (e) {
     return [];
   }
+}
+
+function currentPacificDate() {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    timeZone: "America/Los_Angeles",
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function completedReportDates(dates) {
+  const today = currentPacificDate();
+  return dates.filter((date) => date < today);
 }
 
 // Most recent week_end (Saturday) that has a weekly stats file. Used to
@@ -502,6 +519,7 @@ function aggregateAgency(routes) {
 
 function skippedServiceSummary(dailyByDate) {
   const byWeek = new Map();
+  const dailyTotals = [];
   let totalDropped = 0;
   let totalScheduled = 0;
   let totalDays = 0;
@@ -535,6 +553,7 @@ function skippedServiceSummary(dailyByDate) {
     week.scheduled += scheduled;
     week.dropped += dropped;
     week.days += 1;
+    dailyTotals.push({ date, scheduled, dropped });
     totalDropped += dropped;
     totalScheduled += scheduled;
     totalDays += 1;
@@ -543,6 +562,7 @@ function skippedServiceSummary(dailyByDate) {
   }
 
   return {
+    daily: dailyTotals.sort((a, b) => a.date.localeCompare(b.date)),
     weeks: [...byWeek.values()].sort((a, b) => a.startDate.localeCompare(b.startDate)),
     totalDropped,
     totalScheduled,
@@ -579,6 +599,8 @@ function bunchingGradeWarning(bunching, unit = "service days") {
 
 let skippedServiceChart = null;
 let skippedServiceChartSummary = skippedServiceSummary(new Map());
+let v2MissedDailyChart = null;
+let v2MissedDailySummary = skippedServiceSummary(new Map());
 
 function skippedServiceProjection(week, weeks) {
   if (!week || week.days <= 0 || week.days >= 7) {
@@ -735,6 +757,100 @@ function reportPeriodLabel(firstDate, lastDate) {
     timeZone: "UTC",
   });
   return `${format.format(new Date(`${firstDate}T00:00:00Z`))}–${format.format(new Date(`${lastDate}T00:00:00Z`))}`;
+}
+
+function renderV2MissedDailyChart(summary) {
+  const wrapper = document.getElementById("v2-missed-daily");
+  const canvas = document.getElementById("v2-missed-daily-chart");
+  const description = document.getElementById("v2-missed-daily-description");
+  const days = summary.daily || [];
+  if (!wrapper || !canvas) return;
+
+  wrapper.hidden = days.length === 0;
+  if (!days.length) return;
+
+  v2MissedDailySummary = summary;
+  const labels = days.map((day) => historyDateLabel(day.date));
+  const values = days.map((day) => day.dropped);
+  if (description) {
+    description.textContent = days.map((day) => {
+      const pct = day.scheduled > 0 ? 100 * day.dropped / day.scheduled : 0;
+      return `${fullServiceDateLabel(day.date)}: ${intFmt(day.dropped)} dropped or not observed, ${fmt(pct)}% of ${intFmt(day.scheduled)} scheduled trips.`;
+    }).join(" ");
+  }
+
+  if (v2MissedDailyChart) {
+    v2MissedDailyChart.data.labels = labels;
+    v2MissedDailyChart.data.datasets[0].data = values;
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    v2MissedDailyChart.update(reduceMotion ? "none" : undefined);
+    return;
+  }
+
+  v2MissedDailyChart = new Chart(canvas, {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [{
+        label: "Dropped / not observed trips",
+        data: values,
+        backgroundColor: "rgba(173, 30, 35, 0.82)",
+        borderColor: "rgb(142, 24, 30)",
+        borderWidth: 1,
+        borderRadius: 3,
+        borderSkipped: false,
+        maxBarThickness: 22,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: {
+        duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 320,
+        easing: "easeOutQuart",
+      },
+      interaction: { mode: "index", intersect: false },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { maxRotation: 0, autoSkipPadding: 14 },
+          title: { display: true, text: "Service date" },
+        },
+        y: {
+          beginAtZero: true,
+          ticks: { precision: 0 },
+          title: { display: true, text: "Trips" },
+        },
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            title: (items) => {
+              const day = v2MissedDailySummary.daily[items[0].dataIndex];
+              return fullServiceDateLabel(day.date);
+            },
+            label: (ctx) => `${intFmt(ctx.parsed.y)} dropped / not observed trips`,
+            afterLabel: (ctx) => {
+              const day = v2MissedDailySummary.daily[ctx.dataIndex];
+              const pct = day.scheduled > 0 ? 100 * day.dropped / day.scheduled : 0;
+              return `${fmt(pct)}% of ${intFmt(day.scheduled)} scheduled trips`;
+            },
+          },
+        },
+      },
+    },
+  });
+}
+
+function fullServiceDateLabel(date) {
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${date}T00:00:00Z`));
 }
 
 function buildV2FactorList() {
@@ -919,6 +1035,7 @@ function renderV2(agency, progress, currentWindowService, period = {}) {
   document.getElementById("v2-missed-detail").textContent = missedPct == null
     ? "Loading supporting counts…"
     : `${intFmt(currentWindowService.totalDays)} service days · ${intFmt(currentWindowService.totalScheduled)} scheduled trips · ${intFmt(currentWindowService.totalScheduled - currentWindowService.totalDropped)} observed running · ${intFmt(currentWindowService.totalDropped)} dropped / not observed.`;
+  renderV2MissedDailyChart(currentWindowService);
 
   const components = compositeComponents(agency);
   const missing = components.filter((component) => component.score == null);
@@ -1661,7 +1778,8 @@ async function load() {
   renderAgencyHero(emptyAgency, initialProgress, emptyService);
   renderV2(emptyAgency, initialProgress, emptyService);
 
-  const [dates, weekEnd] = await Promise.all([loadDailyIndex(), latestWeekEnd()]);
+  const [indexedDates, weekEnd] = await Promise.all([loadDailyIndex(), latestWeekEnd()]);
+  const dates = completedReportDates(indexedDates);
   if (!dates.length) {
     document.body.insertAdjacentHTML(
       "afterbegin",

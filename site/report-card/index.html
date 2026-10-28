@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AC Transit route report card</title>
-  <link rel="stylesheet" href="../styles.css?v=report-card-v2">
+  <link rel="stylesheet" href="../styles.css?v=report-card-v2-daily-dropped">
   <script src="../independence-notice.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 </head>
@@ -66,6 +66,16 @@
       <div class="v2-missed-scale" role="img" aria-labelledby="v2-missed-scale-label">
         <div><span id="v2-missed-scale-fill"></span></div>
         <p id="v2-missed-scale-label">Loading service-delivery share…</p>
+      </div>
+      <div id="v2-missed-daily" class="v2-missed-daily" hidden>
+        <div class="v2-missed-daily-heading">
+          <h3>Daily dropped / not observed trips</h3>
+          <p>Hover or tap a bar for the service date and count.</p>
+        </div>
+        <div class="v2-missed-daily-chart">
+          <canvas id="v2-missed-daily-chart" role="img" aria-label="Daily scheduled trips dropped or not observed during the current four-week period" aria-describedby="v2-missed-daily-description"></canvas>
+        </div>
+        <p id="v2-missed-daily-description" class="sr-only"></p>
       </div>
       <details>
         <summary>Counts and data note</summary>
@@ -373,7 +383,7 @@
   </footer>
 
   <script src="../lib.js?v=api-health-v1"></script>
-  <script src="app.js?v=report-card-v2"></script>
+  <script src="app.js?v=report-card-v2-completed-days"></script>
   <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "0e36b12e46b04a69b5e9ff6883f6d23d"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
 </html>

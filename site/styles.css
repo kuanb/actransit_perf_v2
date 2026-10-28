@@ -907,6 +907,24 @@ body.report-card-v2 #grade-history .component-history-grid { display: none; }
 }
 .v2-missed-scale span { display: block; height: 100%; background: #b83439; transition: width 250ms ease; }
 .v2-missed-scale p { margin: 7px 0 0; color: #596978; font-size: 11px; font-weight: 700; text-align: right; }
+.v2-missed-daily { grid-column: 1 / -1; min-width: 0; padding-top: 4px; }
+.v2-missed-daily-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 9px;
+}
+.v2-missed-daily-heading h3 { margin: 0; color: #30475a; font-size: 14px; }
+.v2-missed-daily-heading p { margin: 0; color: #788692; font-size: 11px; }
+.v2-missed-daily-chart {
+  position: relative;
+  height: 190px;
+  padding: 10px 12px 6px;
+  border: 1px solid #eadfdf;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.74);
+}
 .v2-missed-service details { grid-column: 1 / -1; padding-top: 13px; border-top: 1px solid #ebdddd; }
 .v2-missed-service summary { width: max-content; color: #315f7d; font-size: 12px; font-weight: 750; cursor: pointer; }
 .v2-missed-service details p { max-width: 88ch; margin: 9px 0 0; color: #687480; font-size: 12px; }
@@ -984,6 +1002,10 @@ body.report-card-v2 #grade-history .component-history-grid { display: none; }
   .v2-grade-block { min-height: 225px; }
   .v2-hero-copy { padding: 30px 24px 34px; }
   .v2-missed-service { grid-template-columns: 1fr; gap: 18px; padding: 22px 20px; }
+  .v2-missed-daily { grid-column: auto; }
+  .v2-missed-daily-heading { display: block; }
+  .v2-missed-daily-heading p { margin-top: 3px; }
+  .v2-missed-daily-chart { height: 175px; padding-inline: 8px; }
   .v2-missed-service details { grid-column: auto; }
   .v2-missed-scale p { text-align: left; }
   .v2-factor summary { grid-template-columns: 28px minmax(0, 1fr) 54px 20px; gap: 10px; }
