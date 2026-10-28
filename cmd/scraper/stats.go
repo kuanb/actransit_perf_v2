@@ -362,6 +362,9 @@ func generateDailyStats(ctx context.Context, serviceDate civil.Date) (*dailyStat
 	if err != nil {
 		return nil, fmt.Errorf("query api health: %w", err)
 	}
+	if _, err := generateSchoolStats(ctx, zr, serviceDate, activeServices); err != nil {
+		return nil, fmt.Errorf("generate school stats: %w", err)
+	}
 
 	out := &dailyStats{
 		MethodologyVersion:   3,

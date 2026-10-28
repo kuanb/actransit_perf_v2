@@ -22,21 +22,25 @@ var bqClient *bigquery.Client
 // jobs (backfill). bigquery.Null* and civil.Date already implement
 // json.Marshaler with the BigQuery-compatible representation.
 type tripObservationRow struct {
-	ServiceDate      civil.Date             `bigquery:"service_date"      json:"service_date"`
-	RouteID          string                 `bigquery:"route_id"          json:"route_id"`
-	DirectionID      int64                  `bigquery:"direction_id"      json:"direction_id"`
-	TripID           string                 `bigquery:"trip_id"           json:"trip_id"`
-	VehicleID        string                 `bigquery:"vehicle_id"        json:"vehicle_id"`
-	StopSequence     int64                  `bigquery:"stop_sequence"     json:"stop_sequence"`
-	StopID           string                 `bigquery:"stop_id"           json:"stop_id"`
-	ScheduledArrival bigquery.NullTimestamp `bigquery:"scheduled_arrival" json:"scheduled_arrival"`
-	ActualArrival    bigquery.NullTimestamp `bigquery:"actual_arrival"    json:"actual_arrival"`
-	DelaySeconds     bigquery.NullInt64     `bigquery:"delay_seconds"     json:"delay_seconds"`
-	LegDistanceM     bigquery.NullFloat64   `bigquery:"leg_distance_m"    json:"leg_distance_m"`
-	LegDurationS     bigquery.NullFloat64   `bigquery:"leg_duration_s"    json:"leg_duration_s"`
-	LegAvgSpeedMps   bigquery.NullFloat64   `bigquery:"leg_avg_speed_mps" json:"leg_avg_speed_mps"`
-	IsStale          bool                   `bigquery:"is_stale"          json:"is_stale"`
-	IngestedAt       time.Time              `bigquery:"ingested_at"       json:"ingested_at"`
+	ServiceDate           civil.Date             `bigquery:"service_date"      json:"service_date"`
+	RouteID               string                 `bigquery:"route_id"          json:"route_id"`
+	DirectionID           int64                  `bigquery:"direction_id"      json:"direction_id"`
+	TripID                string                 `bigquery:"trip_id"           json:"trip_id"`
+	VehicleID             string                 `bigquery:"vehicle_id"        json:"vehicle_id"`
+	StopSequence          int64                  `bigquery:"stop_sequence"     json:"stop_sequence"`
+	StopID                string                 `bigquery:"stop_id"           json:"stop_id"`
+	ScheduledArrival      bigquery.NullTimestamp `bigquery:"scheduled_arrival" json:"scheduled_arrival"`
+	ActualArrival         bigquery.NullTimestamp `bigquery:"actual_arrival"    json:"actual_arrival"`
+	DelaySeconds          bigquery.NullInt64     `bigquery:"delay_seconds"     json:"delay_seconds"`
+	ScheduledDeparture    bigquery.NullTimestamp `bigquery:"scheduled_departure"  json:"scheduled_departure"`
+	ActualDeparture       bigquery.NullTimestamp `bigquery:"actual_departure"     json:"actual_departure"`
+	DepartureDelaySeconds bigquery.NullInt64     `bigquery:"departure_delay_seconds" json:"departure_delay_seconds"`
+	DepartureConfidence   bigquery.NullString    `bigquery:"departure_confidence" json:"departure_confidence"`
+	LegDistanceM          bigquery.NullFloat64   `bigquery:"leg_distance_m"    json:"leg_distance_m"`
+	LegDurationS          bigquery.NullFloat64   `bigquery:"leg_duration_s"    json:"leg_duration_s"`
+	LegAvgSpeedMps        bigquery.NullFloat64   `bigquery:"leg_avg_speed_mps" json:"leg_avg_speed_mps"`
+	IsStale               bool                   `bigquery:"is_stale"          json:"is_stale"`
+	IngestedAt            time.Time              `bigquery:"ingested_at"       json:"ingested_at"`
 }
 
 type tripProbeRow struct {
@@ -117,7 +121,7 @@ func buildObservationRows(t inFlightTrip, cache *gtfsCache, serviceDate civil.Da
 	prevActual := bigquery.NullTimestamp{}
 	prevDist := 0.0
 
-	for _, st := range trip.StopTimes {
+	for i, st := range trip.StopTimes {
 		row := tripObservationRow{
 			ServiceDate:  serviceDate,
 			RouteID:      t.RouteID,
@@ -132,6 +136,23 @@ func buildObservationRows(t inFlightTrip, cache *gtfsCache, serviceDate civil.Da
 
 		if sched := parseScheduledArrival(serviceDate, st.ArrivalTime); !sched.IsZero() {
 			row.ScheduledArrival = bigquery.NullTimestamp{Timestamp: sched, Valid: true}
+		}
+		if i == 0 {
+			if sched := parseScheduledArrival(serviceDate, st.DepartureTime); !sched.IsZero() {
+				row.ScheduledDeparture = bigquery.NullTimestamp{Timestamp: sched, Valid: true}
+			}
+			if !t.ActualDeparture.IsZero() {
+				row.ActualDeparture = bigquery.NullTimestamp{Timestamp: t.ActualDeparture, Valid: true}
+				if row.ScheduledDeparture.Valid {
+					row.DepartureDelaySeconds = bigquery.NullInt64{
+						Int64: int64(t.ActualDeparture.Sub(row.ScheduledDeparture.Timestamp).Seconds()),
+						Valid: true,
+					}
+				}
+			}
+			if t.DepartureConfidence != "" {
+				row.DepartureConfidence = bigquery.NullString{StringVal: t.DepartureConfidence, Valid: true}
+			}
 		}
 
 		if actual, ok := t.StopArrivals[st.StopSequence]; ok {

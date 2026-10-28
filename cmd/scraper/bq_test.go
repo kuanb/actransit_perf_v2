@@ -71,6 +71,7 @@ func TestTripToRows(t *testing.T) {
 	trip.DirectionID = 1
 	for i := range trip.StopTimes {
 		trip.StopTimes[i].ArrivalTime = []string{"08:00:00", "08:01:00", "08:03:00"}[i]
+		trip.StopTimes[i].DepartureTime = trip.StopTimes[i].ArrivalTime
 	}
 	r.Trips["T1"] = trip
 
@@ -92,6 +93,8 @@ func TestTripToRows(t *testing.T) {
 				2: t0.Add(70 * time.Second),
 				3: t0.Add(150 * time.Second),
 			},
+			ActualDeparture:     t0.Add(30 * time.Second),
+			DepartureConfidence: departureConfidenceConfirmed,
 		}
 		obs, probes := tripToRows(trip, cache, ingestedAt, true)
 
@@ -122,12 +125,27 @@ func TestTripToRows(t *testing.T) {
 		if !o1.IsStale {
 			t.Fatalf("obs[0] is_stale = false, want true")
 		}
+		if !o1.ScheduledDeparture.Valid || !o1.ScheduledDeparture.Timestamp.Equal(t0) {
+			t.Fatalf("obs[0] scheduled departure = %v, want %v", o1.ScheduledDeparture, t0)
+		}
+		if !o1.ActualDeparture.Valid || !o1.ActualDeparture.Timestamp.Equal(t0.Add(30*time.Second)) {
+			t.Fatalf("obs[0] actual departure = %v", o1.ActualDeparture)
+		}
+		if !o1.DepartureDelaySeconds.Valid || o1.DepartureDelaySeconds.Int64 != 30 {
+			t.Fatalf("obs[0] departure delay = %v", o1.DepartureDelaySeconds)
+		}
+		if !o1.DepartureConfidence.Valid || o1.DepartureConfidence.StringVal != departureConfidenceConfirmed {
+			t.Fatalf("obs[0] departure confidence = %v", o1.DepartureConfidence)
+		}
 		if o1.LegDistanceM.Valid {
 			t.Fatalf("obs[0] leg_distance = %v, want NULL (first stop)", o1.LegDistanceM)
 		}
 
 		// Second obs: stop 2 at scheduled 08:01 = t0+60s, actual t0+70s → delay 10s.
 		o2 := obs[1]
+		if o2.ActualDeparture.Valid || o2.ScheduledDeparture.Valid {
+			t.Fatalf("obs[1] unexpectedly contains trip departure fields")
+		}
 		if !o2.DelaySeconds.Valid || o2.DelaySeconds.Int64 != 10 {
 			t.Fatalf("obs[1] delay = %v, want 10s", o2.DelaySeconds)
 		}

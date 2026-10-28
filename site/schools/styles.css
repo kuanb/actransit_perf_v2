@@ -1,0 +1,433 @@
+:root {
+  --school-ink: #17324d;
+  --school-blue: #2f6f9f;
+  --school-green: #297657;
+  --school-amber: #a66013;
+  --school-red: #a83a3a;
+  --school-paper: #f7f2e8;
+}
+
+body {
+  background: #fcfcfb;
+}
+
+.school-kicker {
+  margin: 0 0 5px;
+  color: var(--school-blue);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+header h1 {
+  color: var(--school-ink);
+  max-width: 680px;
+}
+
+.date-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  color: #555;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.date-control select {
+  padding: 6px 28px 6px 9px;
+  border: 1px solid #b8c4ce;
+  border-radius: 5px;
+  background: #fff;
+  color: #243746;
+  font: inherit;
+}
+
+.student-impact,
+.school-methodology {
+  display: flex;
+  gap: 14px;
+  padding: 13px 16px;
+  color: #3e4c57;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.student-impact {
+  margin: 14px 0 0;
+  border-left: 4px solid var(--school-blue);
+  background: #edf5fa;
+}
+
+.school-methodology {
+  margin: 8px 0 30px;
+  border-left: 4px solid var(--school-amber);
+  background: var(--school-paper);
+}
+
+.student-impact strong,
+.school-methodology strong {
+  flex: 0 0 auto;
+  color: var(--school-ink);
+}
+
+.school-panel {
+  margin-top: 32px;
+  overflow: hidden;
+  border: 1px solid #dbe2e8;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 4px 18px rgba(28, 47, 64, 0.05);
+}
+
+.school-panel-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 20px 22px;
+  background: #f4f7f9;
+  border-bottom: 1px solid #dbe2e8;
+}
+
+.school-panel-head h2 {
+  margin: 0 0 3px;
+  color: var(--school-ink);
+  font-size: 22px;
+}
+
+.bell-time {
+  flex: 0 0 auto;
+  text-align: right;
+}
+
+.bell-time strong {
+  display: block;
+  color: var(--school-ink);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 30px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.capacity-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 13px 22px;
+  border-bottom: 1px solid #e8ecef;
+  font-size: 13px;
+}
+
+.capacity-banner strong {
+  font-size: 15px;
+}
+
+.capacity-banner.is-complete {
+  color: #1f6348;
+  background: #edf8f2;
+}
+
+.capacity-banner.is-incomplete {
+  color: #7f2e2e;
+  background: #fff0ef;
+}
+
+.day-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  gap: 8px;
+  padding: 14px 22px;
+  border-bottom: 1px solid #e8ecef;
+  background: #fafbfc;
+}
+
+.day-card {
+  display: grid;
+  gap: 2px;
+  padding: 10px 11px;
+  border: 1px solid #dce4e9;
+  border-top-width: 4px;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.day-card strong {
+  color: var(--school-ink);
+  font-size: 13px;
+}
+
+.day-card span {
+  color: #334c5f;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.day-card small {
+  color: #6f7b84;
+  font-size: 10px;
+}
+
+.day-card.is-good {
+  border-top-color: var(--school-green);
+}
+
+.day-card.is-warning {
+  border-top-color: var(--school-amber);
+}
+
+.day-card.is-bad {
+  border-top-color: var(--school-red);
+}
+
+.route-chart-section {
+  padding: 20px 22px 22px;
+  border-bottom: 1px solid #e8ecef;
+  background: #f7fafb;
+}
+
+.route-chart-intro {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 14px;
+}
+
+.route-chart-intro h3 {
+  margin: 0;
+  color: var(--school-ink);
+  font-size: 18px;
+}
+
+.route-chart-intro > p {
+  max-width: 510px;
+  margin: 0;
+  color: #63717c;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.route-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 14px;
+}
+
+.route-chart-panel {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #dbe2e8;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.route-chart-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.route-chart-head h3,
+.route-chart-head p {
+  margin: 0;
+}
+
+.route-chart-head h3 {
+  color: var(--school-ink);
+  font-size: 15px;
+}
+
+.route-chart-head p {
+  margin-top: 1px;
+  color: #6f7b84;
+  font-size: 11px;
+}
+
+.route-chart-canvas {
+  height: 270px;
+}
+
+.route-chart-note {
+  margin: 12px 0 0;
+  color: #6f7b84;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.school-table-wrap {
+  overflow-x: auto;
+  padding: 8px 14px 16px;
+}
+
+.school-table {
+  min-width: 1080px;
+}
+
+.school-table th:first-child,
+.school-table td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: #fff;
+}
+
+.day-main {
+  display: block;
+  min-width: 76px;
+  color: var(--school-ink);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.school-table th {
+  color: #5d6a74;
+  background: #fff;
+  cursor: default;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.school-table td {
+  padding-top: 12px;
+  padding-bottom: 12px;
+  vertical-align: top;
+}
+
+.route-pill {
+  display: inline-block;
+  min-width: 44px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  color: #fff;
+  background: var(--school-ink);
+  font-weight: 750;
+  text-align: center;
+}
+
+.time-main {
+  display: block;
+  color: #273746;
+  font-weight: 700;
+}
+
+.time-note {
+  display: block;
+  margin-top: 2px;
+  color: #6f7b84;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.status-chip {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.status-by_school_start,
+.status-within_15_minutes {
+  color: #1f6348;
+  background: #dff3e8;
+}
+
+.status-after_school_start,
+.status-more_than_15_minutes_late,
+.status-not_observed {
+  color: #8b2f2f;
+  background: #fde2df;
+}
+
+.status-arrival_not_observed,
+.status-uncertain {
+  color: #81500d;
+  background: #fff0cf;
+}
+
+.section-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: end;
+}
+
+.section-heading h2 {
+  margin: 0;
+  color: var(--school-ink);
+}
+
+.chart-wrap {
+  height: 310px;
+  margin-top: 14px;
+  padding: 16px;
+  border: 1px solid #e0e5e9;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.methodology {
+  padding: 24px;
+  border-radius: 10px;
+  color: #46433e;
+  background: var(--school-paper);
+  border: 1px solid #e5dac6;
+}
+
+.methodology h2 {
+  color: var(--school-ink);
+}
+
+.method-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 28px;
+}
+
+.method-grid p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.error-box {
+  margin-top: 24px;
+  padding: 14px 16px;
+  border: 1px solid #d97b73;
+  border-radius: 6px;
+  color: #7f2e2e;
+  background: #fff0ef;
+}
+
+@media (max-width: 720px) {
+  .method-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .section-heading,
+  .school-panel-head,
+  .capacity-banner,
+  .student-impact,
+  .school-methodology,
+  .route-chart-intro {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .route-chart-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .route-chart-canvas {
+    height: 250px;
+  }
+
+  .bell-time {
+    text-align: left;
+  }
+}

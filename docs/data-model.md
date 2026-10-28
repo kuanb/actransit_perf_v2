@@ -163,6 +163,10 @@ CREATE TABLE actransit.trip_observations (
   scheduled_arrival     TIMESTAMP,                    -- nullable: stop-times missing happens
   actual_arrival        TIMESTAMP,                    -- nullable if trip went stale before reaching stop
   delay_seconds         INT64,                        -- actual − scheduled
+  scheduled_departure   TIMESTAMP,                    -- populated on the origin row only
+  actual_departure      TIMESTAMP,                    -- 250 m origin-geofence crossing, origin row only
+  departure_delay_seconds INT64,                      -- actual departure − scheduled departure
+  departure_confidence  STRING,                       -- confirmed crossing or first-seen-away estimate
   leg_distance_m        FLOAT64,                      -- from previous stop_sequence's projected position
   leg_duration_s        FLOAT64,                      -- from previous stop's actual_arrival
   leg_avg_speed_mps     FLOAT64,                      -- leg_distance_m / leg_duration_s
@@ -184,6 +188,12 @@ keeps those rows physically co-located within a partition.
 **Schedule arrival timezone**: stored as `TIMESTAMP` (UTC), converted from
 GTFS-static's `HH:MM:SS` × `service_date` × agency timezone (`America/Los_Angeles`).
 Handles the "GTFS times can exceed 24:00" quirk for trips that cross midnight.
+
+**Origin departure**: the tracker records the first crossing from within to
+outside a 250 m haversine geofence around the trip origin. If the first probe is
+already outside the geofence, its timestamp is retained with lower confidence
+instead of being presented as a confirmed departure. Departure fields are
+populated only on the trip's origin row.
 
 ### `actransit.trip_probes`
 

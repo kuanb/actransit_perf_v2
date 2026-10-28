@@ -5,6 +5,9 @@ locals {
 resource "google_cloud_run_v2_service" "scraper" {
   name     = "actransit-scraper"
   location = var.region
+  depends_on = [
+    google_bigquery_table.trip_observations,
+  ]
 
   template {
     service_account = google_service_account.scraper.email

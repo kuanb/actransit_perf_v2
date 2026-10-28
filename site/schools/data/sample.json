@@ -1,0 +1,82 @@
+{
+  "methodology_version": 2,
+  "service_date": "2026-10-26",
+  "generated_at": "2026-10-27T09:05:00Z",
+  "geofence_radius_m": 250,
+  "departure_late_threshold_minutes": 15,
+  "schools": [
+    {
+      "school_id": "el-cerrito-high",
+      "name": "El Cerrito High School",
+      "start_time_local": "08:30",
+      "start_time_valid_from": "2026-08-18",
+      "start_time_valid_until": null,
+      "start_time_source_url": "https://ecgauchos.wccusd.net/our-school/bell-schedule",
+      "school_calendar_name": "2026-2027 school year",
+      "school_calendar_start_date": "2026-08-18",
+      "school_calendar_end_date": "2027-06-10",
+      "school_calendar_no_school_dates": ["2026-09-07", "2026-10-12", "2026-11-11", "2026-11-23", "2026-11-24", "2026-11-25", "2026-11-26", "2026-11-27", "2026-12-21", "2026-12-22", "2026-12-23", "2026-12-24", "2026-12-25", "2026-12-28", "2026-12-29", "2026-12-30", "2026-12-31", "2027-01-01", "2027-01-18", "2027-01-19", "2027-02-15", "2027-02-16", "2027-02-17", "2027-02-18", "2027-02-19", "2027-03-26", "2027-04-05", "2027-04-06", "2027-04-07", "2027-04-08", "2027-04-09", "2027-05-28", "2027-05-31"],
+      "school_calendar_source_url": "https://resources.finalsite.net/images/v1781722609/wccusdnet/outbgmsodaqhv0mn49lc/SchoolCalendar2026-27Revised_1.pdf",
+      "scheduled_trips": 3,
+      "observed_arrivals": 3,
+      "arrivals_after_start": 1,
+      "trips_not_observed": 0,
+      "all_scheduled_arrived": true,
+      "trips": [
+        {
+          "route_id": "667", "trip_id": "2121020", "vehicle_id": "5101", "stop_id": "826",
+          "scheduled_departure": "2026-10-26T14:29:00Z", "actual_departure": "2026-10-26T14:34:00Z",
+          "departure_confidence": "confirmed_250m_crossing", "departure_delay_minutes": 5, "departure_status": "within_15_minutes",
+          "scheduled_arrival": "2026-10-26T15:07:00Z", "actual_arrival": "2026-10-26T15:18:00Z",
+          "arrival_confidence": "confirmed_250m_crossing", "arrival_minutes_from_start": -12, "arrival_status": "by_school_start", "observed_running": true
+        },
+        {
+          "route_id": "684", "trip_id": "8595020", "vehicle_id": "5102", "stop_id": "827",
+          "scheduled_departure": "2026-10-26T14:34:00Z", "actual_departure": "2026-10-26T14:37:00Z",
+          "departure_confidence": "confirmed_250m_crossing", "departure_delay_minutes": 3, "departure_status": "within_15_minutes",
+          "scheduled_arrival": "2026-10-26T15:14:00Z", "actual_arrival": "2026-10-26T15:27:00Z",
+          "arrival_confidence": "confirmed_250m_crossing", "arrival_minutes_from_start": -3, "arrival_status": "by_school_start", "observed_running": true
+        },
+        {
+          "route_id": "684", "trip_id": "13200020", "vehicle_id": "5103", "stop_id": "827",
+          "scheduled_departure": "2026-10-26T14:35:00Z", "actual_departure": "2026-10-26T14:53:00Z",
+          "departure_confidence": "confirmed_250m_crossing", "departure_delay_minutes": 18, "departure_status": "more_than_15_minutes_late",
+          "scheduled_arrival": "2026-10-26T15:15:00Z", "actual_arrival": "2026-10-26T15:34:00Z",
+          "arrival_confidence": "first_seen_inside_250m", "arrival_minutes_from_start": 4, "arrival_status": "after_school_start", "observed_running": true
+        }
+      ]
+    },
+    {
+      "school_id": "korematsu-middle",
+      "name": "Korematsu Middle School",
+      "start_time_local": "08:30",
+      "start_time_valid_from": "2026-08-18",
+      "start_time_valid_until": null,
+      "start_time_source_url": "https://korematsu.wccusd.net/our-school/bell-schedule",
+      "school_calendar_name": "2026-2027 school year",
+      "school_calendar_start_date": "2026-08-18",
+      "school_calendar_end_date": "2027-06-10",
+      "school_calendar_no_school_dates": ["2026-09-07", "2026-10-12", "2026-11-11", "2026-11-23", "2026-11-24", "2026-11-25", "2026-11-26", "2026-11-27", "2026-12-21", "2026-12-22", "2026-12-23", "2026-12-24", "2026-12-25", "2026-12-28", "2026-12-29", "2026-12-30", "2026-12-31", "2027-01-01", "2027-01-18", "2027-01-19", "2027-02-15", "2027-02-16", "2027-02-17", "2027-02-18", "2027-02-19", "2027-03-26", "2027-04-05", "2027-04-06", "2027-04-07", "2027-04-08", "2027-04-09", "2027-05-28", "2027-05-31"],
+      "school_calendar_source_url": "https://resources.finalsite.net/images/v1781722609/wccusdnet/outbgmsodaqhv0mn49lc/SchoolCalendar2026-27Revised_1.pdf",
+      "scheduled_trips": 2,
+      "observed_arrivals": 1,
+      "arrivals_after_start": 0,
+      "trips_not_observed": 1,
+      "all_scheduled_arrived": false,
+      "trips": [
+        {
+          "route_id": "675", "trip_id": "11721020", "vehicle_id": "5104", "stop_id": "5362",
+          "scheduled_departure": "2026-10-26T14:29:00Z", "actual_departure": "2026-10-26T14:33:00Z",
+          "departure_confidence": "confirmed_250m_crossing", "departure_delay_minutes": 4, "departure_status": "within_15_minutes",
+          "scheduled_arrival": "2026-10-26T15:16:00Z", "actual_arrival": "2026-10-26T15:20:00Z",
+          "arrival_confidence": "confirmed_250m_crossing", "arrival_minutes_from_start": -10, "arrival_status": "by_school_start", "observed_running": true
+        },
+        {
+          "route_id": "675", "trip_id": "6351020", "stop_id": "5362",
+          "scheduled_departure": "2026-10-26T14:29:00Z", "departure_status": "not_observed",
+          "scheduled_arrival": "2026-10-26T15:16:00Z", "arrival_status": "not_observed", "observed_running": false
+        }
+      ]
+    }
+  ]
+}

@@ -45,6 +45,13 @@ data, including route-level weekday/weekend time-of-day breakdowns. A daily
 `/refresh-published-kpis` job imports AC Transit's published monthly values for
 side-by-side comparison.
 
+The daily generator also publishes a small school-service report for El Cerrito
+High and Korematsu Middle. It compares every expected morning trip with a 250 m
+school-arrival geofence, preserves the effective-dated school start time used
+for that day, and reports confirmed origin departures more than 15 minutes late.
+Reports are limited to weekdays within each school's effective-dated academic
+calendar and exclude district holidays, recesses, and secondary no-school days.
+
 ## Design docs
 
 In-progress / planned services have architecture artifacts under `docs/`:
@@ -68,6 +75,7 @@ directly via HTTPS, with permissive CORS for browsers:
 | Latest weekly report | `https://storage.googleapis.com/transit-203605-actransit-cache/stats/weekly/latest.json` |
 | Latest monthly KPI report | `https://storage.googleapis.com/transit-203605-actransit-cache/stats/monthly/latest.json` |
 | Published AC Transit KPIs | `https://storage.googleapis.com/transit-203605-actransit-cache/stats/published-kpis/latest.json` |
+| Latest school report | `https://storage.googleapis.com/transit-203605-actransit-cache/stats/schools/latest.json` |
 
 ## Stack
 
@@ -92,6 +100,7 @@ make build                  # just build (rare; use release instead)
 make invoke                 # curl /scrape with your identity token
 make logs                   # recent Cloud Run logs
 make backfill-agency-kpis-history  # rebuild KPI comparison history after deployment
+make backfill-school-stats-history # build school reports for every indexed service date
 ```
 
 `make deploy` refuses to run if the tag isn't in Artifact Registry, so you

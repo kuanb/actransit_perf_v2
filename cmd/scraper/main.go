@@ -150,6 +150,7 @@ func main() {
 	http.HandleFunc("/refresh-gtfs", handleRefreshGTFS)
 	http.HandleFunc("/track-performance", handleTrackPerformance)
 	http.HandleFunc("/generate-daily-stats", handleGenerateDailyStats)
+	http.HandleFunc("/generate-school-stats", handleGenerateSchoolStats)
 	http.HandleFunc("/generate-daily-agency-kpis", handleGenerateDailyAgencyKPIs)
 	http.HandleFunc("/generate-weekly-stats", handleGenerateWeeklyStats)
 	http.HandleFunc("/generate-monthly-stats", handleGenerateMonthlyStats)
@@ -218,6 +219,7 @@ func handleTrackPerformance(w http.ResponseWriter, r *http.Request) {
 			"trips_expired", stats.TripsExpired,
 			"trips_completed", stats.TripsCompleted,
 			"probes_appended", stats.ProbesAppended,
+			"departures_detected", stats.DeparturesDetected,
 			"arrivals_detected", stats.StopArrivalsDetected,
 			"trips_missing_shape", stats.TripsMissingShape,
 			"bq_rows_observations", stats.RowsWrittenObs,
@@ -260,6 +262,35 @@ func handleGenerateDailyStats(w http.ResponseWriter, r *http.Request) {
 		"system_total_trips", stats.System.TotalTrips,
 		"scheduled_trips", stats.ScheduleCompliance.ScheduledTrips,
 		"ran_trips", stats.ScheduleCompliance.RanTrips,
+	)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(stats)
+}
+
+func handleGenerateSchoolStats(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	dateStr := r.URL.Query().Get("service_date")
+	var serviceDate civil.Date
+	if dateStr != "" {
+		parsed, err := civil.ParseDate(dateStr)
+		if err != nil {
+			http.Error(w, "invalid service_date: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		serviceDate = parsed
+	} else {
+		serviceDate = defaultStatsServiceDate(time.Now())
+	}
+	stats, err := generateSchoolStatsForDate(r.Context(), serviceDate)
+	if err != nil {
+		slog.Error("generate-school-stats failed", "service_date", serviceDate.String(), "err", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	slog.Info("generate-school-stats ok",
+		"duration_ms", time.Since(start).Milliseconds(),
+		"service_date", serviceDate.String(),
+		"schools", len(stats.Schools),
 	)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(stats)

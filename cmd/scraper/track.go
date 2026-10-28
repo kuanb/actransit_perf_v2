@@ -26,6 +26,9 @@ const (
 	maxProbesPerTrip              = 20
 	metricVehiclesInFlight        = "custom.googleapis.com/actransit/vehicles_in_flight"
 	metricTripsFinalizedPerMinute = "custom.googleapis.com/actransit/trips_finalized_per_minute"
+	departureGeofenceMeters       = 250.0
+	departureConfidenceConfirmed  = "confirmed_250m_crossing"
+	departureConfidenceFirstSeen  = "first_seen_outside_250m"
 	// Tolerance for the trailing-stop fallback in tripToRows. Empirically
 	// ~65% of trips' final probe falls 0–100 m shy of the last stop's
 	// projected dist_along_route (bus pulls into a layover, GPS multipath,
@@ -44,14 +47,16 @@ type stateFile struct {
 }
 
 type inFlightTrip struct {
-	VehicleID    string             `json:"vehicle_id"`
-	RouteID      string             `json:"route_id"`
-	TripID       string             `json:"trip_id"`
-	ServiceDate  string             `json:"service_date"`
-	FirstSeenTS  time.Time          `json:"first_seen_ts"`
-	LastSeenTS   time.Time          `json:"last_seen_ts"`
-	Probes       []probe            `json:"probes"`
-	StopArrivals map[int]time.Time  `json:"stop_arrivals,omitempty"`
+	VehicleID           string            `json:"vehicle_id"`
+	RouteID             string            `json:"route_id"`
+	TripID              string            `json:"trip_id"`
+	ServiceDate         string            `json:"service_date"`
+	FirstSeenTS         time.Time         `json:"first_seen_ts"`
+	LastSeenTS          time.Time         `json:"last_seen_ts"`
+	Probes              []probe           `json:"probes"`
+	StopArrivals        map[int]time.Time `json:"stop_arrivals,omitempty"`
+	ActualDeparture     time.Time         `json:"actual_departure,omitempty"`
+	DepartureConfidence string            `json:"departure_confidence,omitempty"`
 }
 
 type probe struct {
@@ -70,18 +75,19 @@ type trackStats struct {
 	TripsExpired         int
 	TripsCompleted       int
 	ProbesAppended       int
+	DeparturesDetected   int
 	StopArrivalsDetected int
 	TripsMissingShape    int
 	RowsWrittenObs       int
 	RowsWrittenProbes    int
 	Conflict             bool
 	// Diagnostics for the live-duplication investigation.
-	InFlightAfterRead    int
-	InFlightAfterUpdate  int
-	InFlightAfterPrune   int
-	StuckTrips           int
-	ReadGen              int64
-	WriteGen             int64
+	InFlightAfterRead   int
+	InFlightAfterUpdate int
+	InFlightAfterPrune  int
+	StuckTrips          int
+	ReadGen             int64
+	WriteGen            int64
 }
 
 type vehicleSnapshot struct {
@@ -133,6 +139,7 @@ func trackPerformance(ctx context.Context) (trackStats, error) {
 	cache := ensureGTFSCache(ctx)
 	if cache != nil {
 		projectInFlightProbes(&s, cache, &stats)
+		detectTripDepartures(&s, cache, &stats)
 		detectStopArrivals(&s, cache, &stats)
 	}
 
@@ -457,6 +464,70 @@ func projectInFlightProbes(s *stateFile, cache *gtfsCache, stats *trackStats) {
 			p.NearestStopSeq = nearestStopSeq(stops, distAlong)
 		}
 	}
+}
+
+func detectTripDepartures(s *stateFile, cache *gtfsCache, stats *trackStats) {
+	for i := range s.InFlight {
+		t := &s.InFlight[i]
+		if t.DepartureConfidence == departureConfidenceConfirmed || len(t.Probes) == 0 {
+			continue
+		}
+		route, ok := cache.Routes[t.RouteID]
+		if !ok {
+			continue
+		}
+		trip, ok := route.Trips[t.TripID]
+		if !ok || len(trip.StopTimes) == 0 {
+			continue
+		}
+		origin, ok := route.Stops[trip.StopTimes[0].StopID]
+		if !ok {
+			continue
+		}
+
+		if t.ActualDeparture.IsZero() {
+			first := t.Probes[0]
+			if haversineMeters(first.Lat, first.Lon, origin.Lat, origin.Lon) > departureGeofenceMeters {
+				t.ActualDeparture = first.TS
+				t.DepartureConfidence = departureConfidenceFirstSeen
+				stats.DeparturesDetected++
+			}
+		}
+
+		for j := 1; j < len(t.Probes); j++ {
+			prev := t.Probes[j-1]
+			curr := t.Probes[j]
+			prevDist := haversineMeters(prev.Lat, prev.Lon, origin.Lat, origin.Lon)
+			currDist := haversineMeters(curr.Lat, curr.Lon, origin.Lat, origin.Lon)
+			if prevDist > departureGeofenceMeters || currDist <= departureGeofenceMeters {
+				continue
+			}
+			t.ActualDeparture = interpolateGeofenceCrossing(
+				prev.TS,
+				curr.TS,
+				prevDist,
+				currDist,
+				departureGeofenceMeters,
+			)
+			t.DepartureConfidence = departureConfidenceConfirmed
+			stats.DeparturesDetected++
+			break
+		}
+	}
+}
+
+func interpolateGeofenceCrossing(start, end time.Time, startDist, endDist, radius float64) time.Time {
+	span := endDist - startDist
+	if span == 0 || !end.After(start) {
+		return end
+	}
+	fraction := (radius - startDist) / span
+	if fraction < 0 {
+		fraction = 0
+	} else if fraction > 1 {
+		fraction = 1
+	}
+	return start.Add(time.Duration(float64(end.Sub(start)) * fraction))
 }
 
 // detectStopArrivals scans each in-flight trip's probes (which must have

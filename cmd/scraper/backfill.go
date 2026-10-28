@@ -388,6 +388,7 @@ func reconstructTrips(snapshots []vehicleSnapshot, cache *gtfsCache) []inFlightT
 	if cache != nil {
 		var dummy trackStats
 		projectInFlightProbes(&s, cache, &dummy)
+		detectTripDepartures(&s, cache, &dummy)
 		detectStopArrivals(&s, cache, &dummy)
 	}
 	return s.InFlight

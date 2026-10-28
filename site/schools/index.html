@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Morning AC Transit school-route arrivals relative to the school bell at El Cerrito High and Korematsu Middle.">
+  <title>AC Transit school arrival reliability</title>
+  <link rel="stylesheet" href="../styles.css?v=schools-v4">
+  <link rel="stylesheet" href="styles.css?v=schools-v4">
+  <script src="../independence-notice.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <header>
+    <div class="header-body">
+      <p class="school-kicker">Morning school service</p>
+      <h1>Did the bus arrive before the bell?</h1>
+      <p id="meta" class="muted"></p>
+      <label class="date-control" for="week-selector">
+        Service week
+        <select id="week-selector"></select>
+      </label>
+    </div>
+    <nav class="header-nav">
+      <a href="https://ac-transit.com/" target="_blank" rel="noopener">Live map →</a>
+      <a href="../daily/">Daily →</a>
+      <a href="../weekly/">Weekly →</a>
+      <a href="" aria-current="page">Schools</a>
+      <a href="../report-card/">Report card →</a>
+    </nav>
+  </header>
+
+  <main>
+    <aside class="student-impact">
+      <strong>Why this matters</strong>
+      <span>A missing morning bus can leave students stranded, and children without phones may have no way to contact a parent.</span>
+    </aside>
+
+    <aside class="school-methodology">
+      <strong>Methodology</strong>
+      <span>Morning trips are evaluated individually at a 250&nbsp;m geofence around each school. A second bus arriving does not erase a missing bus: each scheduled trip represents capacity students were expecting. Reports are generated only for weekdays in the published school calendar; holidays, recesses, staff no-school days, and summer are excluded.</span>
+    </aside>
+
+    <section aria-labelledby="summary-title">
+      <h2 id="summary-title">Selected-week summary</h2>
+      <div id="summary-cards" class="cards"></div>
+    </section>
+
+    <div id="school-sections"></div>
+
+    <section id="trend-section" hidden>
+      <div class="section-heading">
+        <div>
+          <p class="school-kicker">Day by day</p>
+          <h2>Arrival performance this week</h2>
+        </div>
+        <p class="muted">Missing and unobserved school arrivals count against each day’s percentage.</p>
+      </div>
+      <div class="chart-wrap"><canvas id="school-trend-chart"></canvas></div>
+    </section>
+
+    <section class="methodology" aria-labelledby="methodology-title">
+      <p class="school-kicker">Definitions</p>
+      <h2 id="methodology-title">What the statuses mean</h2>
+      <div class="method-grid">
+        <p><strong>Arrival</strong> is the interpolated time a vehicle entered the 250&nbsp;m school geofence. “First seen inside” is shown with lower confidence when no preceding outside observation was available.</p>
+        <p><strong>Departure</strong> is the interpolated time a vehicle crossed 250&nbsp;m from its scheduled origin. A trip first seen already outside the origin geofence is labeled uncertain and is not classified as more than 15 minutes late.</p>
+        <p><strong>Dropped / not observed</strong> means the scheduled trip had no usable observation. It describes this independent data record and is not proof that no vehicle operated.</p>
+        <p><strong>School start</strong> is effective-dated. Every daily report preserves the start time and validity period used for that date.</p>
+      </div>
+    </section>
+
+    <div id="error" class="error-box" role="alert" hidden></div>
+  </main>
+
+  <footer>
+    <a href="https://kuanbutts.com" target="_blank" rel="noopener">
+      A project by Kuan Butts &copy; <span id="footer-year"></span>
+    </a>
+  </footer>
+
+  <script src="../lib.js?v=schools-v4"></script>
+  <script src="app.js?v=schools-v4"></script>
+  <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "0e36b12e46b04a69b5e9ff6883f6d23d"}'></script><!-- End Cloudflare Web Analytics -->
+</body>
+</html>

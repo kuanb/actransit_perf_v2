@@ -17,7 +17,7 @@ AGENCY_KPI_VERSION := $(shell sed -nE 's/^[[:space:]]*agencyKPIMethodologyVersio
 PARALLEL ?= 2
 BUNCHING_VERIFY_PARALLEL ?= 16
 
-.PHONY: tf-init tf-plan tf-apply tf-fmt build deploy release logs invoke run-local test smoke hooks-install backfill backfill-bunching backfill-bunching-history verify-bunching-history backfill-agency-kpis backfill-agency-kpis-history verify-agency-kpi-history
+.PHONY: tf-init tf-plan tf-apply tf-fmt build deploy release logs invoke run-local test smoke hooks-install backfill backfill-school-stats-history backfill-bunching backfill-bunching-history verify-bunching-history backfill-agency-kpis backfill-agency-kpis-history verify-agency-kpi-history
 
 tf-init:
 	cd infra && terraform init
@@ -93,6 +93,18 @@ backfill:
 	echo "==> POST $$URL/backfill-day?$$QS"; \
 	curl --fail --max-time 1800 -X POST -H "Authorization: Bearer $$TOKEN" \
 		"$$URL/backfill-day?$$QS"
+
+# Runs serially because each date read-modify-writes the school index. Dates
+# outside the configured instructional calendar are removed from school stats.
+backfill-school-stats-history:
+	@set -eu; \
+	URL="$$(cd infra && terraform output -raw scraper_url)"; \
+	TOKEN="$$(gcloud auth print-identity-token)"; \
+	DATES="$$(gsutil cat gs://$(PROJECT_ID)-actransit-cache/stats/_index.json | jq -r '.dates[]')"; \
+	test -n "$$DATES" || { echo "ERROR: stats index contains no dates"; exit 1; }; \
+	export URL TOKEN; \
+	printf '%s\n' "$$DATES" | xargs -n 1 -P 1 sh -c 'date="$$1"; echo "==> $$date"; curl -sS --fail-with-body --max-time 300 -X POST -H "Authorization: Bearer $${TOKEN}" "$${URL}/generate-school-stats?service_date=$${date}" >/dev/null' sh; \
+	echo "==> generated school stats for $$(printf '%s\n' "$$DATES" | wc -l | tr -d ' ') dates"
 
 backfill-bunching:
 	@test -n "$(START)" -a -n "$(END)" || (echo "usage: make backfill-bunching START=YYYY-MM-DD END=YYYY-MM-DD [FORCE=true]" && exit 1)
@@ -228,6 +240,8 @@ smoke:
 	hit POST /generate-daily-stats; \
 	check "$$BUCKET/stats/latest.json"; \
 	check "$$BUCKET/stats/_index.json"; \
+	check "$$BUCKET/stats/schools/latest.json"; \
+	check "$$BUCKET/stats/schools/_index.json"; \
 	hit POST /generate-monthly-stats; \
 	check "$$BUCKET/stats/monthly/latest.json"; \
 	hit POST /refresh-published-kpis; \
