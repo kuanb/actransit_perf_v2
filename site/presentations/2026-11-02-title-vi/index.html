@@ -29,7 +29,7 @@
     <div class="shell">
       <p class="eyebrow">Provisional independent analysis · November 2, 2026</p>
       <h1>A current Title VI screen, while the source data is pending</h1>
-      <p class="dek">AC Transit’s triennial report compares service on minority and non-minority lines. This reproduction applies the same basic screen to current demographics and schedules, then adds a month of actual service, waits, and rider-window performance route by route.</p>
+      <p class="dek">AC Transit’s triennial report compares service on minority and non-minority lines. This reproduction applies the same basic screen to current demographics and schedules, then adds five months of actual service, waits, and rider-window performance route by route.</p>
     </div>
   </header>
 
@@ -98,14 +98,33 @@
       <p>A handful of routes sit close to the one-third classification boundary, and the official service-area geography is missing. The result also depends on whether the agency uses the same peak windows and handles branch departures exactly as this reconstruction does. A two-year schedule comparison suggests a real question; the requested source files are necessary to answer it conclusively.</p>
     </aside>
 
-    <h2>Actual service tells a more mixed story</h2>
+    <h2 id="actual-service">Actual service tells a more mixed story</h2>
 
     <p>The staff report monitors schedule and on-time performance, but not whether scheduled trips actually ran, whether stops were reached in a useful rider window, or whether buses arrived evenly. October’s real-time data adds those measures. Minority routes delivered 86.1 percent of scheduled trips, one point below other routes. They performed better on the independent punctuality proxy and On Time Service Delivered, while their actual expected wait was 1.5 minutes longer. None of those group differences crosses 15 percent.</p>
 
     <figure class="plot plot-wide">
       <img src="plots/monitoring-comparison.png" alt="Four grouped bar charts compare minority and other routes. Minority routes have slightly lower trip delivery, higher independent punctuality and On Time Service Delivered, longer scheduled and actual waits, and better access to a stop with at least 14 daily trips.">
-      <figcaption>Observed measures cover October 1–31, 2026. Schedule and access measures use the Fall 2026 GTFS signup. These comparisons are aggregate screens; the route explorer below shows the variation hidden inside each group.</figcaption>
+      <figcaption>Observed measures cover October 1–31, 2026. Schedule and access measures use the Fall 2026 GTFS signup. In the first three panels, red means provisional minority routes and teal means other routes; the access panel compares block groups instead. These are aggregate screens, and the route explorer below shows the variation hidden inside each group.</figcaption>
     </figure>
+
+    <div class="metric-definitions" aria-label="Definitions for the four current-screen panels">
+      <section>
+        <h3>Observed service outcomes</h3>
+        <p><strong>Trip delivery</strong> is the share of scheduled trips detected as operated. <strong>Independent −1/+5 proxy</strong> is the share of observed eligible timepoints reached from one minute early through five minutes late. <strong>On Time Service Delivered</strong> is the share of eligible scheduled stops reached from one minute early through seven minutes late.</p>
+      </section>
+      <section>
+        <h3>Scheduled frequency</h3>
+        <p>Each bar is the average number of scheduled minutes between consecutive departures in the same route and direction. Peak means 6–10 AM and 3–7 PM; off-peak covers the remaining weekday hours. Smaller values mean more frequent scheduled service.</p>
+      </section>
+      <section>
+        <h3>Wait implied by bus spacing</h3>
+        <p><strong>Actual expected wait</strong> converts the observed distribution of gaps between buses into the average wait faced by a randomly arriving rider. <strong>Scheduled expected wait</strong> applies the same calculation to timetable gaps. Smaller values are better.</p>
+      </section>
+      <section>
+        <h3>Access to 14+ daily trips</h3>
+        <p>This is the share of proxy service-area block groups whose centroid is within one-quarter mile of a stop scheduled for at least 14 trips that day. In this panel, red and teal identify minority and other <em>block groups</em>, not route classifications.</p>
+      </section>
+    </div>
 
     <div class="table-wrap">
       <table>
@@ -120,6 +139,50 @@
         </tbody>
       </table>
     </div>
+
+    <h2>From summer into fall, trip delivery declined across both groups</h2>
+
+    <p>Pooling each month’s daily observations shows a persistent systemwide slide. Trip delivery fell from 91.3 to 86.1 percent on minority routes and from 94.9 to 87.1 percent on other routes between June and October. The gap between the groups narrowed from 3.7 percentage points to 1.0 point, but mainly because both groups worsened.</p>
+
+    <p>The independent −1/+5 proxy was higher on minority routes in every month, with the advantage growing from 1.7 points in June to 4.9 points in October. On Time Service Delivered moved differently: minority routes trailed in June and July, the groups were nearly even in August and September, and minority routes were 1.9 points higher in October. The comparison therefore does not show one group consistently doing worse on every measure; it does show that riders across the system received less of the scheduled service in a useful window as summer turned to fall.</p>
+
+    <figure class="plot plot-wide">
+      <img src="plots/monthly-performance.png" alt="Three line charts show monthly trip delivery, the independent minus-one to plus-five arrival proxy, and On Time Service Delivered for provisional minority and other routes from June through October 2026.">
+      <figcaption>Each point pools the raw numerator and denominator from every daily report in that month; it is not an average of daily percentages. The current provisional route classifications are applied retrospectively to all five months so the groups remain comparable.</figcaption>
+    </figure>
+
+    <div class="metric-definitions trend-definitions" aria-label="Definitions for the monthly performance panels">
+      <section>
+        <h3>Trip delivery</h3>
+        <p>Operated trips divided by scheduled trips. A trip must be detected with a usable identifier; a missing observation may reflect dropped or partial service, an identifier mismatch, or a public-feed failure.</p>
+      </section>
+      <section>
+        <h3>Independent −1/+5 proxy</h3>
+        <p>On-time observed arrival timepoints divided by all observed eligible timepoints. The qualifying window runs from one minute early through five minutes late and is independent of the agency’s published OTP series.</p>
+      </section>
+      <section>
+        <h3>On Time Service Delivered</h3>
+        <p>Eligible scheduled stops reached from one minute early through seven minutes late, divided by all eligible scheduled stops. Its complement is <em>outside rider window</em>.</p>
+      </section>
+    </div>
+
+    <h2>Which routes are in each comparison</h2>
+
+    <p>These are the same provisional classifications used in the current and longitudinal charts. Search the list or scroll within the table; the mileage share shows how much of each line’s East Bay geometry falls within block groups at or above the provisional 74 percent people-of-color threshold.</p>
+
+    <section class="classification-reference" aria-labelledby="classification-reference-title">
+      <h3 id="classification-reference-title">Route classification reference</h3>
+      <div class="classification-reference-controls">
+        <label>Find a route <input id="classification-search" type="search" placeholder="e.g. 51A" autocomplete="off"></label>
+        <span id="classification-count" aria-live="polite"></span>
+      </div>
+      <div class="table-wrap classification-table-wrap">
+        <table id="classification-table">
+          <thead><tr><th>Route</th><th>Provisional classification</th><th>Minority block-group mileage</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
 
     <p>Aggregates can conceal much larger line-level failures. On Time Service Delivered ranges widely across both groups. The lowest current results include the 623, 800, 851, 72, 802, 805, 1T, O, and 72M. A Title VI monitor becomes more useful when the board can see those routes rather than only one average for each group.</p>
 
@@ -160,6 +223,7 @@
       </div>
       <div class="downloads" aria-label="Download analysis data">
         <a href="data/route_metrics.csv" download>Route × day-type metrics CSV</a>
+        <a href="data/monthly_performance_by_group.csv" download>Monthly group performance CSV</a>
         <a href="data/route_classifications.csv" download>Route classifications CSV</a>
         <a href="data/scheduled_headways_by_route.csv" download>Scheduled headways CSV</a>
         <a href="data/ridership_by_route_day_type.csv" download>Route load estimates CSV</a>
@@ -181,7 +245,7 @@
       <p><strong>Official reference.</strong> I reviewed the <a href="https://actransit.legistar.com/View.ashx?M=F&amp;ID=16091037&amp;GUID=F7ACAA65-B3BA-445A-B714-88E165F202A2">staff report</a> and the <a href="https://actransit.legistar.com/View.ashx?M=F&amp;ID=16090987&amp;GUID=78FC602B-4273-40B7-B0A0-DF3895A009AF">2026 Title VI Program</a>, especially Appendix K. The district’s 15 percent standard is a local monitoring policy, not a federal threshold. A <a href="https://bsky.app/profile/laurelintransit.bsky.social/post/3mzbs5ts4tk2j">public discussion of the packet</a> motivated the added Service Operated and rider-facing measures; all calculations here use primary data.</p>
       <p><strong>Demographics and classification.</strong> Block-group race and ethnicity use the Census Bureau’s <a href="https://www2.census.gov/programs-surveys/acs/summary_file/2024/table-based-SF/data/5YRData/acsdt5y2024-b03002.dat">2020–2024 ACS five-year B03002 table</a>. People of color equals total population less non-Hispanic white-alone population. Because the requested service-area geography and official mean are pending, 74 percent—the share published in the district program—is used provisionally. Route and stop geometry comes from AC Transit’s <a href="https://www.actransit.org/data-api-resource-center">Data &amp; API Resource Center</a>. Route mileage is unioned by public route and clipped to Alameda and Contra Costa counties; a line is classified when at least one-third falls in qualifying block groups.</p>
       <p><strong>Schedules and access.</strong> Scheduled headways use representative Wednesday, Saturday, and Sunday service from the Fall 2026 GTFS feed. Each consecutive route-and-direction departure is one headway. Peak is provisionally 6–10 AM and 3–7 PM. The access denominator is a reproducible proxy: 1,165 populated Alameda/Contra Costa block groups whose centroid is within one mile of a current stop. A block group passes when its centroid is within one-quarter mile of a stop receiving at least 14 trips on the representative day. The official service-area block groups will replace this proxy.</p>
-      <p><strong>Observed service.</strong> October 1–31 route metrics come from the tracker’s <a href="https://storage.googleapis.com/transit-203605-actransit-cache/stats/_index.json">public daily archive</a>. Trip delivery counts any scheduled trip detected with a usable identifier. Non-observation can mean dropped or partial service, an identifier mismatch, or a public-feed failure; it is not by itself a claim about cause. The −1/+5 proxy uses independently detected arrivals at eligible intermediate timepoints, unlike the agency’s departure-timepoint measure. On Time Service Delivered asks whether each eligible scheduled stop was reached from one minute early through seven minutes late; its complement is <em>outside rider window</em>, not “not delivered.” Headway comparisons use scheduled frequency of 40 minutes or better; a bunch is below half the schedule and a long gap exceeds 1.5 times the schedule.</p>
+      <p><strong>Observed service.</strong> Current route metrics use October 1–31; the longitudinal comparison pools complete monthly reports from June 1 through October 31 from the tracker’s <a href="https://storage.googleapis.com/transit-203605-actransit-cache/stats/_index.json">public daily archive</a>. The current provisional route classifications are held fixed across all five months. Trip delivery counts any scheduled trip detected with a usable identifier. Non-observation can mean dropped or partial service, an identifier mismatch, or a public-feed failure; it is not by itself a claim about cause. The −1/+5 proxy uses independently detected arrivals at eligible intermediate timepoints, unlike the agency’s departure-timepoint measure. On Time Service Delivered asks whether each eligible scheduled stop was reached from one minute early through seven minutes late; its complement is <em>outside rider window</em>, not “not delivered.” Headway comparisons use scheduled frequency of 40 minutes or better; a bunch is below half the schedule and a long gap exceeds 1.5 times the schedule.</p>
       <p><strong>Reproducibility.</strong> The code, SQL, detailed route tables, and all public outputs are versioned with this page. When request 26-313 is fulfilled, the official block-group universe, benchmark, route-mileage treatment, APC loads, vehicle assignments, and amenity inventory can be swapped into the same stages and every table regenerated.</p>
     </aside>
 

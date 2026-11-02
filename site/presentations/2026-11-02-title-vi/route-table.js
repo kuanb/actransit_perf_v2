@@ -3,6 +3,9 @@ const searchInput = document.querySelector("#route-search");
 const classSelect = document.querySelector("#route-class");
 const countLabel = document.querySelector("#route-count");
 const headerButtons = document.querySelectorAll("#route-table th button");
+const classificationBody = document.querySelector("#classification-table tbody");
+const classificationSearch = document.querySelector("#classification-search");
+const classificationCount = document.querySelector("#classification-count");
 
 let routes = [];
 let sortKey = "route_id";
@@ -53,8 +56,25 @@ function renderRoutes() {
     </tr>`).join("");
 }
 
+function renderClassificationReference() {
+  if (!classificationBody) return;
+  const query = classificationSearch.value.trim().toLowerCase();
+  const filtered = routes
+    .filter((route) => String(route.route_id).toLowerCase().includes(query))
+    .sort((left, right) => String(left.route_id).localeCompare(String(right.route_id), undefined, { numeric: true }));
+
+  classificationCount.textContent = `${filtered.length} of ${routes.length} routes`;
+  classificationBody.innerHTML = filtered.map((route) => `
+    <tr>
+      <td><strong>${route.route_id}</strong></td>
+      <td><span class="badge ${route.provisional_minority_route ? "minority" : "other"}">${route.provisional_minority_route ? "Minority route" : "Other route"}</span></td>
+      <td>${formatNumber(route.minority_mileage_share * 100)}%</td>
+    </tr>`).join("");
+}
+
 searchInput.addEventListener("input", renderRoutes);
 classSelect.addEventListener("change", renderRoutes);
+classificationSearch.addEventListener("input", renderClassificationReference);
 headerButtons.forEach((button) => button.addEventListener("click", () => {
   const nextKey = button.dataset.key;
   if (sortKey === nextKey) {
@@ -74,7 +94,9 @@ fetch("data/route-metrics.json")
   .then((data) => {
     routes = data;
     renderRoutes();
+    renderClassificationReference();
   })
   .catch(() => {
     countLabel.textContent = "Route data could not be loaded.";
+    classificationCount.textContent = "Route data could not be loaded.";
   });

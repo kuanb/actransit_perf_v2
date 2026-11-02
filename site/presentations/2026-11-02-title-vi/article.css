@@ -46,6 +46,14 @@ h1 { max-width: 1020px; margin: 0; font-size: clamp(45px, 7vw, 78px); letter-spa
 .plot img { display: block; width: 100%; border: 1px solid var(--line); border-radius: 10px; background: var(--white); box-shadow: 0 14px 34px rgba(24, 35, 42, .08); }
 .plot figcaption { margin: 11px 8px 0; color: var(--muted); font-size: 13px; }
 
+.metric-definitions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; width: min(1040px, 100%); margin: -18px auto 48px; }
+.metric-definitions section { padding: 18px 20px; border-top: 3px solid var(--teal); background: rgba(255, 253, 249, .75); }
+.metric-definitions section:nth-child(odd) { border-top-color: var(--red); }
+.metric-definitions h3 { margin: 0 0 8px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 14px; font-weight: 800; }
+.metric-definitions p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.55; }
+.trend-definitions { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.trend-definitions section:nth-child(2) { border-top-color: var(--gold); }
+
 .interactive-map-figure { width: min(1040px, 100%); margin: 42px auto 46px; }
 .map-stage { position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: #e8e3da; box-shadow: 0 14px 34px rgba(24, 35, 42, .08); }
 .equity-map { width: 100%; height: min(74vh, 760px); min-height: 540px; }
@@ -70,6 +78,16 @@ h1 { max-width: 1020px; margin: 0; font-size: clamp(45px, 7vw, 78px); letter-spa
 .route-list { width: min(900px, 100%); margin: 0 auto 48px; padding: 18px 22px; border: 1px solid var(--line); background: rgba(255, 253, 249, .7); }
 .route-list summary { cursor: pointer; color: var(--red); font-weight: 750; }
 .route-list p { margin: 16px 0 0; color: var(--muted); font-size: 14px; line-height: 1.7; }
+
+.classification-reference { width: min(900px, 100%); margin: 36px auto 52px; padding: 22px; border: 1px solid var(--line); background: rgba(255, 253, 249, .72); }
+.classification-reference h3 { margin: 0 0 16px; font-size: 25px; }
+.classification-reference-controls { display: flex; align-items: end; gap: 16px; }
+.classification-reference-controls label { display: grid; gap: 5px; color: var(--muted); font-size: 11px; font-weight: 750; letter-spacing: .05em; text-transform: uppercase; }
+.classification-reference-controls input { min-width: 220px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 5px; color: var(--ink); background: var(--white); font: inherit; font-size: 14px; text-transform: none; letter-spacing: 0; }
+#classification-count { margin-left: auto; color: var(--muted); font-size: 12px; }
+.classification-table-wrap { max-height: 330px; margin: 14px 0 0; overflow: auto; box-shadow: none; }
+.classification-table-wrap table { min-width: 600px; font-variant-numeric: tabular-nums; }
+.classification-table-wrap thead { position: sticky; top: 0; z-index: 1; }
 
 .table-wrap { width: min(1040px, 100%); margin: 36px auto 44px; overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--white); box-shadow: 0 10px 26px rgba(24, 35, 42, .05); }
 .table-wrap table { width: 100%; min-width: 820px; border-collapse: collapse; font-size: 14px; line-height: 1.4; }
@@ -129,6 +147,7 @@ tbody tr:last-child td { border-bottom: 0; }
   .stat { padding: 20px; }
   .plot { width: calc(100% + 14px); margin: 34px 0 38px -7px; }
   .plot img { border-radius: 5px; }
+  .metric-definitions, .trend-definitions { grid-template-columns: 1fr; width: calc(100% + 14px); margin-left: -7px; }
   .interactive-map-figure { width: calc(100% + 14px); margin: 34px 0 38px -7px; }
   .map-stage { border-radius: 5px; }
   .equity-map { height: 68vh; min-height: 480px; }
@@ -138,6 +157,10 @@ tbody tr:last-child td { border-bottom: 0; }
   .controls { align-items: stretch; }
   .controls label, .controls input, .controls select { width: 100%; }
   #route-count { margin-left: 0; }
+  .classification-reference { padding: 18px 14px; }
+  .classification-reference-controls { align-items: stretch; flex-direction: column; }
+  .classification-reference-controls label, .classification-reference-controls input { width: 100%; }
+  #classification-count { margin-left: 0; }
 }
 
 @media print {
@@ -145,5 +168,5 @@ tbody tr:last-child td { border-bottom: 0; }
   body { background: #fff; }
   .shell { width: 100%; }
   .stat, .plot, .callout, .methodology, .author-note { break-inside: avoid; }
-  .route-table-wrap { max-height: none; }
+  .route-table-wrap, .classification-table-wrap { max-height: none; }
 }

@@ -25,6 +25,7 @@ PLOTS = REPO / "site" / "presentations" / "2026-11-02-title-vi" / "plots"
 DATA = REPO / "site" / "presentations" / "2026-11-02-title-vi" / "data"
 POC_THRESHOLD = 0.74
 MILES_TO_METERS = 1609.344
+LONGITUDINAL_MONTHS = ["2026-06", "2026-07", "2026-08", "2026-09", "2026-10"]
 COLORS = {
     "minority": "#b3364a",
     "nonminority": "#167383",
@@ -361,19 +362,33 @@ def aggregate_performance(source_root, classifications):
     class_lookup = classifications.set_index("route_id")["provisional_minority_route"].to_dict()
     route_buckets = defaultdict(empty_performance_bucket)
     group_buckets = defaultdict(empty_performance_bucket)
+    monthly_buckets = defaultdict(empty_performance_bucket)
+    monthly_day_counts = defaultdict(int)
     stats_dir = source_root / "stats"
-    for path in sorted(stats_dir.glob("2026-10-*.json")):
+    for path in sorted(stats_dir.glob("2026-*.json")):
         report = json.loads(path.read_text())
-        service_day = day_type(datetime.strptime(report["service_date"], "%Y-%m-%d").date())
+        service_date = datetime.strptime(report["service_date"], "%Y-%m-%d").date()
+        service_month = service_date.strftime("%Y-%m")
+        if service_month not in LONGITUDINAL_MONTHS:
+            continue
+        monthly_day_counts[service_month] += 1
+        service_day = day_type(service_date)
         for route in report["routes"]:
             route_id = str(route["route_id"])
             if route_id not in class_lookup:
                 continue
             group = "minority" if class_lookup[route_id] else "nonminority"
+            add_performance(monthly_buckets[(service_month, group)], route)
+            if service_month != "2026-10":
+                continue
             add_performance(route_buckets[(route_id, service_day)], route)
             add_performance(route_buckets[(route_id, "all")], route)
             add_performance(group_buckets[(group, service_day)], route)
             add_performance(group_buckets[(group, "all")], route)
+
+    expected_day_counts = {"2026-06": 30, "2026-07": 31, "2026-08": 31, "2026-09": 30, "2026-10": 31}
+    if dict(monthly_day_counts) != expected_day_counts:
+        raise RuntimeError(f"incomplete longitudinal stats archive: {dict(monthly_day_counts)}")
 
     route_rows = []
     for (route_id, service_day), bucket in sorted(route_buckets.items()):
@@ -385,7 +400,12 @@ def aggregate_performance(source_root, classifications):
         row = {"group": group, "day_type": service_day}
         row.update(summarize_performance(bucket))
         group_rows.append(row)
-    return pd.DataFrame(route_rows), pd.DataFrame(group_rows)
+    monthly_rows = []
+    for (service_month, group), bucket in sorted(monthly_buckets.items()):
+        row = {"month": service_month, "group": group}
+        row.update(summarize_performance(bucket))
+        monthly_rows.append(row)
+    return pd.DataFrame(route_rows), pd.DataFrame(group_rows), pd.DataFrame(monthly_rows)
 
 
 def add_ridership_metrics(results, classifications):
@@ -635,6 +655,35 @@ def plot_monitoring(performance, scheduled, access):
     save_figure(fig, "monitoring-comparison.png")
 
 
+def plot_monthly_performance(monthly_performance):
+    metrics = [
+        ("service_operated_pct", "Trip delivery"),
+        ("otp_operated_pct", "Independent −1/+5 proxy"),
+        ("on_time_service_delivered_pct", "On Time Service Delivered"),
+    ]
+    groups = ["minority", "nonminority"]
+    colors = [COLORS["minority"], COLORS["nonminority"]]
+    month_labels = ["Jun", "Jul", "Aug", "Sep", "Oct"]
+    fig, axes = plt.subplots(1, 3, figsize=(12, 4.4))
+
+    for axis, (metric, title) in zip(axes, metrics):
+        configure_axis(axis)
+        pivot = monthly_performance.pivot(index="month", columns="group", values=metric).reindex(LONGITUDINAL_MONTHS)
+        for group, color in zip(groups, colors):
+            values = pivot[group].tolist()
+            axis.plot(range(len(LONGITUDINAL_MONTHS)), values, color=color, linewidth=2.5, marker="o", markersize=5, label=group.replace("nonminority", "other").title())
+        axis.set_ylim(50, 100)
+        axis.set_xticks(range(len(LONGITUDINAL_MONTHS)), month_labels)
+        axis.set_ylabel("Percent")
+        axis.set_title(title, loc="left", fontweight="bold", color=COLORS["ink"])
+
+    axes[0].legend(frameon=False, fontsize=9, loc="best")
+    fig.suptitle("Month by month: summer into fall", x=0.055, y=0.98, ha="left", color=COLORS["ink"], fontsize=19, fontweight="bold")
+    fig.text(0.055, 0.88, "Current provisional route classifications applied to June–October 2026 observed service", color=COLORS["muted"], fontsize=10)
+    fig.tight_layout(rect=(0, 0, 1, 0.80), w_pad=2.2)
+    save_figure(fig, "monthly-performance.png")
+
+
 def plot_route_detail(route_metrics, classifications):
     detail = route_metrics[route_metrics["day_type"] == "all"].merge(classifications[["route_id", "provisional_minority_route"]], on="route_id")
     detail = detail[
@@ -683,13 +732,14 @@ def main():
     access_detail = calculate_access(gtfs, block_groups)
     access = access_group_rows(access_detail)
     _, stop_distribution = calculate_stop_distribution(gtfs, block_groups)
-    route_metrics, performance = aggregate_performance(args.source_root, classifications)
+    route_metrics, performance, monthly_performance = aggregate_performance(args.source_root, classifications)
     ridership_detail, ridership_groups = add_ridership_metrics(RESULTS, classifications)
     fleet_age = calculate_fleet_age(classifications)
 
     write_csv(classifications, "route_classifications.csv")
     write_csv(route_metrics, "route_metrics.csv")
     write_csv(performance, "performance_by_group.csv")
+    write_csv(monthly_performance, "monthly_performance_by_group.csv")
     write_csv(scheduled, "scheduled_headways_by_group.csv")
     write_csv(scheduled_routes, "scheduled_headways_by_route.csv")
     write_csv(access, "access_by_group.csv")
@@ -703,6 +753,7 @@ def main():
     plot_route_map(route_geometries, block_groups, classifications, set(access_detail["geoid"]))
     write_map_geojson(route_geometries, block_groups, classifications, set(access_detail["geoid"]))
     plot_monitoring(performance, scheduled, access)
+    plot_monthly_performance(monthly_performance)
     plot_route_detail(route_metrics, classifications)
 
     all_day = performance[performance["day_type"] == "all"].set_index("group")
@@ -724,6 +775,7 @@ def main():
             ]}
             for group in ["minority", "nonminority"]
         },
+        "monthly_groups": monthly_performance.to_dict("records"),
     }
     if not ridership_groups.empty:
         summary["ridership"] = ridership_groups.to_dict("records")
@@ -738,7 +790,7 @@ def main():
     (DATA / "route-metrics.json").write_text(public_routes.to_json(orient="records", indent=2) + "\n")
     for filename in [
         "route_classifications.csv", "route_metrics.csv", "scheduled_headways_by_route.csv",
-        "scheduled_headways_by_group.csv", "performance_by_group.csv", "access_by_group.csv",
+        "scheduled_headways_by_group.csv", "performance_by_group.csv", "monthly_performance_by_group.csv", "access_by_group.csv",
         "access_block_groups.csv", "ridership_by_group.csv", "ridership_by_route_day_type.csv",
         "fleet_age_by_group.csv", "stops_by_group.csv", "summary.json",
     ]:
