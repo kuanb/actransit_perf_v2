@@ -684,31 +684,6 @@ def plot_monthly_performance(monthly_performance):
     save_figure(fig, "monthly-performance.png")
 
 
-def plot_route_detail(route_metrics, classifications):
-    detail = route_metrics[route_metrics["day_type"] == "all"].merge(classifications[["route_id", "provisional_minority_route"]], on="route_id")
-    detail = detail[
-        (detail["scheduled_trips"] >= 100)
-        & detail["on_time_service_delivered_pct"].notna()
-        & (detail["on_time_service_delivered_pct"] >= 20)
-    ].nsmallest(18, "on_time_service_delivered_pct").sort_values("on_time_service_delivered_pct")
-    colors = [COLORS["minority"] if value else COLORS["nonminority"] for value in detail["provisional_minority_route"]]
-    fig, axis = plt.subplots(figsize=(9, 7))
-    configure_axis(axis)
-    axis.barh(detail["route_id"], detail["on_time_service_delivered_pct"], color=colors)
-    axis.set_xlim(40, 82)
-    axis.set_xlabel("On Time Service Delivered (%)")
-    axis.set_title("Where the rider window fails most often", loc="left", color=COLORS["ink"], fontsize=18, fontweight="bold", pad=16)
-    axis.text(0, 1.01, "Lowest October results among routes with at least 100 scheduled trips", transform=axis.transAxes, color=COLORS["muted"], fontsize=10)
-    for index, value in enumerate(detail["on_time_service_delivered_pct"]):
-        axis.text(value + 0.35, index, f"{value:.1f}%", va="center", fontsize=9, color=COLORS["ink"])
-    axis.legend(handles=[
-        Line2D([0], [0], color=COLORS["minority"], lw=6, label="Provisional minority route"),
-        Line2D([0], [0], color=COLORS["nonminority"], lw=6, label="Other route"),
-    ], frameon=False, loc="lower right")
-    fig.tight_layout()
-    save_figure(fig, "route-detail.png")
-
-
 def write_csv(frame, filename):
     output = frame.copy()
     for column in output.select_dtypes(include="number").columns:
@@ -754,8 +729,6 @@ def main():
     write_map_geojson(route_geometries, block_groups, classifications, set(access_detail["geoid"]))
     plot_monitoring(performance, scheduled, access)
     plot_monthly_performance(monthly_performance)
-    plot_route_detail(route_metrics, classifications)
-
     all_day = performance[performance["day_type"] == "all"].set_index("group")
     summary = {
         "generated_at": datetime.now().astimezone().isoformat(),

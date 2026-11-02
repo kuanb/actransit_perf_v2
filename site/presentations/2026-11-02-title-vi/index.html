@@ -20,7 +20,7 @@
   <script src="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.js" defer></script>
   <script src="../../lib.js?v=title-vi-mapbox-v1" defer></script>
   <script src="equity-map.js?v=mapbox-v1" defer></script>
-  <script src="route-table.js" defer></script>
+  <script src="route-table.js?v=rider-window-v1" defer></script>
 </head>
 <body>
   <div class="topline"></div>
@@ -187,9 +187,37 @@
 
     <p>Aggregates can conceal much larger line-level failures. On Time Service Delivered ranges widely across both groups. The lowest current results include the 623, 800, 851, 72, 802, 805, 1T, O, and 72M. A Title VI monitor becomes more useful when the board can see those routes rather than only one average for each group.</p>
 
-    <figure class="plot">
-      <img src="plots/route-detail.png" alt="Horizontal bars show the eighteen routes with the lowest October 2026 On Time Service Delivered among routes with at least 100 scheduled trips. Both provisional minority routes and other routes appear among the lowest performers.">
-    </figure>
+    <section class="rider-window-chart" aria-labelledby="rider-window-title">
+      <p class="eyebrow">October 2026 observed service</p>
+      <h2 id="rider-window-title">Where service falls outside the rider window most often</h2>
+      <p class="rider-window-definition"><strong>The rider window runs from one minute early through seven minutes late.</strong> For each scheduled stop included in the tracker, arrival within that window counts toward On Time Service Delivered. The bars show the complement: the share reached too early, reached more than seven minutes late, or not observed within the window. “Outside rider window” does not by itself identify why the stop missed the window.</p>
+      <div class="rider-window-controls">
+        <label>Route classification
+          <select id="rider-window-class">
+            <option value="all">All routes</option>
+            <option value="minority">Provisional minority routes</option>
+            <option value="other">Other routes</option>
+          </select>
+        </label>
+        <label>Routes shown
+          <select id="rider-window-limit">
+            <option value="10">10</option>
+            <option value="18" selected>18</option>
+            <option value="all">All eligible routes</option>
+          </select>
+        </label>
+        <span id="rider-window-count" aria-live="polite"></span>
+      </div>
+      <div class="rider-window-key" aria-label="Route classification colors">
+        <span><i class="minority"></i>Provisional minority route</span>
+        <span><i class="other"></i>Other route</span>
+      </div>
+      <div class="rider-window-scroll">
+        <div class="rider-window-axis" aria-hidden="true"><span></span><div><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div><span></span></div>
+        <div id="rider-window-bars" class="rider-window-bars" role="list" aria-live="polite"><p>Loading route results…</p></div>
+      </div>
+      <p class="rider-window-note">The screen includes routes with at least 100 scheduled trips and a reported On Time Service Delivered result of at least 20 percent, matching the original analysis filter. Bars are sorted from the largest share outside the rider window.</p>
+    </section>
 
     <section class="explorer" aria-labelledby="explorer-title">
       <p class="eyebrow">All current routes</p>
