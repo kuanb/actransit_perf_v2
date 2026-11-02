@@ -14,13 +14,13 @@
   <meta name="twitter:description" content="A provisional route classification and current service comparison using the latest public demographic, schedule, and real-time data.">
   <meta name="twitter:image" content="https://ac-transit.com/presentations/2026-11-02-title-vi/plots/monitoring-comparison.png">
   <title>A current Title VI screen, while the source data is pending</title>
-  <link rel="stylesheet" href="article.css?v=rider-window-v1">
+  <link rel="stylesheet" href="article.css?v=conclusion-v1">
   <link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css">
   <script src="../../independence-notice.js" defer></script>
   <script src="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.js" defer></script>
   <script src="../../lib.js?v=title-vi-mapbox-v1" defer></script>
   <script src="equity-map.js?v=mapbox-v1" defer></script>
-  <script src="route-table.js?v=rider-window-v1" defer></script>
+  <script src="route-table.js?v=conclusion-v1" defer></script>
 </head>
 <body>
   <div class="topline"></div>
@@ -101,7 +101,9 @@
 
     <h2 id="actual-service">Actual service tells a more mixed story</h2>
 
-    <p>The staff report monitors schedule and on-time performance, but not whether scheduled trips actually ran, whether stops were reached in a useful rider window, or whether buses arrived evenly. October’s real-time data adds those measures. Minority routes delivered 86.1 percent of scheduled trips, one point below other routes. They performed better on the independent punctuality proxy and On Time Service Delivered, while their actual expected wait was 1.5 minutes longer. None of those group differences crosses 15 percent.</p>
+    <p><strong>The main result is that none of the observed-service group differences crosses the district’s 15 percent screen.</strong> That is an equity-screen result, not evidence that service is good. October service was poor across both groups: minority and other routes delivered only 86.1 and 87.1 percent of scheduled trips, and only 63.4 and 61.5 percent of eligible scheduled stops were reached within the rider window.</p>
+
+    <p>The staff report monitors schedule and on-time performance, but not whether scheduled trips actually ran, whether stops were reached in a useful rider window, or whether buses arrived evenly. October’s real-time data adds those measures. Minority routes delivered one percentage point less scheduled service and had a 1.5-minute-longer actual expected wait, but performed better on the independent punctuality proxy, On Time Service Delivered, and long-gap rate.</p>
 
     <figure class="plot plot-wide">
       <img src="plots/monitoring-comparison.png" alt="Four grouped bar charts compare minority and other routes. Minority routes have slightly lower trip delivery, higher independent punctuality and On Time Service Delivered, longer scheduled and actual waits, and better access to a stop with at least 14 daily trips.">
@@ -259,6 +261,27 @@
         <a href="data/access_block_groups.csv" download>Block-group access CSV</a>
         <a href="data/summary.json" download>Machine-readable summary</a>
       </div>
+    </section>
+
+    <section class="service-conclusion" id="service-conclusion" aria-labelledby="service-conclusion-title">
+      <p class="eyebrow">Bottom line</p>
+      <h2 id="service-conclusion-title">No 15% disparity flag—but poor service across both groups</h2>
+      <p class="service-conclusion-lede">The observed-service screen does not show minority routes performing at least 15 percent worse than other routes on any of these five measures. That should not be read as a clean bill of health: riders across both groups experienced weak trip delivery and roughly four in ten scheduled stops outside the rider window.</p>
+      <div class="service-conclusion-stats" aria-label="Key conclusion statistics">
+        <div><strong>86.1% / 87.1%</strong><span>trip delivery<br>minority / other</span></div>
+        <div><strong>63.4% / 61.5%</strong><span>On Time Service Delivered<br>minority / other</span></div>
+        <div><strong>9.5%</strong><span>largest adverse difference:<br>actual expected wait</span></div>
+        <div><strong>15%</strong><span>district monitoring screen</span></div>
+      </div>
+      <figure class="disparity-figure" aria-labelledby="disparity-figure-title">
+        <figcaption id="disparity-figure-title"><strong>Observed-service disparity relative to the minority-route result</strong><span>Right of zero means minority routes perform worse; left means they perform better.</span></figcaption>
+        <div class="disparity-scroll">
+          <div class="disparity-axis" aria-hidden="true"><span></span><div><span>15% better</span><span>0</span><span>15% screen</span></div><span></span></div>
+          <div id="disparity-bars" class="disparity-bars" role="list" aria-live="polite"><p>Loading comparison…</p></div>
+        </div>
+        <p class="disparity-note">The calculation expresses each difference as a share of the minority-route result and reverses good-is-low measures so positive values consistently mean an adverse result for minority routes. The 15 percent line is AC Transit’s local monitoring screen, not a federal threshold.</p>
+      </figure>
+      <p class="service-conclusion-final"><strong>In short:</strong> the comparison does not find a 15 percent racial disparity in these observed measures. It finds service that is inadequate across the system.</p>
     </section>
 
     <h2>Loads, vehicle age, and amenities are necessarily provisional</h2>

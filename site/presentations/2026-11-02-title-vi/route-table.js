@@ -10,6 +10,7 @@ const riderWindowBars = document.querySelector("#rider-window-bars");
 const riderWindowClass = document.querySelector("#rider-window-class");
 const riderWindowLimit = document.querySelector("#rider-window-limit");
 const riderWindowCount = document.querySelector("#rider-window-count");
+const disparityBars = document.querySelector("#disparity-bars");
 
 let routes = [];
 let sortKey = "route_id";
@@ -111,6 +112,38 @@ function renderRiderWindowChart() {
   }).join("");
 }
 
+function renderDisparityChart(summary) {
+  if (!disparityBars) return;
+  const minority = summary.groups.minority;
+  const other = summary.groups.nonminority;
+  const metrics = [
+    { label: "Actual expected wait", key: "expected_wait_min", lowerIsBetter: true },
+    { label: "Trip delivery", key: "service_operated_pct", lowerIsBetter: false },
+    { label: "Long gaps", key: "long_gap_pct", lowerIsBetter: true },
+    { label: "On Time Service Delivered", key: "on_time_service_delivered_pct", lowerIsBetter: false },
+    { label: "Independent −1/+5 proxy", key: "otp_operated_pct", lowerIsBetter: false },
+  ].map((metric) => {
+    const minorityValue = minority[metric.key];
+    const otherValue = other[metric.key];
+    const difference = metric.lowerIsBetter ? minorityValue - otherValue : otherValue - minorityValue;
+    return { ...metric, disparity: 100 * difference / minorityValue };
+  });
+
+  disparityBars.innerHTML = metrics.map((metric) => {
+    const favorable = metric.disparity < 0;
+    const width = Math.min(50, Math.abs(metric.disparity) / 15 * 50);
+    const left = favorable ? 50 - width : 50;
+    const reading = favorable ? `${Math.abs(metric.disparity).toFixed(1)}% better` : `${metric.disparity.toFixed(1)}% worse`;
+    return `<div class="disparity-row" role="listitem">
+      <strong>${metric.label}</strong>
+      <div class="disparity-track" role="img" aria-label="${metric.label}: minority routes ${reading}">
+        <span class="disparity-bar ${favorable ? "favorable" : "adverse"}" style="left:${left.toFixed(2)}%;width:${width.toFixed(2)}%"></span>
+      </div>
+      <span class="disparity-value ${favorable ? "favorable" : "adverse"}">${reading}</span>
+    </div>`;
+  }).join("");
+}
+
 searchInput.addEventListener("input", renderRoutes);
 classSelect.addEventListener("change", renderRoutes);
 classificationSearch.addEventListener("input", renderClassificationReference);
@@ -143,4 +176,14 @@ fetch("data/route-metrics.json")
     classificationCount.textContent = "Route data could not be loaded.";
     riderWindowBars.textContent = "Route data could not be loaded.";
     riderWindowCount.textContent = "";
+  });
+
+fetch("data/summary.json")
+  .then((response) => {
+    if (!response.ok) throw new Error(`summary request failed: ${response.status}`);
+    return response.json();
+  })
+  .then(renderDisparityChart)
+  .catch(() => {
+    disparityBars.textContent = "Comparison data could not be loaded.";
   });
