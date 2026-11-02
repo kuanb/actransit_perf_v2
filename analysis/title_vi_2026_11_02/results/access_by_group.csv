@@ -1,0 +1,7 @@
+group,day_type,block_group_n,accessible_block_group_n,accessible_block_group_pct
+nonminority,weekday,525,375,71.4286
+nonminority,saturday,525,362,68.9524
+nonminority,sunday,525,362,68.9524
+minority,weekday,640,492,76.875
+minority,saturday,640,482,75.3125
+minority,sunday,640,482,75.3125

@@ -1,0 +1,7 @@
+group,day_type,snapshot_n,avg_estimated_load,trip_n,avg_trip_max_estimated_load,direct_count_n,status_estimate_n
+minority,saturday,825505,15.2578,14402,17.7848,0,825505
+minority,sunday,653196,15.0187,11391,16.8937,0,653196
+minority,weekday,4640692,15.9733,75088,19.9488,0,4640692
+nonminority,saturday,334528,15.503,5662,19.8665,0,334528
+nonminority,sunday,239085,15.1682,4056,19.1506,0,239085
+nonminority,weekday,2279547,16.1433,37697,21.2258,0,2279547

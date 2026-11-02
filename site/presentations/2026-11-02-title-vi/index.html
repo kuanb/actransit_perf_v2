@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A provisional, independently reproducible Title VI service-monitoring screen using 2020–2024 ACS demographics, Fall 2026 AC Transit schedules, and October 2026 real-time service data.">
+  <link rel="canonical" href="https://ac-transit.com/presentations/2026-11-02-title-vi/">
+  <meta property="og:title" content="A current Title VI screen, while the source data is pending">
+  <meta property="og:description" content="A provisional route classification and current service comparison using the latest public demographic, schedule, and real-time data.">
+  <meta property="og:type" content="article">
+  <meta property="og:image" content="https://ac-transit.com/presentations/2026-11-02-title-vi/plots/monitoring-comparison.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="A current Title VI screen, while the source data is pending">
+  <meta name="twitter:description" content="A provisional route classification and current service comparison using the latest public demographic, schedule, and real-time data.">
+  <meta name="twitter:image" content="https://ac-transit.com/presentations/2026-11-02-title-vi/plots/monitoring-comparison.png">
+  <title>A current Title VI screen, while the source data is pending</title>
+  <link rel="stylesheet" href="article.css">
+  <script src="../../independence-notice.js" defer></script>
+  <script src="route-table.js" defer></script>
+</head>
+<body>
+  <div class="topline"></div>
+  <div class="shell"><a class="back" href="../">← All presentations</a></div>
+
+  <header class="hero">
+    <div class="shell">
+      <p class="eyebrow">Provisional independent analysis · November 2, 2026</p>
+      <h1>A current Title VI screen, while the source data is pending</h1>
+      <p class="dek">AC Transit’s triennial report compares service on minority and non-minority lines. This reproduction applies the same basic screen to current demographics and schedules, then adds a month of actual service, waits, and rider-window performance route by route.</p>
+    </div>
+  </header>
+
+  <main class="article shell">
+    <aside class="status-note" aria-label="Provisional status">
+      <strong>This is a screening analysis, not a legal finding.</strong>
+      <span>The exact service-area block groups, route-mileage file, fleet assignments, and amenity inventory requested in <a href="https://actransit.nextrequest.com/requests/26-313">public records request 26-313</a> are still pending. Every substitution is documented below so the same pipeline can be rerun when those records arrive.</span>
+    </aside>
+
+    <p>AC Transit’s 2026 Title VI Program uses a straightforward route test: a census block group is “minority” when its people-of-color share is at or above the service-area average, and a line is a minority route when at least one-third of its mileage runs through those block groups. Staff then compares loads, scheduled headways, on-time performance, access, fleet age, and bus-stop amenities. A difference of 15 percent triggers the district’s monitoring threshold.</p>
+
+    <p>The public packet does not include the underlying block-group universe or current route-by-route classification. For this provisional version, I used the district’s published 74 percent service-area people-of-color share as the block-group threshold, the latest 2020–2024 American Community Survey, and Fall 2026 route geometry. That produces <strong>72 provisional minority routes out of 125 current routes</strong>, compared with 68 of 123 in staff’s Fall 2025 analysis.</p>
+
+    <section class="stat-grid" aria-label="Headline results">
+      <div class="stat emphasis"><strong>72 / 125</strong><span>current lines provisionally classified as minority routes</span></div>
+      <div class="stat warning"><strong>15.8–15.9%</strong><span>weekend scheduled-headway disparity, just over the district’s screen</span></div>
+      <div class="stat"><strong>63.4% / 61.5%</strong><span>On Time Service Delivered on minority / other routes</span></div>
+      <div class="stat"><strong>15.9 / 14.3 min</strong><span>actual expected wait on minority / other routes</span></div>
+    </section>
+
+    <h2>The provisional route map</h2>
+
+    <p>The map clips Transbay lines to the East Bay portion of their route, follows the district’s one-third-mileage rule, and uses the 74 percent provisional block-group threshold. Lines near one-third are inherently sensitive to the missing official geography: NL falls just below at 32.9 percent; L falls just above at 34.2 percent. Those are exactly the classifications to revisit first when the records arrive.</p>
+
+    <figure class="plot map-plot">
+      <img src="plots/route-classification-map.png" alt="Map of AC Transit routes in Alameda and Contra Costa counties. Seventy-two routes meeting the provisional minority-route definition are red; other routes are teal. Background census block groups are shaded by whether their people-of-color share is at least 74 percent.">
+      <figcaption>Current Fall 2026 route geometry over 2020–2024 ACS block groups. Transbay mileage outside Alameda and Contra Costa counties is excluded from the screen.</figcaption>
+    </figure>
+
+    <details class="route-list">
+      <summary>Show the 72 provisionally classified minority routes</summary>
+      <p>1T, 9, 14, 19, 22, 28, 30, 34, 35, 36, 40, 41, 45, 46L, 51A, 54, 56, 57, 60, 62, 70, 71, 72, 72L, 72M, 73, 74, 76, 86, 90, 93, 95, 96, 97, 98, 200, 210, 211, 216, 231, 239, 251, 281, 607, 620, 621, 623, 624, 625, 627, 629, 641, 652, 654, 657, 667, 675, 678, 680, 681, 689, 703, 801, 805, 840, 851, DB, DB1, L, NX3, O, and U.</p>
+    </details>
+
+    <h2>One potential flag appears in the scheduled weekend headway test</h2>
+
+    <p>The weekday and weekend scheduled-headway calculation most closely reproduces the staff table. Fall 2026 minority routes are scheduled less frequently in every period. Weekday differences remain below 15 percent. Saturday and Sunday reach 15.8 and 15.9 percent—barely over the district’s policy screen and higher than staff’s 13.7 percent Fall 2025 result.</p>
+
+    <div class="table-wrap compact-table">
+      <table>
+        <thead><tr><th>Scheduled period</th><th>Minority routes</th><th>Other routes</th><th>Disparity</th><th>Provisional screen</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Weekday peak</strong></td><td>25.53 min</td><td>22.13 min</td><td>13.3%</td><td>Below 15%</td></tr>
+          <tr><td><strong>Weekday off-peak</strong></td><td>27.72 min</td><td>25.24 min</td><td>8.9%</td><td>Below 15%</td></tr>
+          <tr><td><strong>Saturday</strong></td><td>30.81 min</td><td>25.95 min</td><td class="negative">15.8%</td><td class="negative">Potential flag</td></tr>
+          <tr><td><strong>Sunday</strong></td><td>30.81 min</td><td>25.91 min</td><td class="negative">15.9%</td><td class="negative">Potential flag</td></tr>
+        </tbody>
+      </table>
+      <p class="table-note">The staff formula expresses the excess headway as a share of the minority-route headway. School lines in the 600 series and Early Bird lines in the 700 series are excluded, matching the packet. “Peak” is provisionally defined as 6–10 AM and 3–7 PM because the packet does not publish its peak-period cutoffs.</p>
+    </div>
+
+    <aside class="callout">
+      <h3>Why this is a flag to verify, not a conclusion</h3>
+      <p>A handful of routes sit close to the one-third classification boundary, and the official service-area geography is missing. The result also depends on whether the agency uses the same peak windows and handles branch departures exactly as this reconstruction does. A two-year schedule comparison suggests a real question; the requested source files are necessary to answer it conclusively.</p>
+    </aside>
+
+    <h2>Actual service tells a more mixed story</h2>
+
+    <p>The staff report monitors schedule and on-time performance, but not whether scheduled trips actually ran, whether stops were reached in a useful rider window, or whether buses arrived evenly. October’s real-time data adds those measures. Minority routes delivered 86.1 percent of scheduled trips, one point below other routes. They performed better on the independent punctuality proxy and On Time Service Delivered, while their actual expected wait was 1.5 minutes longer. None of those group differences crosses 15 percent.</p>
+
+    <figure class="plot plot-wide">
+      <img src="plots/monitoring-comparison.png" alt="Four grouped bar charts compare minority and other routes. Minority routes have slightly lower trip delivery, higher independent punctuality and On Time Service Delivered, longer scheduled and actual waits, and better access to a stop with at least 14 daily trips.">
+      <figcaption>Observed measures cover October 1–31, 2026. Schedule and access measures use the Fall 2026 GTFS signup. These comparisons are aggregate screens; the route explorer below shows the variation hidden inside each group.</figcaption>
+    </figure>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Current measure</th><th>Minority routes</th><th>Other routes</th><th>Reading</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Trip delivery</strong></td><td>86.12%</td><td>87.09%</td><td>Minority routes 1.0 point lower; below the 15% screen</td></tr>
+          <tr><td><strong>Independent −1/+5 arrival proxy</strong></td><td>66.19%</td><td>61.33%</td><td>Minority routes better</td></tr>
+          <tr><td><strong>On Time Service Delivered</strong></td><td>63.43%</td><td>61.52%</td><td>Minority routes better</td></tr>
+          <tr><td><strong>Actual expected wait</strong></td><td>15.85 min</td><td>14.35 min</td><td>Minority routes 9.5% worse; below the 15% screen</td></tr>
+          <tr><td><strong>Long gaps</strong></td><td>16.11%</td><td>16.45%</td><td>Minority routes slightly better</td></tr>
+          <tr><td><strong>Weekday access</strong></td><td>76.88%</td><td>71.43%</td><td>Minority block groups better in the proxy service area</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>Aggregates can conceal much larger line-level failures. On Time Service Delivered ranges widely across both groups. The lowest current results include the 623, 800, 851, 72, 802, 805, 1T, O, and 72M. A Title VI monitor becomes more useful when the board can see those routes rather than only one average for each group.</p>
+
+    <figure class="plot">
+      <img src="plots/route-detail.png" alt="Horizontal bars show the eighteen routes with the lowest October 2026 On Time Service Delivered among routes with at least 100 scheduled trips. Both provisional minority routes and other routes appear among the lowest performers.">
+    </figure>
+
+    <section class="explorer" aria-labelledby="explorer-title">
+      <p class="eyebrow">All current routes</p>
+      <h2 id="explorer-title">Explore the route-level results</h2>
+      <p>Search or filter the full October dataset. Click a column heading to sort. The downloadable files preserve weekday, Saturday, and Sunday detail.</p>
+      <div class="controls">
+        <label>Find a route <input id="route-search" type="search" placeholder="e.g. 51A" autocomplete="off"></label>
+        <label>Classification
+          <select id="route-class">
+            <option value="all">All routes</option>
+            <option value="minority">Provisional minority routes</option>
+            <option value="other">Other routes</option>
+          </select>
+        </label>
+        <span id="route-count" aria-live="polite"></span>
+      </div>
+      <div class="table-wrap route-table-wrap">
+        <table id="route-table">
+          <thead><tr>
+            <th><button data-key="route_id">Route</button></th>
+            <th><button data-key="provisional_minority_route">Class</button></th>
+            <th><button data-key="minority_mileage_share">Minority mileage</button></th>
+            <th><button data-key="scheduled_trips">Scheduled trips</button></th>
+            <th><button data-key="service_operated_pct">Trip delivery</button></th>
+            <th><button data-key="otp_operated_pct">−1/+5 proxy</button></th>
+            <th><button data-key="on_time_service_delivered_pct">On Time Service Delivered</button></th>
+            <th><button data-key="expected_wait_min">Expected wait</button></th>
+            <th><button data-key="long_gap_pct">Long gaps</button></th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="downloads" aria-label="Download analysis data">
+        <a href="data/route_metrics.csv" download>Route × day-type metrics CSV</a>
+        <a href="data/route_classifications.csv" download>Route classifications CSV</a>
+        <a href="data/scheduled_headways_by_route.csv" download>Scheduled headways CSV</a>
+        <a href="data/ridership_by_route_day_type.csv" download>Route load estimates CSV</a>
+        <a href="data/access_block_groups.csv" download>Block-group access CSV</a>
+        <a href="data/summary.json" download>Machine-readable summary</a>
+      </div>
+    </section>
+
+    <h2>Loads, vehicle age, and amenities are necessarily provisional</h2>
+
+    <p>The realtime attributes feed contains fresh capacity and crowding bands, but no direct passenger counts. Applying the project’s published status-band estimates produces an average load of 15.8 riders on minority routes and 16.0 on other routes; average estimated trip maxima are 19.3 and 20.9. Staff treats lower loads on minority routes as non-adverse, but these values are estimates—not APC counts—and should not replace the requested load data.</p>
+
+    <p>The public fleet roster is dated December 2023. Matching its vehicle-number series to October observations covers 85.9 percent of minority-route snapshots and 93.3 percent of other-route snapshots. The resulting snapshot-weighted ages are 9.39 and 9.22 years, a 0.17-year difference. The coverage gap and stale roster make that descriptive only.</p>
+
+    <p>The current stop file has locations and route names, but no shelter, bench, trash-can, lighting, or realtime-sign attributes. It locates 2,457 stops in provisional minority block groups and 2,174 in other block groups. That is a stop-distribution check, not a reproduction of staff’s amenity-equity table. The requested amenity inventory is required to complete it.</p>
+
+    <aside class="methodology" aria-labelledby="methodology-title">
+      <h2 id="methodology-title">Methods, definitions, and sources</h2>
+      <p><strong>Official reference.</strong> I reviewed the <a href="https://actransit.legistar.com/View.ashx?M=F&amp;ID=16091037&amp;GUID=F7ACAA65-B3BA-445A-B714-88E165F202A2">staff report</a> and the <a href="https://actransit.legistar.com/View.ashx?M=F&amp;ID=16090987&amp;GUID=78FC602B-4273-40B7-B0A0-DF3895A009AF">2026 Title VI Program</a>, especially Appendix K. The district’s 15 percent standard is a local monitoring policy, not a federal threshold. A <a href="https://bsky.app/profile/laurelintransit.bsky.social/post/3mzbs5ts4tk2j">public discussion of the packet</a> motivated the added Service Operated and rider-facing measures; all calculations here use primary data.</p>
+      <p><strong>Demographics and classification.</strong> Block-group race and ethnicity use the Census Bureau’s <a href="https://www2.census.gov/programs-surveys/acs/summary_file/2024/table-based-SF/data/5YRData/acsdt5y2024-b03002.dat">2020–2024 ACS five-year B03002 table</a>. People of color equals total population less non-Hispanic white-alone population. Because the requested service-area geography and official mean are pending, 74 percent—the share published in the district program—is used provisionally. Route and stop geometry comes from AC Transit’s <a href="https://www.actransit.org/data-api-resource-center">Data &amp; API Resource Center</a>. Route mileage is unioned by public route and clipped to Alameda and Contra Costa counties; a line is classified when at least one-third falls in qualifying block groups.</p>
+      <p><strong>Schedules and access.</strong> Scheduled headways use representative Wednesday, Saturday, and Sunday service from the Fall 2026 GTFS feed. Each consecutive route-and-direction departure is one headway. Peak is provisionally 6–10 AM and 3–7 PM. The access denominator is a reproducible proxy: 1,165 populated Alameda/Contra Costa block groups whose centroid is within one mile of a current stop. A block group passes when its centroid is within one-quarter mile of a stop receiving at least 14 trips on the representative day. The official service-area block groups will replace this proxy.</p>
+      <p><strong>Observed service.</strong> October 1–31 route metrics come from the tracker’s <a href="https://storage.googleapis.com/transit-203605-actransit-cache/stats/_index.json">public daily archive</a>. Trip delivery counts any scheduled trip detected with a usable identifier. Non-observation can mean dropped or partial service, an identifier mismatch, or a public-feed failure; it is not by itself a claim about cause. The −1/+5 proxy uses independently detected arrivals at eligible intermediate timepoints, unlike the agency’s departure-timepoint measure. On Time Service Delivered asks whether each eligible scheduled stop was reached from one minute early through seven minutes late; its complement is <em>outside rider window</em>, not “not delivered.” Headway comparisons use scheduled frequency of 40 minutes or better; a bunch is below half the schedule and a long gap exceeds 1.5 times the schedule.</p>
+      <p><strong>Reproducibility.</strong> The code, SQL, detailed route tables, and all public outputs are versioned with this page. When request 26-313 is fulfilled, the official block-group universe, benchmark, route-mileage treatment, APC loads, vehicle assignments, and amenity inventory can be swapped into the same stages and every table regenerated.</p>
+    </aside>
+
+    <aside class="author-note" aria-labelledby="author-note-title">
+      <h2 id="author-note-title">About the author</h2>
+      <p>Kuan Butts created the <a href="../../report-card/">AC Transit Report Card</a> and has been involved with <a href="https://www.oakrapidresponse.org/">TVRR</a> as an organizer and with <a href="https://transportoakland.org/">Transport Oakland</a> as a board member.</p>
+    </aside>
+  </main>
+
+  <footer class="footer"><div class="shell"><a href="../">← All presentations</a></div></footer>
+  <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "0e36b12e46b04a69b5e9ff6883f6d23d"}'></script><!-- End Cloudflare Web Analytics -->
+</body>
+</html>

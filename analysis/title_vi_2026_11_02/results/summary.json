@@ -1,0 +1,122 @@
+{
+  "generated_at": "2026-11-02T10:59:59.413003-08:00",
+  "analysis_period": "2026-10-01/2026-10-31",
+  "acs_vintage": "2020-2024 ACS 5-year",
+  "gtfs_signup": "Fall 2026",
+  "poc_threshold": 0.74,
+  "route_count": 125,
+  "provisional_minority_route_count": 72,
+  "proxy_service_area_block_group_count": 1165,
+  "stop_distribution": [
+    {
+      "group": "minority",
+      "stop_n": 2457,
+      "share_of_stops_pct": 53.0554955733103
+    },
+    {
+      "group": "nonminority",
+      "stop_n": 2174,
+      "share_of_stops_pct": 46.9445044266897
+    }
+  ],
+  "groups": {
+    "minority": {
+      "service_operated_pct": 86.12,
+      "otp_operated_pct": 66.19,
+      "otp_scheduled_pct": 57.01,
+      "on_time_service_delivered_pct": 63.43,
+      "expected_wait_min": 15.85,
+      "scheduled_expected_wait_min": 13.74,
+      "bunched_headway_pct": 3.41,
+      "long_gap_pct": 16.11
+    },
+    "nonminority": {
+      "service_operated_pct": 87.09,
+      "otp_operated_pct": 61.33,
+      "otp_scheduled_pct": 53.52,
+      "on_time_service_delivered_pct": 61.52,
+      "expected_wait_min": 14.35,
+      "scheduled_expected_wait_min": 11.88,
+      "bunched_headway_pct": 4.78,
+      "long_gap_pct": 16.45
+    }
+  },
+  "ridership": [
+    {
+      "group": "minority",
+      "day_type": "saturday",
+      "snapshot_n": 825505,
+      "avg_estimated_load": 15.257828844162058,
+      "trip_n": 14402,
+      "avg_trip_max_estimated_load": 17.78475211776142,
+      "direct_count_n": 0,
+      "status_estimate_n": 825505
+    },
+    {
+      "group": "minority",
+      "day_type": "sunday",
+      "snapshot_n": 653196,
+      "avg_estimated_load": 15.018720261606012,
+      "trip_n": 11391,
+      "avg_trip_max_estimated_load": 16.89368799929769,
+      "direct_count_n": 0,
+      "status_estimate_n": 653196
+    },
+    {
+      "group": "minority",
+      "day_type": "weekday",
+      "snapshot_n": 4640692,
+      "avg_estimated_load": 15.973269288287177,
+      "trip_n": 75088,
+      "avg_trip_max_estimated_load": 19.948820051139997,
+      "direct_count_n": 0,
+      "status_estimate_n": 4640692
+    },
+    {
+      "group": "nonminority",
+      "day_type": "saturday",
+      "snapshot_n": 334528,
+      "avg_estimated_load": 15.503028147120716,
+      "trip_n": 5662,
+      "avg_trip_max_estimated_load": 19.866478276227483,
+      "direct_count_n": 0,
+      "status_estimate_n": 334528
+    },
+    {
+      "group": "nonminority",
+      "day_type": "sunday",
+      "snapshot_n": 239085,
+      "avg_estimated_load": 15.168157768157768,
+      "trip_n": 4056,
+      "avg_trip_max_estimated_load": 19.150641025641026,
+      "direct_count_n": 0,
+      "status_estimate_n": 239085
+    },
+    {
+      "group": "nonminority",
+      "day_type": "weekday",
+      "snapshot_n": 2279547,
+      "avg_estimated_load": 16.14327539638358,
+      "trip_n": 37697,
+      "avg_trip_max_estimated_load": 21.22580046157519,
+      "direct_count_n": 0,
+      "status_estimate_n": 2279547
+    }
+  ],
+  "fleet_age": [
+    {
+      "group": "minority",
+      "snapshot_n": 6119393,
+      "covered_snapshot_n": 5253723,
+      "coverage_pct": 85.85366228317089,
+      "snapshot_weighted_vehicle_age": 9.394193222596623
+    },
+    {
+      "group": "nonminority",
+      "snapshot_n": 2853163,
+      "covered_snapshot_n": 2662749,
+      "coverage_pct": 93.32621374944229,
+      "snapshot_weighted_vehicle_age": 9.224759074174846
+    }
+  ]
+}

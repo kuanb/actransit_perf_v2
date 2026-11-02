@@ -1,0 +1,80 @@
+const tableBody = document.querySelector("#route-table tbody");
+const searchInput = document.querySelector("#route-search");
+const classSelect = document.querySelector("#route-class");
+const countLabel = document.querySelector("#route-count");
+const headerButtons = document.querySelectorAll("#route-table th button");
+
+let routes = [];
+let sortKey = "route_id";
+let sortDirection = 1;
+
+function formatNumber(value, digits = 1) {
+  return value == null || Number.isNaN(value) ? "—" : Number(value).toFixed(digits);
+}
+
+function routeSortValue(route, key) {
+  const value = route[key];
+  if (key === "route_id") {
+    return String(value);
+  }
+  if (typeof value === "boolean") {
+    return value ? 1 : 0;
+  }
+  return value == null ? -Infinity : value;
+}
+
+function renderRoutes() {
+  const query = searchInput.value.trim().toLowerCase();
+  const classification = classSelect.value;
+  const filtered = routes
+    .filter((route) => String(route.route_id).toLowerCase().includes(query))
+    .filter((route) => classification === "all"
+      || (classification === "minority" && route.provisional_minority_route)
+      || (classification === "other" && !route.provisional_minority_route))
+    .sort((left, right) => {
+      const a = routeSortValue(left, sortKey);
+      const b = routeSortValue(right, sortKey);
+      if (typeof a === "string") return sortDirection * a.localeCompare(b, undefined, { numeric: true });
+      return sortDirection * (a - b);
+    });
+
+  countLabel.textContent = `${filtered.length} of ${routes.length} routes`;
+  tableBody.innerHTML = filtered.map((route) => `
+    <tr>
+      <td><strong>${route.route_id}</strong></td>
+      <td><span class="badge ${route.provisional_minority_route ? "minority" : "other"}">${route.provisional_minority_route ? "Minority" : "Other"}</span></td>
+      <td>${formatNumber(route.minority_mileage_share * 100)}%</td>
+      <td>${Number(route.scheduled_trips || 0).toLocaleString()}</td>
+      <td>${formatNumber(route.service_operated_pct)}%</td>
+      <td>${formatNumber(route.otp_operated_pct)}%</td>
+      <td>${formatNumber(route.on_time_service_delivered_pct)}%</td>
+      <td>${formatNumber(route.expected_wait_min)} min</td>
+      <td>${formatNumber(route.long_gap_pct)}%</td>
+    </tr>`).join("");
+}
+
+searchInput.addEventListener("input", renderRoutes);
+classSelect.addEventListener("change", renderRoutes);
+headerButtons.forEach((button) => button.addEventListener("click", () => {
+  const nextKey = button.dataset.key;
+  if (sortKey === nextKey) {
+    sortDirection *= -1;
+  } else {
+    sortKey = nextKey;
+    sortDirection = nextKey === "route_id" ? 1 : -1;
+  }
+  renderRoutes();
+}));
+
+fetch("data/route-metrics.json")
+  .then((response) => {
+    if (!response.ok) throw new Error(`route data request failed: ${response.status}`);
+    return response.json();
+  })
+  .then((data) => {
+    routes = data;
+    renderRoutes();
+  })
+  .catch(() => {
+    countLabel.textContent = "Route data could not be loaded.";
+  });

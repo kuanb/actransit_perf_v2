@@ -1,0 +1,3 @@
+group,snapshot_n,covered_snapshot_n,coverage_pct,snapshot_weighted_vehicle_age
+minority,6119393,5253723,85.8537,9.3942
+nonminority,2853163,2662749,93.3262,9.2248
