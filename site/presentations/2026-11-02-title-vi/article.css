@@ -33,6 +33,16 @@ h1 { max-width: 1020px; margin: 0; font-size: clamp(45px, 7vw, 78px); letter-spa
 .status-note strong { font-family: Georgia, "Times New Roman", serif; font-size: 22px; font-weight: 500; line-height: 1.25; }
 .status-note span { color: #4e5960; font-size: 15px; line-height: 1.6; }
 
+.title-vi-primer { width: min(960px, 100%); margin: 0 auto 58px; padding: 30px 34px 26px; border-top: 5px solid var(--red); background: rgba(255, 253, 249, .9); box-shadow: 0 12px 32px rgba(24, 35, 42, .07); }
+.title-vi-primer > .eyebrow { margin-bottom: 8px; }
+.title-vi-primer h2 { margin: 0 0 13px; font-size: clamp(30px, 4vw, 42px); letter-spacing: -.025em; }
+.title-vi-primer > p:not(.eyebrow, .title-vi-primer-note) { max-width: 830px; margin: 0; color: #3f5059; font-family: Georgia, "Times New Roman", serif; font-size: 17px; line-height: 1.6; }
+.title-vi-primer ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 34px; margin: 24px 0 20px; padding-left: 20px; }
+.title-vi-primer li { padding: 10px 4px 12px 2px; color: #3f5059; font-size: 14px; line-height: 1.55; }
+.title-vi-primer li::marker { color: var(--red); font-size: 1.2em; }
+.title-vi-primer li strong { color: var(--ink); }
+.title-vi-primer-note { margin: 0; padding-top: 15px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; line-height: 1.55; }
+
 .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; width: min(1020px, 100%); margin: 44px auto 58px; }
 .stat { padding: 23px; border-top: 4px solid var(--teal); background: rgba(255, 253, 249, .86); }
 .stat.emphasis { border-top-color: var(--red); }
@@ -209,6 +219,8 @@ tbody tr:last-child td { border-bottom: 0; }
   .article { padding-top: 34px; }
   .article > p { font-size: 18px; line-height: 1.65; }
   .status-note { grid-template-columns: 1fr; padding: 21px; }
+  .title-vi-primer { padding: 25px 22px 21px; }
+  .title-vi-primer ul { grid-template-columns: 1fr; gap: 0; }
   .stat-grid { grid-template-columns: 1fr; gap: 10px; }
   .stat { padding: 20px; }
   .plot { width: calc(100% + 14px); margin: 34px 0 38px -7px; }
