@@ -15,7 +15,10 @@
   <meta name="twitter:image" content="https://ac-transit.com/presentations/2026-11-02-title-vi/plots/monitoring-comparison.png">
   <title>A current Title VI screen, while the source data is pending</title>
   <link rel="stylesheet" href="article.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIINfQ3ynHTb+FVSfKcjMZbMZqfkDVs/6HI=" crossorigin="">
   <script src="../../independence-notice.js" defer></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="" defer></script>
+  <script src="equity-map.js" defer></script>
   <script src="route-table.js" defer></script>
 </head>
 <body>
@@ -57,19 +60,25 @@
 
     <p>The map clips Transbay lines to the East Bay portion of their route, follows the district’s one-third-mileage rule, and uses the 74 percent provisional block-group threshold. Lines near one-third are inherently sensitive to the missing official geography: NL falls just below at 32.9 percent; L falls just above at 34.2 percent. Those are exactly the classifications to revisit first when the records arrive.</p>
 
-    <figure class="plot map-plot">
-      <img src="plots/route-classification-map.png" alt="Map of AC Transit routes in Alameda and Contra Costa counties. Seventy-two routes meeting the provisional minority-route definition are red; other routes are teal. Background census block groups are shaded by whether their people-of-color share is at least 74 percent.">
-      <figcaption>Current Fall 2026 route geometry over 2020–2024 ACS block groups. Transbay mileage outside Alameda and Contra Costa counties is excluded from the screen.</figcaption>
+    <figure class="interactive-map-figure">
+      <div class="map-stage">
+        <div id="equity-map" class="equity-map" role="application" aria-label="Interactive map of AC Transit route classifications and census block-group demographics"></div>
+        <p id="map-status" class="map-status">Loading interactive map…</p>
+      </div>
+      <figcaption>Zoom and pan the map, then hover or tap a route or census block group for its details. Current Fall 2026 route geometry is shown over 2020–2024 ACS block groups. Transbay mileage outside Alameda and Contra Costa counties is excluded from the screen.</figcaption>
     </figure>
+    <noscript><figure class="plot map-plot"><img src="plots/route-classification-map.png" alt="Map of AC Transit routes in Alameda and Contra Costa counties. Seventy-two routes meeting the provisional minority-route definition are red; other routes are teal. Background census block groups are shaded by whether their people-of-color share is at least 74 percent."><figcaption>JavaScript is required for the zoomable map; this static version shows the same classifications.</figcaption></figure></noscript>
 
     <details class="route-list">
       <summary>Show the 72 provisionally classified minority routes</summary>
       <p>1T, 9, 14, 19, 22, 28, 30, 34, 35, 36, 40, 41, 45, 46L, 51A, 54, 56, 57, 60, 62, 70, 71, 72, 72L, 72M, 73, 74, 76, 86, 90, 93, 95, 96, 97, 98, 200, 210, 211, 216, 231, 239, 251, 281, 607, 620, 621, 623, 624, 625, 627, 629, 641, 652, 654, 657, 667, 675, 678, 680, 681, 689, 703, 801, 805, 840, 851, DB, DB1, L, NX3, O, and U.</p>
     </details>
 
-    <h2>One potential flag appears in the scheduled weekend headway test</h2>
+    <h2>Weekend service is one area where there is risk for violations</h2>
 
-    <p>The weekday and weekend scheduled-headway calculation most closely reproduces the staff table. Fall 2026 minority routes are scheduled less frequently in every period. Weekday differences remain below 15 percent. Saturday and Sunday reach 15.8 and 15.9 percent—barely over the district’s policy screen and higher than staff’s 13.7 percent Fall 2025 result.</p>
+    <p>This comparison is about <strong>scheduled service, not actual service delivered</strong>. It measures the gaps written into the Fall 2026 timetable before accounting for missed trips, late buses, bunching, or long gaps. Even on paper, weekend service is threadbare: minority routes average one scheduled bus every 30.81 minutes, compared with 25.95 minutes on Saturday and 25.91 minutes on Sunday for other routes.</p>
+
+    <p>Those scheduled differences reach 15.8 percent on Saturday and 15.9 percent on Sunday—just over the district’s 15 percent monitoring screen and higher than staff’s 13.7 percent Fall 2025 result. A schedule already this close to the line leaves almost no margin for error. A small timetable cut, or repeated failure to deliver the trips already scheduled, can make the rider-facing disparity larger and put weekend service at greater risk of non-compliance.</p>
 
     <div class="table-wrap compact-table">
       <table>
@@ -77,15 +86,15 @@
         <tbody>
           <tr><td><strong>Weekday peak</strong></td><td>25.53 min</td><td>22.13 min</td><td>13.3%</td><td>Below 15%</td></tr>
           <tr><td><strong>Weekday off-peak</strong></td><td>27.72 min</td><td>25.24 min</td><td>8.9%</td><td>Below 15%</td></tr>
-          <tr><td><strong>Saturday</strong></td><td>30.81 min</td><td>25.95 min</td><td class="negative">15.8%</td><td class="negative">Potential flag</td></tr>
-          <tr><td><strong>Sunday</strong></td><td>30.81 min</td><td>25.91 min</td><td class="negative">15.9%</td><td class="negative">Potential flag</td></tr>
+          <tr><td><strong>Saturday</strong></td><td>30.81 min</td><td>25.95 min</td><td class="negative">15.8%</td><td class="negative">Above 15% screen</td></tr>
+          <tr><td><strong>Sunday</strong></td><td>30.81 min</td><td>25.91 min</td><td class="negative">15.9%</td><td class="negative">Above 15% screen</td></tr>
         </tbody>
       </table>
       <p class="table-note">The staff formula expresses the excess headway as a share of the minority-route headway. School lines in the 600 series and Early Bird lines in the 700 series are excluded, matching the packet. “Peak” is provisionally defined as 6–10 AM and 3–7 PM because the packet does not publish its peak-period cutoffs.</p>
     </div>
 
     <aside class="callout">
-      <h3>Why this is a flag to verify, not a conclusion</h3>
+      <h3>Why this is a risk to verify, not a conclusion</h3>
       <p>A handful of routes sit close to the one-third classification boundary, and the official service-area geography is missing. The result also depends on whether the agency uses the same peak windows and handles branch departures exactly as this reconstruction does. A two-year schedule comparison suggests a real question; the requested source files are necessary to answer it conclusively.</p>
     </aside>
 

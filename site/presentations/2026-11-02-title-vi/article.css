@@ -46,6 +46,27 @@ h1 { max-width: 1020px; margin: 0; font-size: clamp(45px, 7vw, 78px); letter-spa
 .plot img { display: block; width: 100%; border: 1px solid var(--line); border-radius: 10px; background: var(--white); box-shadow: 0 14px 34px rgba(24, 35, 42, .08); }
 .plot figcaption { margin: 11px 8px 0; color: var(--muted); font-size: 13px; }
 
+.interactive-map-figure { width: min(1040px, 100%); margin: 42px auto 46px; }
+.map-stage { position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: #e8e3da; box-shadow: 0 14px 34px rgba(24, 35, 42, .08); }
+.equity-map { width: 100%; height: min(74vh, 760px); min-height: 540px; }
+.map-status { position: absolute; z-index: 500; top: 18px; left: 50%; margin: 0; padding: 9px 13px; transform: translateX(-50%); border-radius: 5px; color: var(--ink); background: rgba(255, 253, 249, .94); box-shadow: 0 4px 18px rgba(23, 38, 46, .15); font-size: 13px; }
+.map-status.hidden { display: none; }
+.map-status.error { color: #8e2237; }
+.interactive-map-figure figcaption { margin: 11px 8px 0; color: var(--muted); font-size: 13px; }
+.map-legend { padding: 11px 13px; border: 1px solid rgba(23, 38, 46, .14); border-radius: 5px; color: var(--ink); background: rgba(255, 253, 249, .96); box-shadow: 0 3px 14px rgba(23, 38, 46, .12); font-size: 12px; line-height: 1.35; }
+.map-legend strong { display: block; margin-bottom: 7px; font-size: 12px; }
+.map-legend span { display: flex; align-items: center; gap: 7px; margin: 5px 0; white-space: nowrap; }
+.map-swatch { display: inline-block; flex: 0 0 auto; width: 21px; }
+.map-swatch.route-minority { height: 4px; background: var(--red); }
+.map-swatch.route-other { height: 4px; background: var(--teal); }
+.map-swatch.bg-minority { height: 12px; border: 1px solid #d29aa4; background: #f1cbd2; }
+.map-swatch.bg-other { height: 12px; border: 1px solid #96c5cc; background: #cae5e9; }
+.equity-tooltip { min-width: 190px; color: var(--ink); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 12px; line-height: 1.5; }
+.equity-tooltip strong { display: block; margin-bottom: 3px; font-size: 14px; }
+.equity-tooltip .tooltip-class { display: block; margin-bottom: 3px; color: var(--red); font-weight: 750; }
+.equity-tooltip .tooltip-class.other { color: var(--teal); }
+.leaflet-container { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+
 .route-list { width: min(900px, 100%); margin: 0 auto 48px; padding: 18px 22px; border: 1px solid var(--line); background: rgba(255, 253, 249, .7); }
 .route-list summary { cursor: pointer; color: var(--red); font-weight: 750; }
 .route-list p { margin: 16px 0 0; color: var(--muted); font-size: 14px; line-height: 1.7; }
@@ -108,6 +129,10 @@ tbody tr:last-child td { border-bottom: 0; }
   .stat { padding: 20px; }
   .plot { width: calc(100% + 14px); margin: 34px 0 38px -7px; }
   .plot img { border-radius: 5px; }
+  .interactive-map-figure { width: calc(100% + 14px); margin: 34px 0 38px -7px; }
+  .map-stage { border-radius: 5px; }
+  .equity-map { height: 68vh; min-height: 480px; }
+  .map-legend { max-width: 220px; font-size: 10px; }
   .table-wrap { width: calc(100% + 14px); margin-left: -7px; border-radius: 4px; }
   .callout, .methodology, .author-note { padding: 23px 21px; }
   .controls { align-items: stretch; }

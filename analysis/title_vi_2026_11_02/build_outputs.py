@@ -13,7 +13,7 @@ import pandas as pd
 import shapefile
 from matplotlib.lines import Line2D
 from pyproj import Transformer
-from shapely.geometry import MultiPoint, Point, shape
+from shapely.geometry import MultiPoint, Point, mapping, shape
 from shapely.ops import transform, unary_union
 from shapely.strtree import STRtree
 
@@ -537,6 +537,48 @@ def plot_route_map(route_geometries, block_groups, classifications, service_geoi
     save_figure(fig, "route-classification-map.png")
 
 
+def write_map_geojson(route_geometries, block_groups, classifications, service_geoids):
+    to_wgs84 = Transformer.from_crs("EPSG:3310", "EPSG:4326", always_xy=True).transform
+    county_geometry = unary_union([block_group["geometry"] for block_group in block_groups])
+    class_lookup = classifications.set_index("route_id").to_dict("index")
+    features = []
+
+    for block_group in block_groups:
+        if block_group["geoid"] not in service_geoids:
+            continue
+        geometry = transform(to_wgs84, block_group["geometry"].simplify(12, preserve_topology=True))
+        features.append({
+            "type": "Feature",
+            "properties": {
+                "kind": "block_group",
+                "geoid": block_group["geoid"],
+                "population": int(block_group["population"]),
+                "poc_share_pct": round(100 * block_group["poc_share"], 1),
+                "minority": block_group["minority"],
+            },
+            "geometry": mapping(geometry),
+        })
+
+    for route_id, route_geometry in route_geometries.items():
+        geometry = route_geometry.intersection(county_geometry).simplify(5, preserve_topology=True)
+        if geometry.is_empty:
+            continue
+        classification = class_lookup[route_id]
+        features.append({
+            "type": "Feature",
+            "properties": {
+                "kind": "route",
+                "route_id": route_id,
+                "minority_route": classification["provisional_minority_route"],
+                "minority_mileage_share_pct": round(100 * classification["minority_mileage_share"], 1),
+            },
+            "geometry": mapping(transform(to_wgs84, geometry)),
+        })
+
+    collection = {"type": "FeatureCollection", "features": features}
+    (DATA / "map-data.geojson").write_text(json.dumps(collection, separators=(",", ":")) + "\n")
+
+
 def plot_monitoring(performance, scheduled, access):
     groups = ["minority", "nonminority"]
     colors = [COLORS["minority"], COLORS["nonminority"]]
@@ -659,6 +701,7 @@ def main():
         write_csv(fleet_age, "fleet_age_by_group.csv")
 
     plot_route_map(route_geometries, block_groups, classifications, set(access_detail["geoid"]))
+    write_map_geojson(route_geometries, block_groups, classifications, set(access_detail["geoid"]))
     plot_monitoring(performance, scheduled, access)
     plot_route_detail(route_metrics, classifications)
 
