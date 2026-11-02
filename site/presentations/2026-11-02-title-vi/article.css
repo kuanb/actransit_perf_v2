@@ -69,11 +69,16 @@ h1 { max-width: 1020px; margin: 0; font-size: clamp(45px, 7vw, 78px); letter-spa
 .map-swatch.route-other { height: 4px; background: var(--teal); }
 .map-swatch.bg-minority { height: 12px; border: 1px solid #d29aa4; background: #f1cbd2; }
 .map-swatch.bg-other { height: 12px; border: 1px solid #96c5cc; background: #cae5e9; }
+.map-layer-control { padding: 9px 11px; color: var(--ink); background: rgba(255, 253, 249, .96); font-size: 12px; line-height: 1.35; }
+.map-layer-control strong { display: block; margin-bottom: 6px; }
+.map-layer-control label { display: flex; align-items: center; gap: 7px; margin: 5px 0; cursor: pointer; }
+.map-layer-control input { margin: 0; accent-color: var(--teal); }
 .equity-tooltip { min-width: 190px; color: var(--ink); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 12px; line-height: 1.5; }
 .equity-tooltip strong { display: block; margin-bottom: 3px; font-size: 14px; }
 .equity-tooltip .tooltip-class { display: block; margin-bottom: 3px; color: var(--red); font-weight: 750; }
 .equity-tooltip .tooltip-class.other { color: var(--teal); }
-.leaflet-container { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+.equity-map, .mapboxgl-popup-content { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+.mapboxgl-popup-content { padding: 11px 13px; border-radius: 5px; box-shadow: 0 3px 14px rgba(23, 38, 46, .18); }
 
 .route-list { width: min(900px, 100%); margin: 0 auto 48px; padding: 18px 22px; border: 1px solid var(--line); background: rgba(255, 253, 249, .7); }
 .route-list summary { cursor: pointer; color: var(--red); font-weight: 750; }
