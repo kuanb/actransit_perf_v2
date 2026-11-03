@@ -794,17 +794,17 @@ function renderV2MissedDailyChart(summary) {
       datasets: [{
         label: "Dropped / not observed trips",
         data: values,
-        backgroundColor: "rgba(173, 30, 35, 0.82)",
-        borderColor: "rgb(142, 24, 30)",
-        borderWidth: 1,
+        backgroundColor: "#b83439",
+        hoverBackgroundColor: "#971c23",
         borderRadius: 3,
         borderSkipped: false,
-        maxBarThickness: 22,
+        maxBarThickness: 28,
       }],
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      layout: { padding: { top: 8 } },
       animation: {
         duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 320,
         easing: "easeOutQuart",
@@ -813,13 +813,16 @@ function renderV2MissedDailyChart(summary) {
       scales: {
         x: {
           grid: { display: false },
-          ticks: { maxRotation: 0, autoSkipPadding: 14 },
-          title: { display: true, text: "Service date" },
+          border: { display: false },
+          ticks: {
+            color: "#6f7d88",
+            maxRotation: 0,
+            autoSkipPadding: 14,
+          },
         },
         y: {
+          display: false,
           beginAtZero: true,
-          ticks: { precision: 0 },
-          title: { display: true, text: "Trips" },
         },
       },
       plugins: {
