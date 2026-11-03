@@ -822,7 +822,8 @@ body.report-card-v2 #grade-history .component-history-grid { display: none; }
 .v2-grade-block {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  justify-content: center;
+  gap: clamp(32px, 5vw, 56px);
   padding: clamp(24px, 4vw, 42px);
   background: #173b5e;
   color: #fff;
