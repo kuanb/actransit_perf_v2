@@ -802,8 +802,7 @@ footer a:hover {
 body.report-card-v2 .v2-only { display: block; }
 body.report-card-v2 .coverage-card,
 body.report-card-v2 #agency-hero,
-body.report-card-v2 .legacy-report-intro,
-body.report-card-v2 .legacy-report-action,
+body.report-card-v2 .report-intro,
 body.report-card-v2 #grade-history .component-history-heading,
 body.report-card-v2 #grade-history .component-history-grid { display: none; }
 
@@ -880,6 +879,29 @@ body.report-card-v2 #grade-history .component-history-grid { display: none; }
   font-variant-numeric: tabular-nums;
 }
 .v2-report-summary { max-width: 62ch; margin: 12px 0 18px; color: #536576; font-size: 15px; }
+.v2-hero-resources {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin: 0 0 18px;
+  padding: 11px 0;
+  border-block: 1px solid #dbe5ed;
+}
+.v2-hero-resources > span {
+  color: #718191;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.v2-hero-resources a {
+  color: #315f7d;
+  font-size: 13px;
+  font-weight: 750;
+  text-decoration: none;
+}
+.v2-hero-resources a:hover { color: #1971c2; text-decoration: underline; text-underline-offset: 3px; }
 .v2-hero-copy > a { width: max-content; color: #1971c2; font-size: 13px; font-weight: 750; text-decoration: none; }
 .v2-hero-copy > a:hover { text-decoration: underline; }
 
