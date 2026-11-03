@@ -802,7 +802,8 @@ footer a:hover {
 body.report-card-v2 .v2-only { display: block; }
 body.report-card-v2 .coverage-card,
 body.report-card-v2 #agency-hero,
-body.report-card-v2 .report-intro,
+body.report-card-v2 .legacy-report-intro,
+body.report-card-v2 .legacy-report-action,
 body.report-card-v2 #grade-history .component-history-heading,
 body.report-card-v2 #grade-history .component-history-grid { display: none; }
 

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AC Transit route report card</title>
-  <link rel="stylesheet" href="../styles.css?v=report-card-v2-daily-dropped">
+  <link rel="stylesheet" href="../styles.css?v=report-card-v2-resource-links">
   <script src="../independence-notice.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 </head>
@@ -95,16 +95,17 @@
   <section id="agency-hero" class="agency-hero" hidden></section>
 
   <section class="report-intro">
-    <p>
+    <p class="legacy-report-intro">
       Every AC Transit route gets a single letter grade for the
       <strong>last four weeks</strong> of service. The grade is a 0–100
       composite score that weights how reliably each route delivers the
       experience a waiting rider actually needs, not just whether a bus
       eventually showed up.
     </p>
+    <p class="v2-only v2-section-question">More ways to explore</p>
     <div class="report-actions">
-      <a class="report-action" href="../daily/">View latest daily overview →</a>
-      <a class="report-action" href="../weekly/">View latest weekly overview →</a>
+      <a class="report-action legacy-report-action" href="../daily/">View latest daily overview →</a>
+      <a class="report-action legacy-report-action" href="../weekly/">View latest weekly overview →</a>
       <a class="report-action" href="../kpi-comparison/">Compare published AC Transit KPIs →</a>
       <a class="report-action" href="../presentations/">View data analyses presentations →</a>
     </div>
