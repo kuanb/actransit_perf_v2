@@ -215,6 +215,102 @@ have and emit it to BigQuery. AC Transit's GPS occasionally drops; 20 min
 balances "give the bus a chance to come back" with "don't pin in-flight
 state forever."
 
+## Read-only public analysis
+
+The report card has a systemwide prompt entry point, and each route page links
+to the same interface with `route_id` and its displayed `week_end` attached.
+Route context is enforced again in the agent policy; it is not merely prompt
+text that the model can override.
+
+```mermaid
+flowchart LR
+    U[Report card or route page] -->|question + optional route/week context| A[Public analysis agent\nCloud Run]
+    A --> L{Firestore limits\n20 s cooldown\n2 active\n10/session/day\n60 global/day}
+    L -->|accepted| V[Vertex AI\nGemini 3.5 Flash-Lite]
+    V -->|named tool + typed parameters| P[Agent policy\nroute lock + 4-call cap]
+    P -->|OIDC-authenticated MCP| M[Private FastMCP service\nCloud Run]
+    M --> J[Published daily/weekly JSON\nGCS]
+    M --> G[Current + archived GTFS\nGCS]
+    M -->|parameterized templates only\n100 MiB/query cap| B[(BigQuery read-only)]
+    J --> M
+    G --> M
+    B --> M
+    M -->|bounded structured result| V
+    V -->|short plain-text explanation| A
+    A -->|answer + timeframe + charts + tables + sources| U
+```
+
+The scraper remains isolated from this request path. The public agent service
+account can invoke the MCP and use Vertex AI and Firestore. The private MCP
+service account has only GCS object-viewer, BigQuery data-viewer, and BigQuery
+job-user roles. The MCP exposes fixed Python functions; users and the model
+cannot supply SQL, object paths, table names, or write operations.
+
+The initial tool set covers:
+
+- systemwide performance summaries;
+- route comparisons and bounded rankings over approved metrics;
+- one-route performance summaries;
+- hourly route delay/observation profiles;
+- scheduled arrivals for one route, service date, and at most four hours,
+  joined to deduplicated observations and capped at 250 rows;
+- public metric definitions.
+
+All results use a common envelope: `answer_context`, `timeframe`, `charts`,
+`tables`, `sources`, and `warnings`. The model writes only the short narrative;
+the browser renders the structured fields directly and caps the result at three
+charts, two tables, 500 chart points, and 250 rows/table.
+
+### Missing timeframe policy
+
+The tool, rather than the model, chooses deterministic defaults when the user
+does not provide a complete timeframe:
+
+| Question shape | Default |
+|---|---|
+| route comparison or route summary | latest 28 published service days |
+| systemwide ranking | latest complete published service day |
+| hourly route profile | latest completed published week |
+| scheduled-arrival list | 06:00–10:00 Pacific on the latest complete published service day |
+| question opened from a route page | the Sunday–Saturday week displayed on that page; arrival lists use its ending service date |
+
+Each tool marks the timeframe as assumed or explicit and returns a human-readable
+disclosure. The page displays that disclosure independently from the generated
+answer, so an omitted timeframe cannot be silently hidden by model wording.
+
+### Abuse and cost controls
+
+Firestore transactions provide a persistent global active-request lease,
+per-browser cooldown and daily allowance, a shared daily allowance, and
+idempotent one-hour response caching with TTL cleanup. The browser shows active
+slots, shared questions remaining, and seconds until the next question. Terraform also
+provides a public kill switch. Prompt length, model tool calls, response bytes,
+chart/table size, date ranges, route counts, arrival windows, BigQuery bytes,
+Cloud Run instances, and database permissions are all independently bounded.
+Status reads are cached for five seconds, and an instance rejects known
+cooldown or exhausted-budget traffic before another Firestore transaction.
+
+Gemini 3.5 Flash-Lite is the only expected material incremental charge. At
+roughly 10–30 questions/day and 2,000–6,000 input plus 300–700 output tokens per
+question across tool rounds, plan on about **$0.50–$3.50/month** at standard
+on-demand pricing. The 60-question daily global cap makes a sustained high month
+roughly **$3–$7** at those payload sizes. Cloud Run, Firestore, and BigQuery
+should remain in their free tiers for
+the expected 20–60 minutes/day of bursty use; GCS reads are negligible. Actual
+token counts and billing should be checked after the first week before raising
+the global cap.
+
+### Rollout order
+
+1. Build and unit-test the fixed data functions and structured response schema.
+2. Deploy the private MCP with read-only IAM and verify its health and bounds.
+3. Deploy the public agent with Vertex AI, Firestore limits, and the kill switch
+   still disabled.
+4. Publish `analysis/config.json`, exercise both report-card and route-scoped
+   browser flows, then enable public queries.
+5. Review model token usage, BigQuery bytes, 429s, 5xx alerts, and user questions
+   after one week before changing any limits or adding tools.
+
 ## Cost projection
 
 | Line item | Estimate |

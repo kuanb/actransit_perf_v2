@@ -5,8 +5,9 @@ Actions CI keep regressions from sneaking in.
 
 ## Unit tests — `make test`
 
-Runs `go test ./... -race -v`. Pure Go, no network, no GCP calls. Safe to
-run any time.
+Runs `go test ./... -race -v` plus the pure Python tests under
+`services/data_mcp/tests` and `services/agent/tests`. No network or GCP calls
+are made. Safe to run any time.
 
 What's covered:
 
@@ -44,6 +45,10 @@ What's covered:
   trip with last-stop arrival → finalized; trip without → kept;
   unknown route → preserved (we can't tell which stop is last); nil
   cache → no-op.
+- **`services/data_mcp/tests/test_core.py`** — deterministic timeframe defaults,
+  disclosure of inferred dates, and count-weighted metric aggregation.
+- **`services/agent/tests/test_policy.py`** — route-scope enforcement, route-page
+  week defaults, and structured response caps for charts and tables.
 
 ## Smoke test — `make smoke`
 
@@ -110,10 +115,10 @@ hook updates land automatically when you `git pull`. Skip ad hoc with
 
 ## GitHub Actions CI
 
-`.github/workflows/test.yml` runs `go vet` and `go test ./... -race` on
-every push to `main` and on every pull request. No GCP credentials are
-needed because unit tests are pure (per the boundary policy above) — the
-runner is a vanilla `ubuntu-latest`.
+`.github/workflows/test.yml` runs `go vet`, `go test ./... -race`, the Python
+analysis tests, and Python bytecode compilation on every push to `main` and on
+every pull request. No GCP credentials are needed because unit tests are pure
+(per the boundary policy above) — the runner is a vanilla `ubuntu-latest`.
 
 `make smoke` is **not** wired into CI by design. It would require either
 a service account JSON key or a Workload Identity Federation setup, plus

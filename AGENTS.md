@@ -10,7 +10,8 @@ User-facing project docs are in `README.md` and `docs/`. Read those for
 ## Project at a glance
 
 - **Purpose:** minutely AC Transit GTFS-Realtime scraper + per-trip
-  performance tracker on GCP. Personal pet project, ~$1–2/month budget.
+  performance tracker on GCP. Personal pet project; the base pipeline is
+  ~$1–2/month and public analysis is expected to add ~$0.50–$3.50/month.
 - **Migration:** ported from val.town. Owner is learning Go and GCP,
   so explanations that connect to first principles or GCP idioms are
   welcome over jargon.
@@ -38,6 +39,8 @@ cmd/scraper/        Single Go binary; one HTTP handler per Cloud Scheduler job
                       generation-aware refresh check against gtfs/current.zip
   geo.go              Shape projection (haversine + lat/lon → dist-along-route)
 infra/              Terraform (state in gs://transit-203605-tfstate)
+  analysis.tf         Public analysis agent, private read-only MCP, Firestore limits,
+                      least-privilege IAM, and browser config object
   scraper.tf          Cloud Run service (2 GiB / 1 vCPU, 1800s timeout)
   schedule.tf         Cloud Scheduler jobs (cron, OIDC invoker)
   bigquery.tf         Datasets + tables (partitioned by service_date, clustered
@@ -46,6 +49,8 @@ infra/              Terraform (state in gs://transit-203605-tfstate)
   alerting.tf         Email alert policies
   dashboard.tf        Cloud Monitoring dashboard JSON
   iam.tf              Service accounts and bindings
+services/agent/      Public FastAPI + Vertex AI tool-selection service
+services/data_mcp/   Private FastMCP server; fixed GCS/GTFS/BigQuery read tools
 docs/               Architecture and data-model design docs
 site/               Static frontend (GitHub Pages, auto-deploys on push to main)
 Makefile            Authoritative entry points — see README.md "Deploy"
@@ -156,7 +161,7 @@ Two custom Cloud Monitoring metrics emitted from `/track-performance`:
 ## Local + CI commands
 
 ```sh
-make test                   # go test ./... -race -v   (must pass before commit)
+make test                   # Go race tests + pure Python analysis-policy tests
 make tf-fmt                 # terraform fmt -recursive
 make hooks-install          # install repo's pre-commit hook (vet + test)
 make run-local              # local Go server (limited — talks to live GCS)
@@ -176,7 +181,7 @@ before building it.
 ```sh
 make release         # build + deploy at HEAD's git SHA
 make deploy          # terraform apply at the *currently-running* tag
-make build           # build image only, no deploy
+make build           # build scraper, analysis-agent, and analysis-MCP images
 ```
 
 `make deploy` without `TAG=` queries Cloud Run for the live image and

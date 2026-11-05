@@ -16,8 +16,25 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: |
+            services/agent/requirements.txt
+            services/data_mcp/requirements.txt
+
+      - name: Install analysis dependencies
+        run: pip install -r services/agent/requirements.txt -r services/data_mcp/requirements.txt
+
       - name: go vet
         run: go vet ./...
 
       - name: go test
         run: go test ./... -race -count=1
+
+      - name: Analysis service tests
+        run: |
+          python -m unittest discover -s services/data_mcp/tests -p 'test_*.py'
+          python -m unittest discover -s services/agent/tests -p 'test_*.py'
+          python -m py_compile services/data_mcp/*.py services/agent/*.py

@@ -7,6 +7,13 @@
 const params = new URLSearchParams(window.location.search);
 const weekEnd = params.get("week_end") || "";
 const routeID = params.get("route_id") || "";
+const routeAskLink = document.getElementById("route-ask-link");
+if (routeAskLink && routeID) {
+  const askParams = new URLSearchParams({ route_id: routeID });
+  if (weekEnd) askParams.set("week_end", weekEnd);
+  routeAskLink.href = `../ask/?${askParams.toString()}`;
+  routeAskLink.textContent = `Ask about Route ${routeID} →`;
+}
 let activeDir = parseInt(params.get("dir") || "0", 10);
 let activePct = params.get("pct") || "p95"; // "p50" | "p95"
 let activeMode = params.get("mode") || "adherence"; // "adherence" | "volatility"

@@ -3,6 +3,8 @@ REGION     := us-west1
 REPO       := actransit-scraper
 SERVICE    := actransit-scraper
 IMAGE      := $(REGION)-docker.pkg.dev/$(PROJECT_ID)/$(REPO)/scraper
+AGENT_IMAGE := $(REGION)-docker.pkg.dev/$(PROJECT_ID)/$(REPO)/analysis-agent
+MCP_IMAGE   := $(REGION)-docker.pkg.dev/$(PROJECT_ID)/$(REPO)/analysis-data-mcp
 
 # Auto-derive the image tag from git: short SHA, plus "-dirty" when the
 # working tree has uncommitted changes to tracked files. This makes every
@@ -17,7 +19,7 @@ AGENCY_KPI_VERSION := $(shell sed -nE 's/^[[:space:]]*agencyKPIMethodologyVersio
 PARALLEL ?= 2
 BUNCHING_VERIFY_PARALLEL ?= 16
 
-.PHONY: tf-init tf-plan tf-apply tf-fmt build deploy release logs invoke run-local test smoke hooks-install backfill backfill-school-stats-history backfill-bunching backfill-bunching-history verify-bunching-history backfill-agency-kpis backfill-agency-kpis-history verify-agency-kpi-history
+.PHONY: tf-init tf-plan tf-apply tf-fmt build deploy release logs analysis-logs invoke run-local test test-analysis smoke hooks-install backfill backfill-school-stats-history backfill-bunching backfill-bunching-history verify-bunching-history backfill-agency-kpis backfill-agency-kpis-history verify-agency-kpi-history
 
 tf-init:
 	cd infra && terraform init
@@ -43,7 +45,11 @@ build:
 	@T=$${TAG:-$(AUTO_TAG)}; \
 	test -n "$$T" || (echo "ERROR: couldn't determine tag (no TAG= and git unreadable)" && exit 1); \
 	echo "==> building $(IMAGE):$$T"; \
-	gcloud builds submit --tag $(IMAGE):$$T
+	gcloud builds submit --tag $(IMAGE):$$T; \
+	echo "==> building $(AGENT_IMAGE):$$T"; \
+	gcloud builds submit --tag $(AGENT_IMAGE):$$T services/agent; \
+	echo "==> building $(MCP_IMAGE):$$T"; \
+	gcloud builds submit --tag $(MCP_IMAGE):$$T services/data_mcp
 
 # deploy defaults TAG to whatever's currently running on Cloud Run. So a
 # bare `make deploy` applies infra changes against the live image — it
@@ -58,6 +64,10 @@ deploy:
 	test -n "$$T" || (echo "ERROR: no TAG= and couldn't read currently-deployed tag" && exit 1); \
 	gcloud artifacts docker tags list $(IMAGE) --format='value(TAG)' | grep -qx "$$T" \
 	  || (echo "ERROR: tag '$$T' not in Artifact Registry — run 'make build TAG=$$T' first" && exit 1); \
+	gcloud artifacts docker tags list $(AGENT_IMAGE) --format='value(TAG)' | grep -qx "$$T" \
+	  || (echo "ERROR: analysis agent tag '$$T' missing — run 'make build TAG=$$T' first" && exit 1); \
+	gcloud artifacts docker tags list $(MCP_IMAGE) --format='value(TAG)' | grep -qx "$$T" \
+	  || (echo "ERROR: analysis MCP tag '$$T' missing — run 'make build TAG=$$T' first" && exit 1); \
 	echo "==> deploying $$T"; \
 	cd infra && terraform apply -var "image_tag=$$T"
 
@@ -76,6 +86,10 @@ release:
 logs:
 	gcloud logging read 'resource.labels.service_name="actransit-scraper" AND jsonPayload.msg!=""' --limit 50 --freshness=15m \
 		--format='value(timestamp,severity,jsonPayload.msg,jsonPayload.in_flight,jsonPayload.duration_ms,jsonPayload.err)'
+
+analysis-logs:
+	gcloud logging read 'resource.labels.service_name="actransit-analysis-agent" OR resource.labels.service_name="actransit-analysis-mcp"' --limit 50 --freshness=15m \
+		--format='value(timestamp,severity,resource.labels.service_name,textPayload,jsonPayload.message)'
 
 invoke:
 	curl -H "Authorization: Bearer $$(gcloud auth print-identity-token)" \
@@ -189,6 +203,11 @@ run-local:
 
 test:
 	go test ./... -race -v
+	$(MAKE) test-analysis
+
+test-analysis:
+	python3 -m unittest discover -s services/data_mcp/tests -p 'test_*.py'
+	python3 -m unittest discover -s services/agent/tests -p 'test_*.py'
 
 # Install the version-controlled pre-commit hook into .git/hooks/.
 # Idempotent — re-run after pulling new hook changes.

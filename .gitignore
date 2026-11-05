@@ -4,6 +4,10 @@
 *.test
 *.out
 
+# Python
+__pycache__/
+*.pyc
+
 # Terraform
 **/.terraform/
 *.tfstate

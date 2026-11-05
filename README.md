@@ -52,6 +52,13 @@ for that day, and reports confirmed origin departures more than 15 minutes late.
 Reports are limited to weekdays within each school's effective-dated academic
 calendar and exclude district holidays, recesses, and secondary no-school days.
 
+The report card and route pages also link to an experimental read-only analysis
+interface. A public Cloud Run agent uses Vertex AI to select from a fixed set of
+private MCP tools; those tools can read published report JSON, archived GTFS,
+and bounded BigQuery partitions, but cannot accept SQL or write project data.
+Responses carry structured text, charts, tables, data sources, and the exact
+timeframe used.
+
 ## Design docs
 
 In-progress / planned services have architecture artifacts under `docs/`:
@@ -76,12 +83,15 @@ directly via HTTPS, with permissive CORS for browsers:
 | Latest monthly KPI report | `https://storage.googleapis.com/transit-203605-actransit-cache/stats/monthly/latest.json` |
 | Published AC Transit KPIs | `https://storage.googleapis.com/transit-203605-actransit-cache/stats/published-kpis/latest.json` |
 | Latest school report | `https://storage.googleapis.com/transit-203605-actransit-cache/stats/schools/latest.json` |
+| Analysis UI config | `https://storage.googleapis.com/transit-203605-actransit-cache/analysis/config.json` |
 
 ## Stack
 
-- **Compute:** Cloud Run (Go 1.25, distroless image)
+- **Compute:** Cloud Run (Go 1.25 scraper; Python 3.13 analysis agent and MCP)
 - **Schedule:** Cloud Scheduler → HTTPS + OIDC
 - **Cache:** Cloud Storage (GCS)
+- **Analysis:** Vertex AI Gemini + FastMCP + Firestore rate limits
+- **Warehouse:** BigQuery with partition pruning and per-query byte caps
 - **Secrets:** Secret Manager (`actransit-token`, `actransit-gtfs-token`, `actransit-ridership-token`)
 - **Alerts:** Cloud Monitoring → email
 - **IaC:** Terraform (state in GCS)
@@ -99,6 +109,7 @@ make deploy                 # terraform apply at the currently-running tag (infr
 make build                  # just build (rare; use release instead)
 make invoke                 # curl /scrape with your identity token
 make logs                   # recent Cloud Run logs
+make analysis-logs          # recent analysis-agent and MCP logs
 make backfill-agency-kpis-history  # rebuild KPI comparison history after deployment
 make backfill-school-stats-history # build school reports for every indexed service date
 ```
@@ -117,6 +128,7 @@ suffixed `-dirty` and `make release` prompts before building it.
 | Change                                  | Command           |
 |-----------------------------------------|-------------------|
 | Go code (`cmd/`, future `internal/`)    | `make release`    |
+| Analysis code (`services/`)             | `make release`    |
 | `Dockerfile` or `go.mod` / `go.sum`     | `make release`    |
 | Terraform only (`infra/*.tf`)           | `make deploy`     |
 
@@ -153,7 +165,8 @@ will then disagree until you reconcile.
 
 ## Testing
 
-Run `make test` to execute unit tests locally (no external dependencies).
+Run `make test` to execute Go and analysis-policy unit tests locally (no GCP
+credentials or network calls).
 After a deploy, `make smoke` verifies the live service end-to-end via curl
 and `gsutil`. A pre-commit hook is available — install with
 `make hooks-install` to auto-run `go vet` + `go test` before every commit.
@@ -163,6 +176,20 @@ intentionally not unit-tested.
 
 ## Cost
 
-Designed for ~$1/month on a personal GCP project (free tier covers
-Cloud Run invocations and Scheduler; main line items are GCS write
-ops and Secret Manager accesses).
+The existing collection and reporting path is designed for roughly $1–2/month.
+For light public-analysis use, expect approximately another **$0.50–$3.50/month**:
+Cloud Run, Firestore, and BigQuery should remain in their free tiers, while
+Gemini 3.5 Flash-Lite tokens are the main incremental cost. This assumes roughly
+10–30 questions/day at about 2,000–6,000 input tokens and 300–700 output tokens
+per question across the tool-calling turns. The configured shared cap of 60
+accepted questions/day bounds a busier month to roughly **$3–$7**, depending on
+tool-result size. These are planning estimates, not a billing guarantee.
+
+The public defaults are one question every 20 seconds per browser, at most two
+active questions, 10 accepted questions per browser/day, 60 accepted questions
+globally/day, four tool calls/question, 500 prompt characters, and 100 MiB
+maximum BigQuery bytes billed per query. All are Terraform variables except the
+tool-call and response-size caps, which are service environment settings.
+The Terraform default leaves the public kill switch off for the first deploy;
+enable it only after the private MCP and route-scoped browser flow pass smoke
+checks.

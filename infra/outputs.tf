@@ -17,3 +17,13 @@ output "scraper_url" {
   description = "Cloud Run service URL"
   value       = google_cloud_run_v2_service.scraper.uri
 }
+
+output "analysis_agent_url" {
+  description = "Public read-only analysis API URL"
+  value       = google_cloud_run_v2_service.analysis_agent.uri
+}
+
+output "analysis_mcp_url" {
+  description = "Private read-only MCP service URL"
+  value       = google_cloud_run_v2_service.analysis_mcp.uri
+}
