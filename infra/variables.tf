@@ -39,7 +39,7 @@ variable "analysis_gemini_model" {
 variable "analysis_allowed_origins" {
   type        = list(string)
   description = "Browser origins allowed to call the public analysis API"
-  default     = ["https://kuanb.github.io", "http://localhost:8000", "http://127.0.0.1:8000"]
+  default     = ["https://ac-transit.com", "https://kuanb.github.io", "http://localhost:8000", "http://127.0.0.1:8000"]
 }
 
 variable "analysis_cooldown_seconds" {

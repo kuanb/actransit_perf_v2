@@ -50,7 +50,7 @@ class Settings:
                 value.strip()
                 for value in os.environ.get(
                     "ALLOWED_ORIGINS",
-                    "https://kuanb.github.io,http://localhost:8000,http://127.0.0.1:8000",
+                    "https://ac-transit.com,https://kuanb.github.io,http://localhost:8000,http://127.0.0.1:8000",
                 ).split(",")
                 if value.strip()
             ],
