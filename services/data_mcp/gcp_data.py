@@ -9,6 +9,7 @@ import threading
 import time as monotonic_time
 import zipfile
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, time, timedelta, timezone
 from functools import lru_cache
 from typing import Any, Literal
@@ -24,6 +25,7 @@ from core import (
     daily_metric_value,
     default_analysis_window,
     format_metric,
+    number,
     resolve_daily_dates,
     route_ids_for_group,
     route_group_source,
@@ -39,6 +41,7 @@ PROFILE_METRICS = {
     "p95_delay": ("95th percentile delay by hour", "p95", "Minutes"),
     "observed_arrivals": ("Observed stop arrivals by hour", "n", "Observed arrivals"),
 }
+WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
 
 class TransitData:
@@ -233,6 +236,184 @@ class TransitData:
             ],
             sources=[daily_source(resolved.dates)],
             warnings=resolved.warnings + ["Delay percentiles are summarized from published daily percentiles."],
+        )
+
+    def get_route_service_profile(
+        self,
+        route_id: str,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> dict[str, Any]:
+        route_id = validate_route_id(route_id)
+        resolved = resolve_daily_dates(self.published_dates(), start_date, end_date)
+        reports = self.daily_reports(resolved.dates)
+        routes = [find_route(report, route_id) for report in reports]
+        if not any(routes):
+            raise ValueError(f"Route {route_id} has no published data in the selected period")
+
+        daily_rows = []
+        for service_date, route in zip(resolved.dates, routes):
+            scheduled = int(number((route or {}).get("scheduled_trips")))
+            ran = int(number((route or {}).get("ran_trips")))
+            dropped = max(0, scheduled - ran)
+            daily_rows.append(
+                {
+                    "service_date": service_date,
+                    "scheduled_trips": scheduled,
+                    "dropped_trips": dropped,
+                    "trip_delivery": round(ran / scheduled * 100, 1) if scheduled else None,
+                }
+            )
+
+        observed = self.query_observed_trips(route_id, resolved.dates[0], resolved.dates[-1])
+        observed_by_date: dict[str, set[str]] = defaultdict(set)
+        for row in observed:
+            service_date = row["service_date"]
+            date_key = service_date.isoformat() if hasattr(service_date, "isoformat") else str(service_date)
+            observed_by_date[date_key].add(str(row["trip_id"]))
+
+        bodies = self.gtfs_for_dates(resolved.dates)
+        templates_by_body: dict[int, dict[str, list[dict[str, Any]]]] = {}
+        hour_cells: dict[tuple[str, int], dict[str, int]] = defaultdict(
+            lambda: {"scheduled": 0, "dropped": 0}
+        )
+        for service_date in resolved.dates:
+            body = bodies[service_date]
+            body_key = id(body)
+            if body_key not in templates_by_body:
+                templates_by_body[body_key] = route_trip_templates(body, route_id)
+            templates = templates_by_body[body_key]
+            active = active_services(body, service_date)
+            base_date = date.fromisoformat(service_date)
+            for service_id in active:
+                for trip in templates.get(service_id, []):
+                    start_seconds = int(trip["start_seconds"])
+                    start_day = base_date + timedelta(days=start_seconds // 86400)
+                    weekday = WEEKDAYS[start_day.weekday()]
+                    hour = (start_seconds // 3600) % 24
+                    cell = hour_cells[(weekday, hour)]
+                    cell["scheduled"] += 1
+                    if trip["trip_id"] not in observed_by_date[service_date]:
+                        cell["dropped"] += 1
+
+        heatmap_cells = []
+        for weekday in WEEKDAYS:
+            for hour in range(24):
+                counts = hour_cells[(weekday, hour)]
+                scheduled = counts["scheduled"]
+                dropped = counts["dropped"]
+                heatmap_cells.append(
+                    {
+                        "x": f"{hour:02d}:00",
+                        "y": weekday,
+                        "value": round(dropped / scheduled * 100, 1) if scheduled else None,
+                        "scheduled": scheduled,
+                        "dropped": dropped,
+                    }
+                )
+
+        worst_cells = sorted(
+            (cell for cell in heatmap_cells if cell["dropped"] > 0),
+            key=lambda cell: (cell["dropped"], cell["value"] or 0, cell["scheduled"]),
+            reverse=True,
+        )
+        worst_text = ", ".join(
+            f"{cell['y']} {cell['x']} ({cell['dropped']} of {cell['scheduled']}, {cell['value']:.1f}%)"
+            for cell in worst_cells[:5]
+        )
+        total_scheduled = sum(row["scheduled_trips"] for row in daily_rows)
+        total_dropped = sum(row["dropped_trips"] for row in daily_rows)
+        daily_extremes = sorted(daily_rows, key=lambda row: row["dropped_trips"], reverse=True)
+        answer_context = (
+            f"Route {route_id} scheduled and dropped-trip profile. "
+            f"Across {len(daily_rows)} published service days, {total_dropped} of {total_scheduled} scheduled trips "
+            "were Dropped / not observed. "
+        )
+        if daily_extremes:
+            answer_context += (
+                f"The highest daily count was {daily_extremes[0]['dropped_trips']} on "
+                f"{daily_extremes[0]['service_date']}. "
+            )
+        if worst_text:
+            answer_context += f"Worst scheduled start periods by absolute dropped trips: {worst_text}."
+
+        return tool_result(
+            answer_context=answer_context,
+            timeframe=resolved.timeframe,
+            charts=[
+                {
+                    "type": "bar",
+                    "priority": 100,
+                    "title": f"Route {route_id} scheduled and dropped trips by day",
+                    "x_label": "Service date",
+                    "labels": resolved.dates,
+                    "y_label": "Trips",
+                    "series": [
+                        {
+                            "name": "Scheduled trips",
+                            "values": [row["scheduled_trips"] for row in daily_rows],
+                        },
+                        {
+                            "name": "Dropped / not observed trips",
+                            "values": [row["dropped_trips"] for row in daily_rows],
+                        },
+                    ],
+                },
+                {
+                    "type": "heatmap",
+                    "priority": 95,
+                    "title": f"Route {route_id} dropped trips by scheduled start hour",
+                    "x_label": "Scheduled start hour in Pacific time",
+                    "y_label": "Scheduled start weekday",
+                    "x_labels": [f"{hour:02d}:00" for hour in range(24)],
+                    "y_labels": WEEKDAYS,
+                    "value_label": "Dropped share",
+                    "cells": heatmap_cells,
+                    "note": "Cell labels show the number of dropped trips; color represents the dropped share of scheduled trips.",
+                },
+            ],
+            tables=[
+                {
+                    "title": f"Route {route_id} scheduled and dropped trips by day",
+                    "columns": [
+                        {"key": "service_date", "label": "Service date"},
+                        {"key": "scheduled_trips", "label": "Scheduled trips"},
+                        {"key": "dropped_trips", "label": "Dropped / not observed"},
+                        {"key": "trip_delivery", "label": "Trip delivery (%)"},
+                    ],
+                    "rows": daily_rows,
+                },
+                {
+                    "title": f"Route {route_id} worst scheduled start periods",
+                    "columns": [
+                        {"key": "y", "label": "Weekday"},
+                        {"key": "x", "label": "Hour (PT)"},
+                        {"key": "scheduled", "label": "Scheduled trips"},
+                        {"key": "dropped", "label": "Dropped / not observed"},
+                        {"key": "value", "label": "Dropped share (%)"},
+                    ],
+                    "rows": worst_cells[:24],
+                },
+            ],
+            sources=[
+                daily_source(resolved.dates),
+                {
+                    "kind": "gtfs_schedule",
+                    "start_date": resolved.dates[0],
+                    "end_date": resolved.dates[-1],
+                },
+                {
+                    "kind": "bigquery",
+                    "table": f"{self.project_id}.actransit.trip_observations",
+                    "start_date": resolved.dates[0],
+                    "end_date": resolved.dates[-1],
+                    "deduplicated": True,
+                },
+            ],
+            warnings=resolved.warnings
+            + [
+                "Hourly cells assign each trip to its scheduled start weekday and hour in Pacific time; after-midnight GTFS times appear on the following calendar day."
+            ],
         )
 
     def get_system_performance(
@@ -521,6 +702,46 @@ class TransitData:
         )
         return [dict(row.items()) for row in self.bigquery.query(sql, job_config=config).result(timeout=20)]
 
+    def query_observed_trips(self, route_id: str, start_date: str, end_date: str) -> list[dict[str, Any]]:
+        validate_date_range(start_date, end_date)
+        sql = f"""
+            WITH obs AS (
+              SELECT service_date, trip_id, stop_sequence, actual_arrival, ingested_at
+              FROM `{self.project_id}.actransit.trip_observations`
+              WHERE service_date BETWEEN @start_date AND @end_date
+                AND route_id = @route_id
+              QUALIFY ROW_NUMBER() OVER (
+                PARTITION BY service_date, trip_id, stop_sequence
+                ORDER BY IF(actual_arrival IS NULL, 1, 0), ingested_at DESC
+              ) = 1
+            )
+            SELECT DISTINCT service_date, trip_id
+            FROM obs
+            WHERE actual_arrival IS NOT NULL
+        """
+        ranges = []
+        cursor = date.fromisoformat(start_date)
+        final = date.fromisoformat(end_date)
+        while cursor <= final:
+            chunk_end = min(cursor + timedelta(days=6), final)
+            ranges.append((cursor.isoformat(), chunk_end.isoformat()))
+            cursor = chunk_end + timedelta(days=1)
+
+        def run_chunk(chunk: tuple[str, str]) -> list[dict[str, Any]]:
+            config = bigquery.QueryJobConfig(
+                maximum_bytes_billed=self.maximum_bytes_billed,
+                query_parameters=[
+                    bigquery.ScalarQueryParameter("start_date", "DATE", chunk[0]),
+                    bigquery.ScalarQueryParameter("end_date", "DATE", chunk[1]),
+                    bigquery.ScalarQueryParameter("route_id", "STRING", route_id),
+                ],
+            )
+            result = self.bigquery.query(sql, job_config=config).result(timeout=20)
+            return [dict(row.items()) for row in result]
+
+        with ThreadPoolExecutor(max_workers=len(ranges)) as executor:
+            return [row for rows in executor.map(run_chunk, ranges) for row in rows]
+
     def list_scheduled_arrivals(
         self,
         route_id: str,
@@ -745,6 +966,35 @@ class TransitData:
                 return body
         raise ValueError(f"No current or archived GTFS feed covers {service_date}")
 
+    def gtfs_for_dates(self, service_dates: list[str]) -> dict[str, bytes]:
+        unresolved = set(service_dates)
+        bodies: dict[str, bytes] = {}
+        current = self.bucket.blob("gtfs/current.zip").download_as_bytes()
+        for service_date in list(unresolved):
+            if active_services(current, service_date):
+                bodies[service_date] = current
+                unresolved.remove(service_date)
+        if not unresolved:
+            return bodies
+
+        keys = sorted(
+            (
+                blob.name
+                for blob in self.storage.list_blobs(self.bucket_name, prefix="gtfs/")
+                if blob.name != "gtfs/current.zip" and blob.name.endswith(".zip")
+            ),
+            reverse=True,
+        )
+        for key in keys:
+            body = self.bucket.blob(key).download_as_bytes()
+            for service_date in list(unresolved):
+                if active_services(body, service_date):
+                    bodies[service_date] = body
+                    unresolved.remove(service_date)
+            if not unresolved:
+                return bodies
+        raise ValueError(f"No current or archived GTFS feed covers {min(unresolved)}")
+
 
 def validate_route_id(route_id: str) -> str:
     route_id = route_id.strip().upper()
@@ -826,6 +1076,45 @@ def active_services(body: bytes, service_date: str) -> set[str]:
     return active
 
 
+def route_trip_templates(body: bytes, route_id: str) -> dict[str, list[dict[str, Any]]]:
+    with zipfile.ZipFile(io.BytesIO(body)) as archive:
+        trip_services = {
+            row["trip_id"]: row["service_id"]
+            for row in csv.DictReader(io.TextIOWrapper(archive.open("trips.txt"), encoding="utf-8-sig"))
+            if row.get("route_id", "").upper() == route_id
+        }
+        starts: dict[str, int] = {}
+        for row in csv.DictReader(io.TextIOWrapper(archive.open("stop_times.txt"), encoding="utf-8-sig")):
+            trip_id = row.get("trip_id") or ""
+            if trip_id not in trip_services:
+                continue
+            start_seconds = gtfs_time_seconds(row.get("arrival_time") or row.get("departure_time") or "")
+            if start_seconds is None:
+                continue
+            if trip_id not in starts or start_seconds < starts[trip_id]:
+                starts[trip_id] = start_seconds
+
+    templates: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for trip_id, start_seconds in starts.items():
+        templates[trip_services[trip_id]].append(
+            {"trip_id": trip_id, "start_seconds": start_seconds}
+        )
+    return templates
+
+
+def gtfs_time_seconds(value: str) -> int | None:
+    parts = value.split(":")
+    if len(parts) != 3:
+        return None
+    try:
+        hours, minutes, seconds = (int(part) for part in parts)
+    except ValueError:
+        return None
+    if hours < 0 or not 0 <= minutes < 60 or not 0 <= seconds < 60:
+        return None
+    return hours * 3600 + minutes * 60 + seconds
+
+
 def scheduled_rows(
     body: bytes,
     service_date: str,
@@ -878,13 +1167,7 @@ def scheduled_rows(
 
 
 def gtfs_datetime(service_date: date, value: str) -> datetime | None:
-    parts = value.split(":")
-    if len(parts) != 3:
+    seconds = gtfs_time_seconds(value)
+    if seconds is None:
         return None
-    try:
-        hours, minutes, seconds = (int(part) for part in parts)
-    except ValueError:
-        return None
-    return datetime.combine(service_date, time(0, 0), PACIFIC) + timedelta(
-        hours=hours, minutes=minutes, seconds=seconds
-    )
+    return datetime.combine(service_date, time(0, 0), PACIFIC) + timedelta(seconds=seconds)

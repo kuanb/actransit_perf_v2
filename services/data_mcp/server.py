@@ -54,6 +54,16 @@ def get_route_performance(
 
 
 @mcp.tool
+def get_route_service_profile(
+    route_id: str,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> dict:
+    """Return daily absolute scheduled and Dropped / not observed trip counts plus a 24-hour by 7-day heatmap of dropped trips grouped by scheduled start time. Use this for questions about how many trips did not run by day or which hours and weekdays have the worst trip delivery. Dates default to seven days ending yesterday and are limited to 31 calendar days."""
+    return data.get_route_service_profile(route_id, start_date, end_date)
+
+
+@mcp.tool
 def get_system_performance(
     start_date: str | None = None,
     end_date: str | None = None,

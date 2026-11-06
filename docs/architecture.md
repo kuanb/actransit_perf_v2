@@ -252,6 +252,8 @@ The initial tool set covers:
 - systemwide performance summaries;
 - route comparisons and bounded rankings over approved metrics;
 - one-route performance summaries;
+- daily scheduled and Dropped / not observed trip counts plus a scheduled-start
+  hour-of-week heatmap for one route;
 - hourly route delay/observation profiles;
 - scheduled arrivals for one route, service date, and at most four hours,
   joined to deduplicated observations and capped at 250 rows;
@@ -267,8 +269,9 @@ official classification source.
 
 All results use a common envelope: `answer_context`, `timeframe`, `charts`,
 `tables`, `sources`, and `warnings`. The model writes only the short narrative;
-the browser renders the structured fields directly and caps the result at three
-charts, two tables, 500 chart points, and 250 rows/table.
+the browser renders the structured fields directly, including `line`, `bar`,
+and accessible 24-hour by 7-day `heatmap` charts, and caps the result at three
+charts, two tables, 500 chart points or heatmap cells, and 250 rows/table.
 
 ### Missing timeframe policy
 
@@ -328,12 +331,13 @@ the global cap.
 5. Review model token usage, BigQuery bytes, 429s, 5xx alerts, and user questions
    after one week before changing any limits or adding tools.
 
-Category-sensitive requests emit an `analysis_eval_trace` structured log with
-prompt feature tags and bounded tool arguments, but not raw visitor text. The
-manual route-category eval suite replays checked-in synthetic prompts against a
-deployed agent and checks that regular, school, and All Nighter results remain
-segmented. It consumes five questions and observes the normal cooldown, so it
-is deliberately excluded from CI.
+Category-sensitive and dropped-trip timing requests emit an `analysis_eval_trace`
+structured log with prompt feature tags and bounded tool arguments, but not raw
+visitor text. The manual route-category eval suite checks that regular, school,
+and All Nighter results remain segmented. A separate multi-turn suite replays
+the Route 1T monthly follow-up and requires both the absolute-count bar chart and
+the hour-of-week heatmap. Both suites observe the normal cooldown and are
+deliberately excluded from CI.
 
 Every accepted analysis turn is also archived as one JSON object in the private
 `transit-203605-analysis-chats` bucket. Object names use

@@ -25,6 +25,13 @@ class ScopePolicyTest(unittest.TestCase):
 
         self.assertEqual("51A", arguments["route_id"])
 
+    def test_route_scope_overwrites_service_profile_route(self):
+        arguments, _ = prepare_tool_call(
+            "get_route_service_profile", {"route_id": "72"}, "51A", None
+        )
+
+        self.assertEqual("51A", arguments["route_id"])
+
     def test_route_scope_rejects_systemwide_ranking(self):
         with self.assertRaises(ValueError):
             prepare_tool_call("rank_routes", {"metric": "dropped_trips"}, "51A", None)
@@ -52,6 +59,14 @@ class ScopePolicyTest(unittest.TestCase):
         )
 
         self.assertEqual(["ranking", "hourly", "popularity_language"], features)
+
+    def test_eval_features_tag_dropped_trip_timing(self):
+        features = eval_prompt_features(
+            "How many buses were not run on each day and which hours were worst?"
+        )
+
+        self.assertIn("hourly", features)
+        self.assertIn("dropped_trip_timing", features)
 
     def test_popular_route_ranking_cannot_drift_into_special_service(self):
         arguments = enforce_route_group(
@@ -115,6 +130,29 @@ class MergeResultsTest(unittest.TestCase):
 
         self.assertEqual(1, len(merged["timeframes"]))
 
+    def test_prioritizes_daily_trip_bars_and_caps_heatmap_cells(self):
+        result = {
+            "charts": [
+                {"type": "line", "priority": 0, "labels": ["a"], "series": []},
+                {
+                    "type": "heatmap",
+                    "priority": 95,
+                    "x_labels": [str(value) for value in range(30)],
+                    "y_labels": [str(value) for value in range(10)],
+                    "cells": [{"value": value} for value in range(200)],
+                },
+                {"type": "bar", "priority": 100, "labels": ["a"], "series": []},
+            ]
+        }
+
+        merged = merge_tool_results([result])
+
+        self.assertEqual(["bar", "heatmap", "line"], [chart["type"] for chart in merged["charts"]])
+        self.assertEqual(168, len(merged["charts"][1]["cells"]))
+        self.assertEqual(24, len(merged["charts"][1]["x_labels"]))
+        self.assertEqual(7, len(merged["charts"][1]["y_labels"]))
+        self.assertNotIn("priority", merged["charts"][0])
+
 
 class ConversationTest(unittest.TestCase):
     def test_initial_answer_allows_three_follow_ups(self):
@@ -153,6 +191,15 @@ class EvalCaseTest(unittest.TestCase):
                 for group in case.get("required_route_groups", [])
             },
         )
+
+    def test_conversation_eval_requires_daily_bars_and_heatmap(self):
+        path = Path(__file__).resolve().parents[1] / "evals" / "conversation_cases.json"
+        cases = json.loads(path.read_text())
+
+        self.assertEqual(len(cases), len({case["id"] for case in cases}))
+        final_turn = cases[0]["turns"][-1]
+        self.assertEqual({"bar", "heatmap"}, set(final_turn["required_chart_types"]))
+        self.assertIn("not run", final_turn["prompt"])
 
 
 if __name__ == "__main__":

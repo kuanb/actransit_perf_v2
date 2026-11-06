@@ -238,7 +238,7 @@ async def query(body: QueryBody) -> JSONResponse:
         eval_trace = result.pop("_eval_trace", [])
         structured_log(
             "analysis_eval_trace",
-            policy_version="route-groups-v1",
+            policy_version="route-groups-and-chart-contract-v2",
             request_id=body.request_id,
             route_scope=route_id,
             prompt_length=len(prompt),

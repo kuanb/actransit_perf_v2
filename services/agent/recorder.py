@@ -81,7 +81,7 @@ class ConversationRecorder:
             "question": values["question"],
             "response": values["response"],
             "evaluation": {
-                "policy_version": "route-groups-v1",
+                "policy_version": "route-groups-and-chart-contract-v2",
                 "prompt_features": values["prompt_features"],
                 "tool_calls": values["tool_calls"],
             },

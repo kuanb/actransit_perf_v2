@@ -8,6 +8,7 @@ from typing import Any
 
 ROUTE_SCOPED_TOOLS = {
     "get_route_performance",
+    "get_route_service_profile",
     "get_route_time_profile",
     "list_scheduled_arrivals",
     "get_metric_definition",
@@ -32,7 +33,12 @@ def prepare_tool_call(
     prepared = dict(arguments)
     if tool_name == "rank_routes" and not prepared.get("route_group"):
         prepared["route_group"] = "regular"
-    if route_id and tool_name in {"get_route_performance", "get_route_time_profile", "list_scheduled_arrivals"}:
+    if route_id and tool_name in {
+        "get_route_performance",
+        "get_route_service_profile",
+        "get_route_time_profile",
+        "list_scheduled_arrivals",
+    }:
         prepared["route_id"] = route_id
 
     context_timeframe = None
@@ -51,7 +57,11 @@ def prepare_tool_call(
                     f"{week_end}."
                 ),
             }
-        elif tool_name in {"get_route_performance", "get_route_time_profile"}:
+        elif tool_name in {
+            "get_route_performance",
+            "get_route_service_profile",
+            "get_route_time_profile",
+        }:
             prepared["start_date"] = start.isoformat()
             prepared["end_date"] = end.isoformat()
             context_timeframe = {
@@ -74,6 +84,12 @@ def eval_prompt_features(prompt: str) -> list[str]:
         "ranking": r"\b(worst|best|rank|ranking|worse)\b",
         "comparison": r"\b(compare|comparison|versus|vs\.?|worse than|better than)\b",
         "hourly": r"\b(hour|hours|hourly|time of day)\b",
+        "dropped_trip_timing": (
+            r"\b(not run|did not run|dropped|unobserved|missing trips?)\b.*"
+            r"\b(hour|hours|hourly|each day|by day)\b|"
+            r"\b(hour|hours|hourly|each day|by day)\b.*"
+            r"\b(not run|did not run|dropped|unobserved|missing trips?)\b"
+        ),
         "popularity_language": r"\b(popular|common|major|busy)\b",
         "school_service": r"\b(6\d{2}|600.series|school)\b",
         "all_nighter_service": r"\b(8\d{2}|800.series|all.nighter|overnight)\b",
@@ -192,6 +208,7 @@ def consolidate_timeframes(timeframes: list[dict[str, Any]]) -> list[dict[str, A
 def merge_tool_results(results: list[dict[str, Any]]) -> dict[str, Any]:
     timeframes: list[dict[str, Any]] = []
     charts: list[dict[str, Any]] = []
+    chart_candidates: list[dict[str, Any]] = []
     tables: list[dict[str, Any]] = []
     sources: list[dict[str, Any]] = []
     warnings: list[str] = []
@@ -203,19 +220,7 @@ def merge_tool_results(results: list[dict[str, Any]]) -> dict[str, Any]:
         if timeframe:
             timeframes.append(timeframe)
 
-        for chart in result.get("charts") or []:
-            if len(charts) >= 3:
-                break
-            labels = list(chart.get("labels") or [])[:200]
-            remaining = 500 - total_chart_points
-            if remaining <= 0:
-                break
-            labels = labels[:remaining]
-            normalized = {**chart, "labels": labels, "series": []}
-            for series in (chart.get("series") or [])[:5]:
-                normalized["series"].append({**series, "values": list(series.get("values") or [])[: len(labels)]})
-            total_chart_points += len(labels)
-            charts.append(normalized)
+        chart_candidates.extend(result.get("charts") or [])
 
         for table in result.get("tables") or []:
             if len(tables) >= 2:
@@ -231,6 +236,33 @@ def merge_tool_results(results: list[dict[str, Any]]) -> dict[str, Any]:
         for warning in result.get("warnings") or []:
             if warning not in warnings and len(warnings) < 8:
                 warnings.append(str(warning))
+
+    chart_candidates.sort(key=lambda chart: int(chart.get("priority") or 0), reverse=True)
+    for chart in chart_candidates:
+        if len(charts) >= 3:
+            break
+        remaining = 500 - total_chart_points
+        if remaining <= 0:
+            break
+        normalized = {key: value for key, value in chart.items() if key != "priority"}
+        if chart.get("type") == "heatmap":
+            cells = list(chart.get("cells") or [])[: min(168, remaining)]
+            normalized["cells"] = cells
+            normalized["x_labels"] = list(chart.get("x_labels") or [])[:24]
+            normalized["y_labels"] = list(chart.get("y_labels") or [])[:7]
+            normalized["labels"] = []
+            normalized["series"] = []
+            total_chart_points += len(cells)
+        else:
+            labels = list(chart.get("labels") or [])[: min(200, remaining)]
+            normalized["labels"] = labels
+            normalized["series"] = []
+            for series in (chart.get("series") or [])[:5]:
+                normalized["series"].append(
+                    {**series, "values": list(series.get("values") or [])[: len(labels)]}
+                )
+            total_chart_points += len(labels)
+        charts.append(normalized)
 
     return {
         "timeframes": consolidate_timeframes(timeframes),

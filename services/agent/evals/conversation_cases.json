@@ -1,0 +1,20 @@
+[
+  {
+    "id": "route_1t_dropped_trips_and_hourly_followup",
+    "scope": {"route_id": null, "week_end": null},
+    "turns": [
+      {
+        "prompt": "is the 1T getting worse?"
+      },
+      {
+        "prompt": "how about over the last month?"
+      },
+      {
+        "prompt": "and how many 1T buses were not run on each day and show me which hours tend to be worst for this problem",
+        "required_chart_types": ["bar", "heatmap"],
+        "required_chart_title_terms": ["scheduled and dropped trips by day", "dropped trips by scheduled start hour"],
+        "forbidden_answer_terms": ["exceeds the data query limits", "request a narrower date window"]
+      }
+    ]
+  }
+]

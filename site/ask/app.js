@@ -284,13 +284,20 @@ function renderCharts(items) {
     card.className = "chart-card";
     const title = document.createElement("h3");
     title.textContent = spec.title || "Chart";
+    card.appendChild(title);
+    if (spec.type === "heatmap") {
+      card.classList.add("heatmap-card");
+      renderHeatmap(card, spec);
+      wrap.appendChild(card);
+      return;
+    }
     const chartWrap = document.createElement("div");
     chartWrap.className = "chart-wrap";
     const canvas = document.createElement("canvas");
     canvas.setAttribute("role", "img");
     canvas.setAttribute("aria-label", spec.title || "Analysis chart");
     chartWrap.appendChild(canvas);
-    card.append(title, chartWrap);
+    card.appendChild(chartWrap);
     wrap.appendChild(card);
     const instance = new Chart(canvas, {
       type: spec.type === "bar" ? "bar" : "line",
@@ -319,6 +326,72 @@ function renderCharts(items) {
     });
     charts.push(instance);
   });
+}
+
+function renderHeatmap(card, spec) {
+  const note = document.createElement("p");
+  note.className = "heatmap-note";
+  note.textContent = spec.note || "Cell color represents severity.";
+
+  const cellMap = new Map((spec.cells || []).map(cell => [`${cell.y}\u0000${cell.x}`, cell]));
+  const scroll = document.createElement("div");
+  scroll.className = "heatmap-scroll";
+  const table = document.createElement("table");
+  table.className = "heatmap";
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  const corner = document.createElement("th");
+  corner.scope = "col";
+  corner.textContent = "Weekday";
+  headRow.appendChild(corner);
+  (spec.x_labels || []).forEach(label => {
+    const th = document.createElement("th");
+    th.scope = "col";
+    th.textContent = String(label).replace(":00", "");
+    th.title = String(label);
+    headRow.appendChild(th);
+  });
+  thead.appendChild(headRow);
+
+  const tbody = document.createElement("tbody");
+  (spec.y_labels || []).forEach(yLabel => {
+    const row = document.createElement("tr");
+    const th = document.createElement("th");
+    th.scope = "row";
+    th.textContent = String(yLabel).slice(0, 3);
+    th.title = String(yLabel);
+    row.appendChild(th);
+    (spec.x_labels || []).forEach(xLabel => {
+      const cell = cellMap.get(`${yLabel}\u0000${xLabel}`) || {};
+      const td = document.createElement("td");
+      const scheduled = Number(cell.scheduled || 0);
+      const dropped = Number(cell.dropped || 0);
+      const value = cell.value == null ? null : Number(cell.value);
+      if (!scheduled || !Number.isFinite(value)) {
+        td.className = "no-service";
+        td.textContent = "–";
+        td.setAttribute("aria-label", `${yLabel} ${xLabel}: no scheduled trips`);
+      } else {
+        const intensity = Math.max(0, Math.min(1, value / 100));
+        td.style.backgroundColor = `rgba(177, 61, 88, ${0.08 + intensity * 0.82})`;
+        if (intensity >= 0.62) td.style.color = "#fff";
+        td.textContent = String(dropped);
+        const detail = `${yLabel} ${xLabel}: ${dropped} dropped of ${scheduled} scheduled trips (${value.toFixed(1)}%)`;
+        td.title = detail;
+        td.tabIndex = 0;
+        td.setAttribute("aria-label", detail);
+      }
+      row.appendChild(td);
+    });
+    tbody.appendChild(row);
+  });
+  table.append(thead, tbody);
+  scroll.appendChild(table);
+
+  const legend = document.createElement("div");
+  legend.className = "heatmap-legend";
+  legend.innerHTML = '<span>Lower dropped share</span><i aria-hidden="true"></i><span>Higher dropped share</span>';
+  card.append(note, scroll, legend);
 }
 
 function renderTables(items) {
