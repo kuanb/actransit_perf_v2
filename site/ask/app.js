@@ -279,9 +279,13 @@ function renderCharts(items) {
   const wrap = document.getElementById("charts");
   wrap.replaceChildren();
   const colors = ["#165d8f", "#b13d58", "#1d7a5b", "#9a5a08", "#6b4c9a"];
-  items.slice(0, 3).forEach((spec, chartIndex) => {
+  const visibleItems = items.slice(0, 3);
+  const expandStandardChart = visibleItems.filter(spec => spec.type !== "heatmap").length === 1
+    && visibleItems.some(spec => spec.type === "heatmap");
+  visibleItems.forEach((spec, chartIndex) => {
     const card = document.createElement("article");
     card.className = "chart-card";
+    if (expandStandardChart && spec.type !== "heatmap") card.classList.add("full-width");
     const title = document.createElement("h3");
     title.textContent = spec.title || "Chart";
     card.appendChild(title);
