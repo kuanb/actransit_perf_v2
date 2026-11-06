@@ -180,6 +180,11 @@ resource "google_cloud_run_v2_service" "analysis_agent" {
       }
 
       env {
+        name  = "MAX_FOLLOW_UPS"
+        value = tostring(var.analysis_max_follow_ups)
+      }
+
+      env {
         name  = "MAX_TOOL_CALLS"
         value = "4"
       }
@@ -254,6 +259,7 @@ resource "google_storage_bucket_object" "analysis_config" {
     api_url            = google_cloud_run_v2_service.analysis_agent.uri
     cooldown_seconds   = var.analysis_cooldown_seconds
     max_active_queries = var.analysis_max_active_queries
+    max_follow_ups     = var.analysis_max_follow_ups
     max_prompt_chars   = var.analysis_max_prompt_chars
     enabled            = var.analysis_enabled
   })

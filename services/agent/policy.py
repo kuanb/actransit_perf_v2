@@ -12,6 +12,7 @@ ROUTE_SCOPED_TOOLS = {
     "get_metric_definition",
 }
 GENERAL_TOOLS = ROUTE_SCOPED_TOOLS | {"compare_routes", "get_system_performance", "rank_routes"}
+CONTEXT_ANSWER_CHARS = 2000
 
 
 def allowed_tool_names(route_id: str | None) -> set[str]:
@@ -80,23 +81,76 @@ def apply_context_timeframe(result: dict[str, Any], context_timeframe: dict[str,
     return updated
 
 
+def extend_conversation(
+    context: list[dict[str, Any]],
+    prompt: str,
+    result: dict[str, Any],
+    max_follow_ups: int,
+) -> list[dict[str, Any]]:
+    if len(context) > max_follow_ups:
+        raise ValueError("The follow-up limit for this answer has been reached")
+    turn: dict[str, Any] = {
+        "question": prompt,
+        "answer": str(result.get("answer") or "")[:CONTEXT_ANSWER_CHARS],
+    }
+    timeframes = list(result.get("timeframes") or [])
+    if timeframes:
+        turn["timeframe"] = timeframes[0]
+    return [*context, turn]
+
+
+def follow_ups_remaining(context: list[dict[str, Any]], max_follow_ups: int) -> int:
+    return max(0, max_follow_ups - max(0, len(context) - 1))
+
+
+def consolidate_timeframes(timeframes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    unique: list[dict[str, Any]] = []
+    identities: set[str] = set()
+    for timeframe in timeframes:
+        identity = json.dumps(
+            {
+                key: timeframe.get(key)
+                for key in ("start_date", "end_date", "start_time", "end_time", "timezone")
+            },
+            sort_keys=True,
+            default=str,
+        )
+        if identity not in identities:
+            identities.add(identity)
+            unique.append(timeframe)
+
+    if len(unique) <= 1:
+        return unique
+
+    disclosures = [
+        str(timeframe.get("disclosure"))
+        for timeframe in unique
+        if timeframe.get("disclosure")
+    ]
+    return [
+        {
+            "start_date": min(str(timeframe.get("start_date")) for timeframe in unique),
+            "end_date": max(str(timeframe.get("end_date")) for timeframe in unique),
+            "assumed": any(bool(timeframe.get("assumed")) for timeframe in unique),
+            "basis": "combined_tool_timeframes",
+            "disclosure": "This answer combines multiple analyzed periods: " + " ".join(disclosures),
+        }
+    ]
+
+
 def merge_tool_results(results: list[dict[str, Any]]) -> dict[str, Any]:
     timeframes: list[dict[str, Any]] = []
     charts: list[dict[str, Any]] = []
     tables: list[dict[str, Any]] = []
     sources: list[dict[str, Any]] = []
     warnings: list[str] = []
-    seen_timeframes: set[str] = set()
     seen_sources: set[str] = set()
     total_chart_points = 0
 
     for result in results:
         timeframe = result.get("timeframe")
         if timeframe:
-            key = json.dumps(timeframe, sort_keys=True, default=str)
-            if key not in seen_timeframes:
-                seen_timeframes.add(key)
-                timeframes.append(timeframe)
+            timeframes.append(timeframe)
 
         for chart in result.get("charts") or []:
             if len(charts) >= 3:
@@ -128,7 +182,7 @@ def merge_tool_results(results: list[dict[str, Any]]) -> dict[str, Any]:
                 warnings.append(str(warning))
 
     return {
-        "timeframes": timeframes,
+        "timeframes": consolidate_timeframes(timeframes),
         "charts": charts,
         "tables": tables,
         "sources": sources,

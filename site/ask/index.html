@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Ask about AC Transit performance</title>
-  <link rel="stylesheet" href="../styles.css?v=analysis-v1">
-  <link rel="stylesheet" href="styles.css?v=analysis-v1">
+  <link rel="stylesheet" href="../styles.css?v=analysis-v2">
+  <link rel="stylesheet" href="styles.css?v=analysis-v2">
   <script src="../independence-notice.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 </head>
@@ -36,12 +36,13 @@
       <div id="suggestions" class="suggestions" aria-label="Suggested questions"></div>
 
       <form id="ask-form">
-        <label for="question">Question</label>
-        <textarea id="question" name="question" rows="4" maxlength="500" required placeholder="For example: Compare On Time Service Delivered for routes 51A and 72 over the latest four weeks."></textarea>
+        <label id="question-label" for="question">Question</label>
+        <textarea id="question" name="question" rows="4" maxlength="500" required placeholder="For example: Compare On Time Service Delivered for routes 51A and 72."></textarea>
         <div class="question-meta">
           <span id="character-count">0 / 500</span>
           <span>Do not include personal or sensitive information.</span>
         </div>
+        <p id="thread-state" class="thread-state">Each answer can be followed by up to 3 clarifying questions.</p>
         <button id="ask-button" type="submit" disabled>Ask</button>
       </form>
 
@@ -52,7 +53,7 @@
         </div>
         <p id="limit-copy">Questions are deliberately rate limited to manage misuse and model/database costs.</p>
         <p id="timeframe-rule" class="muted">
-          If you omit a timeframe, comparisons and route summaries use the latest 28 published service days; rankings use the latest complete service day; hourly profiles use the latest completed week; arrival lists use 6–10 a.m. Pacific on the latest complete service day. The exact choice is shown with every answer.
+          If you omit a timeframe, analysis uses the seven-day period ending yesterday in Pacific time; arrival lists use yesterday from 6–10 a.m. The exact choice is shown with every answer.
         </p>
       </aside>
 
@@ -65,7 +66,7 @@
           <p class="ask-eyebrow">Analysis</p>
           <h2>Answer</h2>
         </div>
-        <button id="clear-response" type="button" class="secondary-button">Clear</button>
+        <button id="clear-response" type="button" class="secondary-button">New question</button>
       </div>
       <div id="timeframes" class="timeframes"></div>
       <div id="answer" class="answer"></div>
@@ -83,7 +84,7 @@
     <a href="https://kuanbutts.com" target="_blank" rel="noopener">A project by Kuan Butts</a>
   </footer>
 
-  <script src="app.js?v=analysis-v1"></script>
+  <script src="app.js?v=analysis-v2"></script>
   <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "0e36b12e46b04a69b5e9ff6883f6d23d"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
 </html>

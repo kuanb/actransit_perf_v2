@@ -20,6 +20,7 @@ from core import (
     METRICS,
     aggregate_metric,
     daily_metric_value,
+    default_analysis_window,
     format_metric,
     resolve_daily_dates,
     system_metric_row,
@@ -80,9 +81,7 @@ class TransitData:
     ) -> dict[str, Any]:
         route_ids = validate_route_ids(route_ids, minimum=2, maximum=5)
         validate_metric(metric)
-        resolved = resolve_daily_dates(
-            self.published_dates(), start_date, end_date, 28, "the latest 28 published service days"
-        )
+        resolved = resolve_daily_dates(self.published_dates(), start_date, end_date)
         reports = self.daily_reports(resolved.dates)
         rows: list[dict[str, Any]] = []
         series: list[dict[str, Any]] = []
@@ -138,9 +137,7 @@ class TransitData:
         end_date: str | None = None,
     ) -> dict[str, Any]:
         route_id = validate_route_id(route_id)
-        resolved = resolve_daily_dates(
-            self.published_dates(), start_date, end_date, 28, "the latest 28 published service days"
-        )
+        resolved = resolve_daily_dates(self.published_dates(), start_date, end_date)
         reports = self.daily_reports(resolved.dates)
         routes = [find_route(report, route_id) for report in reports]
         available = [route for route in routes if route]
@@ -225,9 +222,7 @@ class TransitData:
         start_date: str | None = None,
         end_date: str | None = None,
     ) -> dict[str, Any]:
-        resolved = resolve_daily_dates(
-            self.published_dates(), start_date, end_date, 28, "the latest 28 published service days"
-        )
+        resolved = resolve_daily_dates(self.published_dates(), start_date, end_date)
         reports = self.daily_reports(resolved.dates)
         systems = [system_metric_row(report) for report in reports]
         metrics = [
@@ -315,9 +310,7 @@ class TransitData:
             raise ValueError("limit must be between 1 and 10")
         if order not in {"worst", "best"}:
             raise ValueError("order must be worst or best")
-        resolved = resolve_daily_dates(
-            self.published_dates(), start_date, end_date, 1, "the latest complete published service day"
-        )
+        resolved = resolve_daily_dates(self.published_dates(), start_date, end_date)
         reports = self.daily_reports(resolved.dates)
         route_ids = sorted({route["route_id"] for report in reports for route in report.get("routes") or []})
         ranked: list[dict[str, Any]] = []
@@ -379,21 +372,19 @@ class TransitData:
             raise ValueError(f"metric must be one of: {', '.join(PROFILE_METRICS)}")
 
         if start_date is None and end_date is None:
-            weekly = self.read_json("stats/weekly/latest.json")
-            start_date = weekly["week_start"]
-            end_date = weekly["week_end"]
+            start_date, end_date = default_analysis_window()
             assumed = True
             disclosure = (
-                "No timeframe was provided, so this hourly profile uses the latest completed published week: "
+                "No timeframe was provided, so this hourly profile uses the seven-day period ending yesterday: "
                 f"{start_date} through {end_date}."
             )
-            rows = list((weekly.get("route_delay_by_hour") or {}).get(route_id) or [])
+            rows = self.query_hourly_profile(route_id, start_date, end_date)
             source = {
-                "kind": "weekly_stats",
-                "uri": f"gs://{self.bucket_name}/stats/weekly/latest.json",
+                "kind": "bigquery",
+                "table": f"{self.project_id}.actransit.trip_observations",
                 "start_date": start_date,
                 "end_date": end_date,
-                "methodology_version": weekly.get("methodology_version"),
+                "deduplicated": True,
             }
         else:
             if start_date is None:
@@ -429,7 +420,7 @@ class TransitData:
                 "start_date": start_date,
                 "end_date": end_date,
                 "assumed": assumed,
-                "basis": "latest_completed_week" if assumed else "user_supplied_or_interpreted_dates",
+                "basis": "seven_day_period_ending_yesterday" if assumed else "user_supplied_or_interpreted_dates",
                 "disclosure": disclosure,
             },
             charts=[
@@ -505,9 +496,9 @@ class TransitData:
         if direction_id not in {None, 0, 1}:
             raise ValueError("direction_id must be 0 or 1")
         published_dates = sorted(self.published_dates())
-        latest = published_dates[-1]
+        _, yesterday = default_analysis_window()
         assumed_date = service_date is None
-        service_date = service_date or latest
+        service_date = service_date or yesterday
         date.fromisoformat(service_date)
         if service_date not in published_dates:
             raise ValueError("Scheduled-arrival analysis is available only for complete published service dates")
@@ -588,7 +579,7 @@ class TransitData:
 
         disclosure_parts = []
         if assumed_date:
-            disclosure_parts.append(f"the latest complete published service day ({service_date})")
+            disclosure_parts.append(f"yesterday's complete published service day ({service_date})")
         if assumed_time:
             disclosure_parts.append("the default 06:00–10:00 Pacific window")
         assumed = assumed_date or assumed_time
@@ -611,7 +602,7 @@ class TransitData:
                 "end_time": end_time,
                 "timezone": "America/Los_Angeles",
                 "assumed": assumed,
-                "basis": "latest_day_and_morning_window" if assumed else "user_supplied_or_interpreted_timeframe",
+                "basis": "yesterday_and_morning_window" if assumed else "user_supplied_or_interpreted_timeframe",
                 "disclosure": disclosure,
             },
             charts=[

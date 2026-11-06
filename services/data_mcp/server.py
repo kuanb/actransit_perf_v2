@@ -12,7 +12,10 @@ from gcp_data import PROFILE_METRICS, TransitData
 
 mcp = FastMCP(
     "AC Transit performance data",
-    instructions="Read-only, bounded tools for published AC Transit performance reports and observations.",
+    instructions=(
+        "Read-only, bounded tools for published AC Transit performance reports and observations. "
+        "When dates are omitted, tools use the seven-day period ending yesterday in America/Los_Angeles."
+    ),
 )
 data = TransitData()
 
@@ -34,7 +37,7 @@ def compare_routes(
     start_date: str | None = None,
     end_date: str | None = None,
 ) -> dict:
-    """Compare two to five routes using one approved metric and at most 31 calendar days."""
+    """Compare two to five routes using one approved metric and at most 31 calendar days. Dates default to seven days ending yesterday."""
     return data.compare_routes(route_ids, metric, start_date, end_date)
 
 
@@ -44,7 +47,7 @@ def get_route_performance(
     start_date: str | None = None,
     end_date: str | None = None,
 ) -> dict:
-    """Summarize one route across rider-window, trip-delivery, delay, speed, bunching, and gap metrics."""
+    """Summarize one route across rider-window, trip-delivery, delay, speed, bunching, and gap metrics. Dates default to seven days ending yesterday."""
     return data.get_route_performance(route_id, start_date, end_date)
 
 
@@ -53,7 +56,7 @@ def get_system_performance(
     start_date: str | None = None,
     end_date: str | None = None,
 ) -> dict:
-    """Summarize systemwide service delivery, delay, speed, bunching, and gap metrics."""
+    """Summarize systemwide service delivery, delay, speed, bunching, and gap metrics. Dates default to seven days ending yesterday."""
     return data.get_system_performance(start_date, end_date)
 
 
@@ -75,7 +78,7 @@ def rank_routes(
     order: Literal["worst", "best"] = "worst",
     limit: int = 10,
 ) -> dict:
-    """Rank at most ten routes using an approved metric."""
+    """Rank at most ten routes using an approved metric. Dates default to seven days ending yesterday."""
     return data.rank_routes(metric, start_date, end_date, order, limit)
 
 
@@ -86,7 +89,7 @@ def get_route_time_profile(
     start_date: str | None = None,
     end_date: str | None = None,
 ) -> dict:
-    """Return a route's bounded hourly delay or observed-arrival profile."""
+    """Return a route's bounded hourly delay or observed-arrival profile. Dates default to seven days ending yesterday."""
     return data.get_route_time_profile(route_id, metric, start_date, end_date)
 
 
@@ -101,7 +104,7 @@ def list_scheduled_arrivals(
     trip_id: str | None = None,
     vehicle_id: str | None = None,
 ) -> dict:
-    """List at most 250 scheduled stop arrivals in a window of at most four hours and mark observed or missing arrivals."""
+    """List at most 250 scheduled stop arrivals in a window of at most four hours and mark observed or missing arrivals. The date defaults to yesterday."""
     return data.list_scheduled_arrivals(
         route_id,
         service_date,

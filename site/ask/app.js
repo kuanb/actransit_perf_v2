@@ -16,6 +16,8 @@ let status = null;
 let nextAllowedAt = null;
 let submitting = false;
 let statusTimer = null;
+let parentRequestID = null;
+let followUpsRemaining = null;
 
 const sessionID = getSessionID();
 configureScope();
@@ -115,7 +117,8 @@ function renderStatus() {
   }
   const shared = status.global_questions_remaining_today;
   const sharedCopy = Number.isInteger(shared) ? ` ${shared} questions remain in today's shared budget.` : "";
-  limitCopy.textContent = `To control misuse and model/database costs, each visitor can submit one question every ${cooldown} seconds. This browser has ${status.max_session_daily ?? 10} questions available per day.${sharedCopy}`;
+  const followUps = status.max_follow_ups ?? config.max_follow_ups ?? 3;
+  limitCopy.textContent = `To control misuse and model/database costs, each visitor can submit one question every ${cooldown} seconds. Each answer supports up to ${followUps} follow-ups, and every turn counts toward this browser's ${status.max_session_daily ?? 10} questions per day.${sharedCopy}`;
 }
 
 function updateFormState() {
@@ -124,10 +127,13 @@ function updateFormState() {
   const remaining = secondsUntil(nextAllowedAt);
   const full = status && status.active_queries >= status.max_active_queries;
   const dailyExhausted = status?.global_questions_remaining_today === 0;
-  const ready = config?.enabled && status?.enabled && status?.accepting && !full && remaining <= 0 && !submitting;
+  const threadExhausted = Boolean(parentRequestID) && followUpsRemaining <= 0;
+  const ready = config?.enabled && status?.enabled && status?.accepting && !full && remaining <= 0 && !submitting && !threadExhausted;
   askButton.disabled = !ready || question.value.trim().length < 3;
   if (submitting) {
     askButton.textContent = "Analyzing…";
+  } else if (threadExhausted) {
+    askButton.textContent = "Follow-up limit reached";
   } else if (remaining > 0) {
     askButton.textContent = `Ask again in ${remaining}s`;
   } else if (full) {
@@ -137,8 +143,9 @@ function updateFormState() {
   } else if (status && !status.enabled) {
     askButton.textContent = "Analysis unavailable";
   } else {
-    askButton.textContent = "Ask";
+    askButton.textContent = parentRequestID ? "Ask follow-up" : "Ask";
   }
+  renderThreadState();
 }
 
 async function submitQuestion(event) {
@@ -148,14 +155,16 @@ async function submitQuestion(event) {
   submitting = true;
   updateFormState();
   const requestID = crypto.randomUUID();
+  const prompt = question.value.trim();
   try {
     const response = await fetch(`${config.api_url}/v1/query`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        prompt: question.value.trim(),
+        prompt,
         session_id: sessionID,
         request_id: requestID,
+        parent_request_id: parentRequestID,
         scope: { route_id: routeID || null, week_end: weekEnd || null },
       }),
     });
@@ -163,6 +172,11 @@ async function submitQuestion(event) {
     if (!response.ok) {
       if (payload.retry_after_seconds) {
         nextAllowedAt = new Date(Date.now() + payload.retry_after_seconds * 1000);
+      }
+      if (payload.code === "follow_up_limit") followUpsRemaining = 0;
+      if (payload.code === "thread_unavailable") {
+        parentRequestID = null;
+        followUpsRemaining = null;
       }
       throw new Error(payload.message || "The analysis request failed.");
     }
@@ -174,6 +188,9 @@ async function submitQuestion(event) {
       cooldown_seconds: payload.cooldown_seconds,
       enabled: true,
     };
+    parentRequestID = payload.request_id;
+    followUpsRemaining = payload.follow_ups_remaining ?? 0;
+    question.value = "";
     renderResponse(payload);
     renderStatus();
     responseSection.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -199,12 +216,12 @@ function renderResponse(payload) {
 function renderTimeframes(timeframes) {
   const wrap = document.getElementById("timeframes");
   wrap.replaceChildren();
-  timeframes.forEach(timeframe => {
-    const note = document.createElement("div");
-    note.className = `timeframe-note ${timeframe.assumed ? "" : "explicit"}`;
-    note.textContent = timeframe.disclosure || timeframeLabel(timeframe);
-    wrap.appendChild(note);
-  });
+  const timeframe = timeframes[0];
+  if (!timeframe) return;
+  const note = document.createElement("div");
+  note.className = `timeframe-note ${timeframe.assumed ? "" : "explicit"}`;
+  note.textContent = timeframe.disclosure || timeframeLabel(timeframe);
+  wrap.appendChild(note);
 }
 
 function renderAnswer(text) {
@@ -326,7 +343,28 @@ function renderSources(items) {
 function clearResponse() {
   responseSection.hidden = true;
   charts.splice(0).forEach(chart => chart.destroy());
+  parentRequestID = null;
+  followUpsRemaining = null;
+  question.value = "";
+  updateFormState();
   question.focus();
+}
+
+function renderThreadState() {
+  const state = document.getElementById("thread-state");
+  const label = document.getElementById("question-label");
+  const max = config?.max_follow_ups ?? status?.max_follow_ups ?? 3;
+  if (!parentRequestID) {
+    label.textContent = "Question";
+    question.placeholder = "For example: Compare On Time Service Delivered for routes 51A and 72.";
+    state.textContent = `Each answer can be followed by up to ${max} clarifying questions.`;
+    return;
+  }
+  label.textContent = "Follow-up question";
+  question.placeholder = "Ask a clarifying question about the answer above.";
+  state.textContent = followUpsRemaining > 0
+    ? `${followUpsRemaining} follow-up${followUpsRemaining === 1 ? "" : "s"} remaining in this thread. Choose New question to reset the context.`
+    : "Follow-up limit reached. Choose New question to start with fresh context.";
 }
 
 function sourceLabel(source) {

@@ -82,6 +82,17 @@ variable "analysis_max_prompt_chars" {
   default     = 500
 }
 
+variable "analysis_max_follow_ups" {
+  type        = number
+  description = "Maximum clarifying follow-ups after an initial public analysis answer"
+  default     = 3
+
+  validation {
+    condition     = var.analysis_max_follow_ups >= 0 && var.analysis_max_follow_ups <= 3
+    error_message = "analysis_max_follow_ups must be between 0 and 3."
+  }
+}
+
 variable "analysis_bq_maximum_bytes_billed" {
   type        = number
   description = "BigQuery maximum bytes billed for each MCP query"

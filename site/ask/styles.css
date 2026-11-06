@@ -123,6 +123,12 @@ body {
   font-size: 11px;
 }
 
+.thread-state {
+  margin: -4px 1px 12px;
+  color: #536b78;
+  font-size: 12px;
+}
+
 #ask-button {
   min-width: 138px;
   padding: 10px 18px;

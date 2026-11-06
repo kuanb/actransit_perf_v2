@@ -187,9 +187,12 @@ tool-result size. These are planning estimates, not a billing guarantee.
 
 The public defaults are one question every 20 seconds per browser, at most two
 active questions, 10 accepted questions per browser/day, 60 accepted questions
-globally/day, four tool calls/question, 500 prompt characters, and 100 MiB
-maximum BigQuery bytes billed per query. All are Terraform variables except the
-tool-call and response-size caps, which are service environment settings.
+globally/day, three clarifying follow-ups after an initial answer, four tool
+calls/question, 500 prompt characters, and 100 MiB maximum BigQuery bytes billed
+per query. Follow-ups retain only the bounded prior question, narrative answer,
+and timeframe for one hour; every turn consumes the normal cooldown and daily
+allowances. All are Terraform variables except the tool-call and response-size
+caps, which are service environment settings.
 The Terraform default leaves the public kill switch off for the first deploy;
 enable it only after the private MCP and route-scoped browser flow pass smoke
 checks.

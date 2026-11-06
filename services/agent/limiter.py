@@ -63,8 +63,17 @@ class FirestoreRateLimiter:
     async def get_cached(self, session_id: str, request_id: str) -> dict[str, Any] | None:
         return await asyncio.to_thread(self._get_cached, session_id, request_id)
 
-    async def store_result(self, session_id: str, request_id: str, result: dict[str, Any]) -> None:
-        await asyncio.to_thread(self._store_result, session_id, request_id, result)
+    async def get_context(self, session_id: str, request_id: str) -> list[dict[str, Any]] | None:
+        return await asyncio.to_thread(self._get_context, session_id, request_id)
+
+    async def store_result(
+        self,
+        session_id: str,
+        request_id: str,
+        result: dict[str, Any],
+        context: list[dict[str, Any]],
+    ) -> None:
+        await asyncio.to_thread(self._store_result, session_id, request_id, result, context)
 
     def _status(self) -> dict[str, Any]:
         with self._status_lock:
@@ -243,16 +252,38 @@ class FirestoreRateLimiter:
         self._invalidate_status()
 
     def _get_cached(self, session_id: str, request_id: str) -> dict[str, Any] | None:
+        data = self._result_record(session_id, request_id)
+        return data.get("response") if data else None
+
+    def _get_context(self, session_id: str, request_id: str) -> list[dict[str, Any]] | None:
+        data = self._result_record(session_id, request_id)
+        context = data.get("context") if data else None
+        return context if isinstance(context, list) else None
+
+    def _result_record(self, session_id: str, request_id: str) -> dict[str, Any] | None:
         ref = self.client.collection("analysis_results").document(digest(f"{session_id}:{request_id}"))
         data = ref.get().to_dict() or {}
         if not data or as_datetime(data.get("expires_at")) <= datetime.now(timezone.utc):
             return None
-        return data.get("response")
+        return data
 
-    def _store_result(self, session_id: str, request_id: str, result: dict[str, Any]) -> None:
+    def _store_result(
+        self,
+        session_id: str,
+        request_id: str,
+        result: dict[str, Any],
+        context: list[dict[str, Any]],
+    ) -> None:
         now = datetime.now(timezone.utc)
         ref = self.client.collection("analysis_results").document(digest(f"{session_id}:{request_id}"))
-        ref.set({"response": result, "created_at": now, "expires_at": now + timedelta(hours=1)})
+        ref.set(
+            {
+                "response": result,
+                "context": context,
+                "created_at": now,
+                "expires_at": now + timedelta(hours=1),
+            }
+        )
 
     def _invalidate_status(self) -> None:
         with self._status_lock:

@@ -268,25 +268,31 @@ does not provide a complete timeframe:
 
 | Question shape | Default |
 |---|---|
-| route comparison or route summary | latest 28 published service days |
-| systemwide ranking | latest complete published service day |
-| hourly route profile | latest completed published week |
-| scheduled-arrival list | 06:00–10:00 Pacific on the latest complete published service day |
+| route comparison, route summary, ranking, or system summary | seven calendar days ending yesterday in Pacific time |
+| hourly route profile | seven calendar days ending yesterday in Pacific time |
+| scheduled-arrival list | 06:00–10:00 Pacific yesterday |
 | question opened from a route page | the Sunday–Saturday week displayed on that page; arrival lists use its ending service date |
 
 Each tool marks the timeframe as assumed or explicit and returns a human-readable
-disclosure. The page displays that disclosure independently from the generated
-answer, so an omitted timeframe cannot be silently hidden by model wording.
+disclosure. Tool results covering the same period collapse into one notice; an
+answer that genuinely combines different periods receives one consolidated
+notice. The page replaces the prior answer and notice on every turn, so an
+omitted timeframe cannot be silently hidden by model wording or accumulate stale
+alerts.
 
 ### Abuse and cost controls
 
 Firestore transactions provide a persistent global active-request lease,
 per-browser cooldown and daily allowance, a shared daily allowance, and
 idempotent one-hour response caching with TTL cleanup. The browser shows active
-slots, shared questions remaining, and seconds until the next question. Terraform also
-provides a public kill switch. Prompt length, model tool calls, response bytes,
-chart/table size, date ranges, route counts, arrival windows, BigQuery bytes,
-Cloud Run instances, and database permissions are all independently bounded.
+slots, shared questions remaining, and seconds until the next question. An
+initial answer can have at most three follow-ups; the one-hour result cache keeps
+only the bounded prior questions, narrative answers, and timeframe needed to
+resolve references such as "that route" or "the same period." Each follow-up is
+rate limited and must re-query the read-only tools for factual claims. Terraform
+also provides a public kill switch. Prompt length, model tool calls, response
+bytes, chart/table size, date ranges, route counts, arrival windows, BigQuery
+bytes, Cloud Run instances, and database permissions are all independently bounded.
 Status reads are cached for five seconds, and an instance rejects known
 cooldown or exhausted-budget traffic before another Firestore transaction.
 

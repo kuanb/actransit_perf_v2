@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 from limiter import FirestoreRateLimiter, LimitConfig, RateLimitError
 from orchestrator import AnalysisAgent, MCPGateway
+from policy import extend_conversation, follow_ups_remaining
 
 
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
@@ -34,6 +35,7 @@ class Settings:
     max_prompt_chars: int
     max_response_bytes: int
     max_tool_calls: int
+    max_follow_ups: int
     limits: LimitConfig
 
     @classmethod
@@ -58,6 +60,7 @@ class Settings:
             max_prompt_chars=int(os.environ.get("MAX_PROMPT_CHARS", "500")),
             max_response_bytes=int(os.environ.get("MAX_RESPONSE_BYTES", str(256 * 1024))),
             max_tool_calls=int(os.environ.get("MAX_TOOL_CALLS", "4")),
+            max_follow_ups=int(os.environ.get("MAX_FOLLOW_UPS", "3")),
             limits=LimitConfig(
                 cooldown_seconds=int(os.environ.get("COOLDOWN_SECONDS", "20")),
                 max_active_queries=int(os.environ.get("MAX_ACTIVE_QUERIES", "2")),
@@ -77,6 +80,12 @@ class QueryBody(BaseModel):
     prompt: str = Field(min_length=3)
     session_id: str = Field(min_length=16, max_length=80, pattern=r"^[A-Za-z0-9-]+$")
     request_id: str = Field(min_length=16, max_length=80, pattern=r"^[A-Za-z0-9-]+$")
+    parent_request_id: str | None = Field(
+        default=None,
+        min_length=16,
+        max_length=80,
+        pattern=r"^[A-Za-z0-9-]+$",
+    )
     scope: Scope = Field(default_factory=Scope)
 
 
@@ -121,6 +130,7 @@ async def status() -> dict[str, Any]:
         "enabled": settings.enabled,
         "max_prompt_chars": settings.max_prompt_chars,
         "max_session_daily": settings.limits.max_session_daily,
+        "max_follow_ups": settings.max_follow_ups,
     }
 
 
@@ -153,6 +163,35 @@ async def query(body: QueryBody) -> JSONResponse:
     if cached:
         return JSONResponse(cached)
 
+    conversation: list[dict[str, Any]] = []
+    if body.parent_request_id:
+        if body.parent_request_id == body.request_id:
+            return JSONResponse(
+                {"code": "invalid_parent", "message": "A follow-up must reference the preceding answer."},
+                status_code=422,
+            )
+        stored_context = await limiter.get_context(body.session_id, body.parent_request_id)
+        if stored_context is None:
+            return JSONResponse(
+                {
+                    "code": "thread_unavailable",
+                    "message": "This answer is no longer available for follow-up. Start a new question.",
+                },
+                status_code=409,
+            )
+        if len(stored_context) > settings.max_follow_ups:
+            return JSONResponse(
+                {
+                    "code": "follow_up_limit",
+                    "message": (
+                        f"This answer has reached its {settings.max_follow_ups}-follow-up limit. "
+                        "Start a new question."
+                    ),
+                },
+                status_code=409,
+            )
+        conversation = stored_context
+
     try:
         reservation = await limiter.reserve(body.session_id, body.request_id)
     except RateLimitError as exc:
@@ -170,7 +209,18 @@ async def query(body: QueryBody) -> JSONResponse:
         return response
 
     try:
-        result = await agent.analyze(prompt, route_id, body.scope.week_end if route_id else None)
+        result = await agent.analyze(
+            prompt,
+            route_id,
+            body.scope.week_end if route_id else None,
+            conversation,
+        )
+        updated_conversation = extend_conversation(
+            conversation,
+            prompt,
+            result,
+            settings.max_follow_ups,
+        )
         response_body = {
             **result,
             "request_id": body.request_id,
@@ -178,10 +228,19 @@ async def query(body: QueryBody) -> JSONResponse:
             "active_queries": reservation.active_queries,
             "max_active_queries": settings.limits.max_active_queries,
             "cooldown_seconds": settings.limits.cooldown_seconds,
+            "follow_ups_remaining": follow_ups_remaining(
+                updated_conversation,
+                settings.max_follow_ups,
+            ),
         }
         if len(json.dumps(response_body, default=str).encode()) > settings.max_response_bytes:
             raise ValueError("The structured response exceeded the public response-size limit")
-        await limiter.store_result(body.session_id, body.request_id, response_body)
+        await limiter.store_result(
+            body.session_id,
+            body.request_id,
+            response_body,
+            updated_conversation,
+        )
         return JSONResponse(response_body)
     except Exception as exc:
         logger.exception("analysis request failed", extra={"request_id": body.request_id})

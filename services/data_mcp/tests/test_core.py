@@ -1,26 +1,33 @@
 import sys
 import unittest
+from datetime import date
 from pathlib import Path
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from core import aggregate_metric, resolve_daily_dates, system_metric_row
+from core import aggregate_metric, default_analysis_window, resolve_daily_dates, system_metric_row
 
 
 class ResolveDatesTest(unittest.TestCase):
-    def test_defaults_to_latest_published_service_days_and_discloses_assumption(self):
+    def test_defaults_to_seven_days_ending_yesterday_and_discloses_assumption(self):
         dates = [f"2026-10-{day:02d}" for day in range(1, 11)]
-        resolved = resolve_daily_dates(dates, None, None, 3, "the latest three published service days")
+        resolved = resolve_daily_dates(dates, None, None, date(2026, 10, 11))
 
-        self.assertEqual(["2026-10-08", "2026-10-09", "2026-10-10"], resolved.dates)
+        self.assertEqual([f"2026-10-{day:02d}" for day in range(4, 11)], resolved.dates)
+        self.assertEqual("2026-10-04", resolved.timeframe["start_date"])
+        self.assertEqual("2026-10-10", resolved.timeframe["end_date"])
         self.assertTrue(resolved.timeframe["assumed"])
-        self.assertIn("No timeframe was provided", resolved.timeframe["disclosure"])
+        self.assertIn("seven-day period ending yesterday", resolved.timeframe["disclosure"])
+
+    def test_default_window_is_seven_calendar_days(self):
+        self.assertEqual(
+            ("2026-10-29", "2026-11-04"),
+            default_analysis_window(date(2026, 11, 5)),
+        )
 
     def test_explicit_range_uses_only_published_dates(self):
-        resolved = resolve_daily_dates(
-            ["2026-10-01", "2026-10-03"], "2026-10-01", "2026-10-03", 1, "latest"
-        )
+        resolved = resolve_daily_dates(["2026-10-01", "2026-10-03"], "2026-10-01", "2026-10-03")
 
         self.assertFalse(resolved.timeframe["assumed"])
         self.assertEqual(1, len(resolved.warnings))

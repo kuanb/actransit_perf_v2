@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
+
+
+PACIFIC = ZoneInfo("America/Los_Angeles")
 
 
 METRICS = {
@@ -88,8 +92,7 @@ def resolve_daily_dates(
     published_dates: list[str],
     start_date: str | None,
     end_date: str | None,
-    default_service_days: int,
-    default_label: str,
+    today: date | None = None,
 ) -> ResolvedDates:
     if not published_dates:
         raise ValueError("No published daily reports are available")
@@ -99,12 +102,21 @@ def resolve_daily_dates(
     warnings: list[str] = []
 
     if assumed:
-        chosen = ordered[-default_service_days:]
+        window_start, window_end = default_analysis_window(today)
+        chosen = [value for value in ordered if window_start <= value <= window_end]
+        if not chosen:
+            raise ValueError("No published reports exist in the default seven-day period")
+        if len(chosen) < 7:
+            warnings.append(
+                "The default seven-day period includes dates without a published report; only published service dates were analyzed."
+            )
         disclosure = (
-            f"No timeframe was provided, so this analysis uses {default_label}: "
-            f"{chosen[0]} through {chosen[-1]}."
+            "No timeframe was provided, so this analysis uses the seven-day period ending yesterday: "
+            f"{window_start} through {window_end}."
         )
-        basis = default_label.replace(" ", "_")
+        basis = "seven_day_period_ending_yesterday"
+        timeframe_start = window_start
+        timeframe_end = window_end
     else:
         if start_date is None:
             start_date = end_date
@@ -126,12 +138,14 @@ def resolve_daily_dates(
             )
         disclosure = f"Analyzed published service dates from {chosen[0]} through {chosen[-1]}."
         basis = "user_supplied_or_interpreted_dates"
+        timeframe_start = chosen[0]
+        timeframe_end = chosen[-1]
 
     return ResolvedDates(
         dates=chosen,
         timeframe={
-            "start_date": chosen[0],
-            "end_date": chosen[-1],
+            "start_date": timeframe_start,
+            "end_date": timeframe_end,
             "assumed": assumed,
             "basis": basis,
             "disclosure": disclosure,
@@ -140,11 +154,11 @@ def resolve_daily_dates(
     )
 
 
-def previous_sunday_through_saturday(latest_date: str) -> tuple[str, str]:
-    latest = date.fromisoformat(latest_date)
-    saturday = latest - timedelta(days=(latest.weekday() - 5) % 7)
-    sunday = saturday - timedelta(days=6)
-    return sunday.isoformat(), saturday.isoformat()
+def default_analysis_window(today: date | None = None) -> tuple[str, str]:
+    current = today or datetime.now(PACIFIC).date()
+    end = current - timedelta(days=1)
+    start = end - timedelta(days=6)
+    return start.isoformat(), end.isoformat()
 
 
 def daily_metric_value(route: dict[str, Any], metric: str) -> float | None:
