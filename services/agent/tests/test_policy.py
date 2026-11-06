@@ -1,3 +1,4 @@
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -7,6 +8,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from policy import (
     apply_context_timeframe,
+    enforce_route_group,
+    eval_prompt_features,
     extend_conversation,
     follow_ups_remaining,
     merge_tool_results,
@@ -35,6 +38,38 @@ class ScopePolicyTest(unittest.TestCase):
         result = apply_context_timeframe({"timeframe": {}}, timeframe)
         self.assertTrue(result["timeframe"]["assumed"])
         self.assertIn("week shown by the route page", result["timeframe"]["disclosure"])
+
+    def test_open_ranking_defaults_to_regular_service(self):
+        arguments, _ = prepare_tool_call(
+            "rank_routes", {"metric": "median_delay"}, None, None
+        )
+
+        self.assertEqual("regular", arguments["route_group"])
+
+    def test_eval_features_tag_category_sensitive_prompt_without_storing_it(self):
+        features = eval_prompt_features(
+            "Tell me about the worst hours of 1T performance this week? Any other popular routes that were worse?"
+        )
+
+        self.assertEqual(["ranking", "hourly", "popularity_language"], features)
+
+    def test_popular_route_ranking_cannot_drift_into_special_service(self):
+        arguments = enforce_route_group(
+            "rank_routes",
+            {"metric": "median_delay", "route_group": "all_nighter"},
+            "Were any other popular routes worse?",
+        )
+
+        self.assertEqual("regular", arguments["route_group"])
+
+    def test_explicit_school_request_selects_school_group(self):
+        arguments = enforce_route_group(
+            "rank_routes",
+            {"metric": "median_delay", "route_group": "regular"},
+            "Which 600-series school routes were worst?",
+        )
+
+        self.assertEqual("school", arguments["route_group"])
 
 
 class MergeResultsTest(unittest.TestCase):
@@ -95,6 +130,22 @@ class ConversationTest(unittest.TestCase):
         self.assertEqual(0, follow_ups_remaining(context, 3))
         with self.assertRaises(ValueError):
             extend_conversation(context, "One too many", {"answer": "No"}, 3)
+
+
+class EvalCaseTest(unittest.TestCase):
+    def test_route_category_eval_cases_have_unique_ids_and_expected_groups(self):
+        path = Path(__file__).resolve().parents[1] / "evals" / "route_category_cases.json"
+        cases = json.loads(path.read_text())
+
+        self.assertEqual(len(cases), len({case["id"] for case in cases}))
+        self.assertEqual(
+            {"regular", "school", "all_nighter"},
+            {
+                group
+                for case in cases
+                for group in case.get("required_route_groups", [])
+            },
+        )
 
 
 if __name__ == "__main__":

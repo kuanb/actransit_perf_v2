@@ -6,7 +6,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from core import aggregate_metric, default_analysis_window, resolve_daily_dates, system_metric_row
+from core import (
+    aggregate_metric,
+    comparable_route_group,
+    default_analysis_window,
+    resolve_daily_dates,
+    route_group_for_id,
+    route_ids_for_group,
+    system_metric_row,
+)
 
 
 class ResolveDatesTest(unittest.TestCase):
@@ -71,6 +79,32 @@ class AggregateMetricTest(unittest.TestCase):
         self.assertEqual(12, row["observations"])
         self.assertEqual(8, row["stop_sd_delivered_n"])
         self.assertEqual(9, row["ran_trips"])
+
+
+class RouteGroupTest(unittest.TestCase):
+    def test_official_special_series_are_separate_from_regular_routes(self):
+        expected = {
+            "1T": "regular",
+            "51A": "regular",
+            "200": "regular",
+            "633": "school",
+            "802": "all_nighter",
+            "NL": "transbay",
+        }
+
+        self.assertEqual(expected, {route: route_group_for_id(route) for route in expected})
+
+    def test_cross_group_comparisons_are_rejected(self):
+        self.assertEqual("regular", comparable_route_group(["1T", "51A"]))
+        with self.assertRaises(ValueError):
+            comparable_route_group(["1T", "802"])
+
+    def test_default_peer_group_filter_excludes_special_service(self):
+        route_ids = ["1T", "51A", "633", "802", "NL", "51A"]
+
+        self.assertEqual(["1T", "51A"], route_ids_for_group(route_ids, "regular"))
+        self.assertEqual(["633"], route_ids_for_group(route_ids, "school"))
+        self.assertEqual(["802"], route_ids_for_group(route_ids, "all_nighter"))
 
 
 if __name__ == "__main__":

@@ -2,11 +2,46 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+import re
 from typing import Any
 from zoneinfo import ZoneInfo
 
 
 PACIFIC = ZoneInfo("America/Los_Angeles")
+
+
+ROUTE_GROUPS = {
+    "regular": {
+        "label": "Local / Rapid / Tempo",
+        "definition": (
+            "Regular East Bay peer group used for performance rankings. It excludes 600-series "
+            "Supplementary School Service, 800-series All Nighter service, and lettered Transbay routes."
+        ),
+        "source_url": "https://www.actransit.org/maps-schedules",
+    },
+    "school": {
+        "label": "600-series Supplementary School Service",
+        "definition": (
+            "AC Transit's 600-series service to schools operates around student demand and the academic calendar."
+        ),
+        "source_url": (
+            "https://www.actransit.org/press-release/"
+            "ac-transit-rolls-out-back-to-school-service-starting-august-9"
+        ),
+    },
+    "all_nighter": {
+        "label": "800-series All Nighter",
+        "definition": (
+            "AC Transit's 800-series routes are part of its late-night and early-morning All Nighter network."
+        ),
+        "source_url": "https://www.actransit.org/index.php/all-nighter",
+    },
+    "transbay": {
+        "label": "Transbay",
+        "definition": "Lettered Transbay routes are compared separately from East Bay regular service.",
+        "source_url": "https://www.actransit.org/maps-schedules",
+    },
+}
 
 
 METRICS = {
@@ -86,6 +121,47 @@ class ResolvedDates:
     dates: list[str]
     timeframe: dict[str, Any]
     warnings: list[str]
+
+
+def route_group_for_id(route_id: str) -> str:
+    normalized = route_id.strip().upper()
+    if re.fullmatch(r"6\d{2}", normalized):
+        return "school"
+    if re.fullmatch(r"8\d{2}", normalized):
+        return "all_nighter"
+    if normalized[:1].isalpha():
+        return "transbay"
+    return "regular"
+
+
+def comparable_route_group(route_ids: list[str]) -> str:
+    groups = {route_group_for_id(route_id) for route_id in route_ids}
+    if len(groups) != 1:
+        labels = ", ".join(sorted(ROUTE_GROUPS[group]["label"] for group in groups))
+        raise ValueError(
+            f"Routes from different service groups cannot be compared directly ({labels}). "
+            "Analyze each service group separately."
+        )
+    return groups.pop()
+
+
+def route_ids_for_group(route_ids: list[str], route_group: str) -> list[str]:
+    if route_group not in ROUTE_GROUPS:
+        raise ValueError(f"route_group must be one of: {', '.join(ROUTE_GROUPS)}")
+    return sorted(
+        {route_id for route_id in route_ids if route_group_for_id(route_id) == route_group}
+    )
+
+
+def route_group_source(route_group: str) -> dict[str, Any]:
+    definition = ROUTE_GROUPS[route_group]
+    return {
+        "kind": "route_classification",
+        "route_group": route_group,
+        "label": definition["label"],
+        "definition": definition["definition"],
+        "url": definition["source_url"],
+    }
 
 
 def resolve_daily_dates(

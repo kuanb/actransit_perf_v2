@@ -19,7 +19,7 @@ AGENCY_KPI_VERSION := $(shell sed -nE 's/^[[:space:]]*agencyKPIMethodologyVersio
 PARALLEL ?= 2
 BUNCHING_VERIFY_PARALLEL ?= 16
 
-.PHONY: tf-init tf-plan tf-apply tf-fmt build deploy release logs analysis-logs invoke run-local test test-analysis smoke hooks-install backfill backfill-school-stats-history backfill-bunching backfill-bunching-history verify-bunching-history backfill-agency-kpis backfill-agency-kpis-history verify-agency-kpi-history
+.PHONY: tf-init tf-plan tf-apply tf-fmt build deploy release logs analysis-logs analysis-eval-logs eval-analysis-route-groups invoke run-local test test-analysis smoke hooks-install backfill backfill-school-stats-history backfill-bunching backfill-bunching-history verify-bunching-history backfill-agency-kpis backfill-agency-kpis-history verify-agency-kpi-history
 
 tf-init:
 	cd infra && terraform init
@@ -90,6 +90,14 @@ logs:
 analysis-logs:
 	gcloud logging read 'resource.labels.service_name="actransit-analysis-agent" OR resource.labels.service_name="actransit-analysis-mcp"' --limit 50 --freshness=15m \
 		--format='value(timestamp,severity,resource.labels.service_name,textPayload,jsonPayload.message)'
+
+analysis-eval-logs:
+	gcloud logging read 'resource.labels.service_name="actransit-analysis-agent" AND jsonPayload.event="analysis_eval_trace"' --limit 50 --freshness=7d \
+		--format=json
+
+eval-analysis-route-groups:
+	@test -n "$(ANALYSIS_API_URL)" || (echo "usage: make eval-analysis-route-groups ANALYSIS_API_URL=https://..." && exit 1)
+	python3 services/agent/evals/run_route_category_evals.py --api-url "$(ANALYSIS_API_URL)"
 
 invoke:
 	curl -H "Authorization: Bearer $$(gcloud auth print-identity-token)" \

@@ -256,6 +256,14 @@ The initial tool set covers:
   joined to deduplicated observations and capped at 250 rows;
 - public metric definitions.
 
+Route ranking and comparison are service-group aware. The default peer set is
+regular Local/Rapid/Tempo service. AC Transit's 600-series Supplementary School
+Service, 800-series All Nighter service, and lettered Transbay routes are
+separate peer sets. The MCP filters rankings and rejects cross-group route
+comparisons, so the boundary does not depend on the model remembering the
+distinction. Structured results carry the service group, explanatory note, and
+official classification source.
+
 All results use a common envelope: `answer_context`, `timeframe`, `charts`,
 `tables`, `sources`, and `warnings`. The model writes only the short narrative;
 the browser renders the structured fields directly and caps the result at three
@@ -316,6 +324,13 @@ the global cap.
    browser flows, then enable public queries.
 5. Review model token usage, BigQuery bytes, 429s, 5xx alerts, and user questions
    after one week before changing any limits or adding tools.
+
+Category-sensitive requests emit an `analysis_eval_trace` structured log with
+prompt feature tags and bounded tool arguments, but not raw visitor text. The
+manual route-category eval suite replays checked-in synthetic prompts against a
+deployed agent and checks that regular, school, and All Nighter results remain
+segmented. It consumes five questions and observes the normal cooldown, so it
+is deliberately excluded from CI.
 
 ## Cost projection
 

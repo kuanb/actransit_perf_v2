@@ -18,11 +18,15 @@ from google.cloud import bigquery, storage
 
 from core import (
     METRICS,
+    ROUTE_GROUPS,
     aggregate_metric,
+    comparable_route_group,
     daily_metric_value,
     default_analysis_window,
     format_metric,
     resolve_daily_dates,
+    route_ids_for_group,
+    route_group_source,
     system_metric_row,
 )
 
@@ -80,6 +84,7 @@ class TransitData:
         end_date: str | None = None,
     ) -> dict[str, Any]:
         route_ids = validate_route_ids(route_ids, minimum=2, maximum=5)
+        route_group = comparable_route_group(route_ids)
         validate_metric(metric)
         resolved = resolve_daily_dates(self.published_dates(), start_date, end_date)
         reports = self.daily_reports(resolved.dates)
@@ -90,7 +95,16 @@ class TransitData:
             daily_routes = [find_route(report, route_id) for report in reports]
             available = [route for route in daily_routes if route]
             value, days = aggregate_metric(available, metric)
-            rows.append({"route_id": route_id, "value": value, "formatted_value": format_metric(value, metric), "days": days})
+            rows.append(
+                {
+                    "route_id": route_id,
+                    "route_group": route_group,
+                    "route_group_label": ROUTE_GROUPS[route_group]["label"],
+                    "value": value,
+                    "formatted_value": format_metric(value, metric),
+                    "days": days,
+                }
+            )
             series.append(
                 {
                     "name": f"Route {route_id}",
@@ -103,7 +117,10 @@ class TransitData:
             warnings.append("Delay percentiles are summarized as the mean of each published daily percentile, not recomputed from raw observations.")
         answer_values = ", ".join(f"Route {row['route_id']}: {row['formatted_value']}" for row in rows)
         return tool_result(
-            answer_context=f"{METRICS[metric]['label']} comparison. {answer_values}.",
+            answer_context=(
+                f"{ROUTE_GROUPS[route_group]['label']} {METRICS[metric]['label']} comparison. "
+                f"{answer_values}."
+            ),
             timeframe=resolved.timeframe,
             charts=[
                 {
@@ -120,14 +137,15 @@ class TransitData:
                     "title": f"{METRICS[metric]['label']} comparison",
                     "columns": [
                         {"key": "route_id", "label": "Route"},
+                        {"key": "route_group_label", "label": "Service type"},
                         {"key": "formatted_value", "label": METRICS[metric]["label"]},
                         {"key": "days", "label": "Service days"},
                     ],
                     "rows": rows,
                 }
             ],
-            sources=[daily_source(resolved.dates)],
-            warnings=warnings,
+            sources=[daily_source(resolved.dates), route_group_source(route_group)],
+            warnings=warnings + [ROUTE_GROUPS[route_group]["definition"]],
         )
 
     def get_route_performance(
@@ -304,21 +322,39 @@ class TransitData:
         end_date: str | None = None,
         order: Literal["worst", "best"] = "worst",
         limit: int = 10,
+        route_group: Literal["regular", "school", "all_nighter", "transbay"] = "regular",
     ) -> dict[str, Any]:
         validate_metric(metric)
+        if route_group not in ROUTE_GROUPS:
+            raise ValueError(f"route_group must be one of: {', '.join(ROUTE_GROUPS)}")
         if limit < 1 or limit > 10:
             raise ValueError("limit must be between 1 and 10")
         if order not in {"worst", "best"}:
             raise ValueError("order must be worst or best")
         resolved = resolve_daily_dates(self.published_dates(), start_date, end_date)
         reports = self.daily_reports(resolved.dates)
-        route_ids = sorted({route["route_id"] for report in reports for route in report.get("routes") or []})
+        route_ids = route_ids_for_group(
+            [
+                str(route["route_id"])
+                for report in reports
+                for route in report.get("routes") or []
+            ],
+            route_group,
+        )
         ranked: list[dict[str, Any]] = []
         for route_id in route_ids:
             routes = [find_route(report, route_id) for report in reports]
             value, days = aggregate_metric([route for route in routes if route], metric)
             if value is not None:
-                ranked.append({"route_id": route_id, "value": value, "days": days})
+                ranked.append(
+                    {
+                        "route_id": route_id,
+                        "route_group": route_group,
+                        "route_group_label": ROUTE_GROUPS[route_group]["label"],
+                        "value": value,
+                        "days": days,
+                    }
+                )
 
         descending_for_worst = bool(METRICS[metric]["higher_is_worse"])
         reverse = descending_for_worst if order == "worst" else not descending_for_worst
@@ -330,7 +366,7 @@ class TransitData:
 
         return tool_result(
             answer_context=(
-                f"{order.title()} routes for {METRICS[metric]['label']}: "
+                f"{order.title()} {ROUTE_GROUPS[route_group]['label']} routes for {METRICS[metric]['label']}: "
                 + ", ".join(f"{row['route_id']} ({row['formatted_value']})" for row in ranked)
                 + "."
             ),
@@ -338,7 +374,10 @@ class TransitData:
             charts=[
                 {
                     "type": "bar",
-                    "title": f"{order.title()} routes: {METRICS[metric]['label']}",
+                    "title": (
+                        f"{order.title()} {ROUTE_GROUPS[route_group]['label']} routes: "
+                        f"{METRICS[metric]['label']}"
+                    ),
                     "x_label": "Route",
                     "labels": [row["route_id"] for row in ranked],
                     "y_label": METRICS[metric]["unit"].title(),
@@ -347,17 +386,18 @@ class TransitData:
             ],
             tables=[
                 {
-                    "title": f"{order.title()} routes",
+                    "title": f"{order.title()} {ROUTE_GROUPS[route_group]['label']} routes",
                     "columns": [
                         {"key": "rank", "label": "Rank"},
                         {"key": "route_id", "label": "Route"},
+                        {"key": "route_group_label", "label": "Service type"},
                         {"key": "formatted_value", "label": METRICS[metric]["label"]},
                     ],
                     "rows": ranked,
                 }
             ],
-            sources=[daily_source(resolved.dates)],
-            warnings=resolved.warnings,
+            sources=[daily_source(resolved.dates), route_group_source(route_group)],
+            warnings=resolved.warnings + [ROUTE_GROUPS[route_group]["definition"]],
         )
 
     def get_route_time_profile(

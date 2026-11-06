@@ -14,7 +14,9 @@ mcp = FastMCP(
     "AC Transit performance data",
     instructions=(
         "Read-only, bounded tools for published AC Transit performance reports and observations. "
-        "When dates are omitted, tools use the seven-day period ending yesterday in America/Los_Angeles."
+        "When dates are omitted, tools use the seven-day period ending yesterday in America/Los_Angeles. "
+        "Route comparisons are service-group aware: regular Local/Rapid/Tempo, 600-series Supplementary "
+        "School Service, 800-series All Nighter, and lettered Transbay routes must be analyzed separately."
     ),
 )
 data = TransitData()
@@ -37,7 +39,7 @@ def compare_routes(
     start_date: str | None = None,
     end_date: str | None = None,
 ) -> dict:
-    """Compare two to five routes using one approved metric and at most 31 calendar days. Dates default to seven days ending yesterday."""
+    """Compare two to five routes from the same service group using one approved metric and at most 31 calendar days. Mixed regular, 600-series school, 800-series All Nighter, and Transbay comparisons are rejected. Dates default to seven days ending yesterday."""
     return data.compare_routes(route_ids, metric, start_date, end_date)
 
 
@@ -77,9 +79,10 @@ def rank_routes(
     end_date: str | None = None,
     order: Literal["worst", "best"] = "worst",
     limit: int = 10,
+    route_group: Literal["regular", "school", "all_nighter", "transbay"] = "regular",
 ) -> dict:
-    """Rank at most ten routes using an approved metric. Dates default to seven days ending yesterday."""
-    return data.rank_routes(metric, start_date, end_date, order, limit)
+    """Rank at most ten routes within one service group using an approved metric. Defaults to regular Local/Rapid/Tempo routes; 600-series school, 800-series All Nighter, and Transbay routes require their own separate ranking. Dates default to seven days ending yesterday."""
+    return data.rank_routes(metric, start_date, end_date, order, limit, route_group)
 
 
 @mcp.tool

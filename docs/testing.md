@@ -46,9 +46,27 @@ What's covered:
   unknown route → preserved (we can't tell which stop is last); nil
   cache → no-op.
 - **`services/data_mcp/tests/test_core.py`** — deterministic timeframe defaults,
-  disclosure of inferred dates, and count-weighted metric aggregation.
+  disclosure of inferred dates, count-weighted metric aggregation, route-group
+  classification, and rejection of cross-group comparisons.
 - **`services/agent/tests/test_policy.py`** — route-scope enforcement, route-page
-  week defaults, and structured response caps for charts and tables.
+  week defaults, regular-service ranking defaults, category-sensitive eval
+  tagging, eval-case integrity, and structured response caps for charts and tables.
+
+## Live route-category model eval
+
+`services/agent/evals/route_category_cases.json` contains synthetic prompts for
+regular, 600-series school, and 800-series All Nighter rankings plus a mixed
+comparison refusal. Run them manually against a deployed agent:
+
+```sh
+make eval-analysis-route-groups ANALYSIS_API_URL=https://actransit-analysis-agent-komsnvluna-uw.a.run.app
+```
+
+The suite consumes five accepted questions and waits through the configured
+cooldown. It is not a CI check because it uses Vertex AI, the live public daily
+allowance, and production data. Inspect recent structured traces with
+`make analysis-eval-logs`; logs omit raw prompts and retain only feature tags,
+bounded tool arguments, request IDs, and policy outcomes.
 
 ## Smoke test — `make smoke`
 

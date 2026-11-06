@@ -59,6 +59,13 @@ and bounded BigQuery partitions, but cannot accept SQL or write project data.
 Responses carry structured text, charts, tables, data sources, and the exact
 timeframe used.
 
+Route comparisons are segmented by service type. Open-ended rankings default
+to regular Local/Rapid/Tempo service; 600-series Supplementary School Service,
+800-series All Nighter service, and lettered Transbay routes are ranked only
+within their own groups. The MCP rejects cross-group comparisons and includes
+the service type and official AC Transit classification source in structured
+results.
+
 ## Design docs
 
 In-progress / planned services have architecture artifacts under `docs/`:
@@ -167,6 +174,17 @@ will then disagree until you reconcile.
 
 Run `make test` to execute Go and analysis-policy unit tests locally (no GCP
 credentials or network calls).
+The optional live model regression suite uses five rate-limited questions and
+is intentionally not part of CI:
+
+```sh
+make eval-analysis-route-groups ANALYSIS_API_URL=https://actransit-analysis-agent-komsnvluna-uw.a.run.app
+make analysis-eval-logs
+```
+
+The service logs only prompt feature tags, bounded tool arguments, and policy
+outcomes—not raw visitor prompts. The checked-in synthetic cases preserve the
+exact category-sensitive phrasings used to detect model/tool-selection drift.
 After a deploy, `make smoke` verifies the live service end-to-end via curl
 and `gsutil`. A pre-commit hook is available — install with
 `make hooks-install` to auto-run `go vet` + `go test` before every commit.

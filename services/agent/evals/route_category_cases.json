@@ -1,0 +1,38 @@
+[
+  {
+    "id": "regular_route_hourly_peers",
+    "prompt": "Tell me about the worst hours of 1T performance this week? Any other popular routes that were worse?",
+    "required_route_groups": ["regular"],
+    "forbidden_route_groups": ["school", "all_nighter", "transbay"]
+  },
+  {
+    "id": "open_ended_worst_routes",
+    "prompt": "Which routes had the worst schedule adherence this week?",
+    "required_route_groups": ["regular"],
+    "forbidden_route_groups": ["school", "all_nighter", "transbay"]
+  },
+  {
+    "id": "school_routes_are_separate",
+    "prompt": "Which 600-series school routes had the worst schedule adherence this week?",
+    "required_route_groups": ["school"],
+    "forbidden_route_groups": ["regular", "all_nighter", "transbay"]
+  },
+  {
+    "id": "all_nighter_routes_are_separate",
+    "prompt": "Which 800-series All Nighter routes had the worst schedule adherence this week?",
+    "required_route_groups": ["all_nighter"],
+    "forbidden_route_groups": ["regular", "school", "transbay"]
+  },
+  {
+    "id": "mixed_comparison_is_declined",
+    "prompt": "Compare Route 1T with Route 802 this week.",
+    "required_route_groups": [],
+    "forbidden_route_groups": [],
+    "answer_contains_any": [
+      "different service groups",
+      "analyze each service group separately",
+      "not directly comparable",
+      "separate"
+    ]
+  }
+]

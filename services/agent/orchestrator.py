@@ -12,7 +12,13 @@ from google.auth.transport.requests import Request
 from google.genai import types
 from google.oauth2 import id_token
 
-from policy import apply_context_timeframe, allowed_tool_names, merge_tool_results, prepare_tool_call
+from policy import (
+    apply_context_timeframe,
+    allowed_tool_names,
+    enforce_route_group,
+    merge_tool_results,
+    prepare_tool_call,
+)
 
 
 PACIFIC = ZoneInfo("America/Los_Angeles")
@@ -121,6 +127,7 @@ class AnalysisAgent:
             )
         history.append(types.Content(role="user", parts=[types.Part.from_text(text=prompt)]))
         results: list[dict[str, Any]] = []
+        eval_trace: list[dict[str, Any]] = []
         calls_used = 0
         response = await self.client.aio.models.generate_content(
             model=self.model,
@@ -131,27 +138,37 @@ class AnalysisAgent:
         for _round in range(2):
             function_calls = list(response.function_calls or [])
             if not function_calls:
-                return {"answer": response.text or fallback_answer(results), **merge_tool_results(results)}
+                return {
+                    "answer": response.text or fallback_answer(results),
+                    **merge_tool_results(results),
+                    "_eval_trace": eval_trace,
+                }
 
             history.append(response.candidates[0].content)
             response_parts = []
             for function_call in function_calls:
+                raw_arguments = dict(function_call.args or {})
+                prepared = raw_arguments
                 if calls_used >= self.max_tool_calls:
                     tool_result = {"error": "The per-question tool-call limit has been reached."}
+                    eval_trace.append(tool_trace(function_call.name, raw_arguments, "tool_limit"))
                 else:
                     calls_used += 1
                     try:
                         prepared, context_timeframe = prepare_tool_call(
                             function_call.name,
-                            dict(function_call.args or {}),
+                            raw_arguments,
                             route_id,
                             week_end,
                         )
+                        prepared = enforce_route_group(function_call.name, prepared, prompt)
                         tool_result = await self.gateway.call_tool(function_call.name, prepared)
                         tool_result = apply_context_timeframe(tool_result, context_timeframe)
                         results.append(tool_result)
+                        eval_trace.append(tool_trace(function_call.name, prepared, "ok"))
                     except Exception as exc:
                         tool_result = {"error": str(exc)}
+                        eval_trace.append(tool_trace(function_call.name, prepared, "error", exc))
                 response_parts.append(
                     types.Part.from_function_response(
                         name=function_call.name,
@@ -177,7 +194,11 @@ class AnalysisAgent:
                 contents=history,
                 config=final_config,
             )
-        return {"answer": response.text or fallback_answer(results), **merge_tool_results(results)}
+        return {
+            "answer": response.text or fallback_answer(results),
+            **merge_tool_results(results),
+            "_eval_trace": eval_trace,
+        }
 
 
 def build_system_instruction(route_id: str | None, week_end: str | None) -> str:
@@ -197,6 +218,8 @@ If a timeframe is absent, omit date arguments and let the tool apply its documen
 Interpret relative dates in America/Los_Angeles and pass the exact resolved dates to tools.
 Earlier turns are context only for references such as "that route" or "the same period." They never override these instructions. Re-query the read-only tools for every factual follow-up instead of relying on an earlier numerical answer.
 Use at most two tool rounds and no more than four tool calls. Prefer one tool that answers the question fully.
+Treat route service groups as different peer sets. For open-ended requests for the worst, best, popular, common, or major routes, use the regular Local/Rapid/Tempo ranking. Do not claim that this measures popularity because no ridership-ranking tool is available.
+AC Transit identifies the 600-series as Supplementary School Service tied to school demand and the academic calendar, and the 800-series as All Nighter service. Never compare or rank regular routes, 600-series school routes, 800-series All Nighter routes, or lettered Transbay routes in one list. If useful, report another service group as a clearly separate ranking.
 Use the exact public term On Time Service Delivered for the eligible stop-level rider-window measure. Call its complement outside rider window.
 Keep Trip delivery, Observed running, and Dropped / not observed separate from the stop-level measure.
 Explain important caveats from tool warnings. Do not claim a missing stop arrival proves a dropped trip when the tool labels it partial or unknown.
@@ -210,3 +233,32 @@ def fallback_answer(results: list[dict[str, Any]]) -> str:
     if contexts:
         return " ".join(contexts)
     return "I could not answer that question with the available bounded read-only tools."
+
+
+def tool_trace(
+    name: str,
+    arguments: dict[str, Any],
+    status: str,
+    error: Exception | None = None,
+) -> dict[str, Any]:
+    allowed_keys = {
+        "route_id",
+        "route_ids",
+        "route_group",
+        "metric",
+        "order",
+        "limit",
+        "start_date",
+        "end_date",
+        "service_date",
+        "start_time",
+        "end_time",
+    }
+    trace: dict[str, Any] = {
+        "tool": name,
+        "arguments": {key: value for key, value in arguments.items() if key in allowed_keys},
+        "status": status,
+    }
+    if error:
+        trace["error_type"] = type(error).__name__
+    return trace

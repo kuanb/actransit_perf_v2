@@ -15,12 +15,16 @@ from pydantic import BaseModel, Field
 
 from limiter import FirestoreRateLimiter, LimitConfig, RateLimitError
 from orchestrator import AnalysisAgent, MCPGateway
-from policy import extend_conversation, follow_ups_remaining
+from policy import eval_prompt_features, extend_conversation, follow_ups_remaining
 
 
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
 logger = logging.getLogger("actransit-agent")
 ROUTE_PATTERN = re.compile(r"^[A-Za-z0-9-]{1,16}$")
+
+
+def structured_log(event: str, **fields: Any) -> None:
+    print(json.dumps({"severity": "INFO", "event": event, **fields}, default=str), flush=True)
 
 
 @dataclass(frozen=True)
@@ -214,6 +218,16 @@ async def query(body: QueryBody) -> JSONResponse:
             route_id,
             body.scope.week_end if route_id else None,
             conversation,
+        )
+        eval_trace = result.pop("_eval_trace", [])
+        structured_log(
+            "analysis_eval_trace",
+            policy_version="route-groups-v1",
+            request_id=body.request_id,
+            route_scope=route_id,
+            prompt_length=len(prompt),
+            prompt_features=eval_prompt_features(prompt),
+            tool_calls=eval_trace,
         )
         updated_conversation = extend_conversation(
             conversation,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import date, timedelta
 from typing import Any
 
@@ -29,6 +30,8 @@ def prepare_tool_call(
         raise ValueError(f"Tool {tool_name} is not available in this analysis scope")
 
     prepared = dict(arguments)
+    if tool_name == "rank_routes" and not prepared.get("route_group"):
+        prepared["route_group"] = "regular"
     if route_id and tool_name in {"get_route_performance", "get_route_time_profile", "list_scheduled_arrivals"}:
         prepared["route_id"] = route_id
 
@@ -62,6 +65,51 @@ def prepare_tool_call(
                 ),
             }
     return prepared, context_timeframe
+
+
+def eval_prompt_features(prompt: str) -> list[str]:
+    lowered = prompt.lower()
+    features = []
+    patterns = {
+        "ranking": r"\b(worst|best|rank|ranking|worse)\b",
+        "comparison": r"\b(compare|comparison|versus|vs\.?|worse than|better than)\b",
+        "hourly": r"\b(hour|hours|hourly|time of day)\b",
+        "popularity_language": r"\b(popular|common|major|busy)\b",
+        "school_service": r"\b(6\d{2}|600.series|school)\b",
+        "all_nighter_service": r"\b(8\d{2}|800.series|all.nighter|overnight)\b",
+    }
+    for feature, pattern in patterns.items():
+        if re.search(pattern, lowered):
+            features.append(feature)
+    return features
+
+
+def enforce_route_group(tool_name: str, arguments: dict[str, Any], prompt: str) -> dict[str, Any]:
+    if tool_name != "rank_routes":
+        return arguments
+
+    lowered = prompt.lower()
+    explicit_groups: set[str] = set()
+    if re.search(r"\b(6\d{2}|600.series|school)\b", lowered):
+        explicit_groups.add("school")
+    if re.search(r"\b(8\d{2}|800.series|all.nighter|overnight)\b", lowered):
+        explicit_groups.add("all_nighter")
+    if re.search(r"\b(transbay|lettered route)\b", lowered):
+        explicit_groups.add("transbay")
+    if re.search(r"\b(local|regular|rapid|tempo|popular|common|major)\b", lowered):
+        explicit_groups.add("regular")
+    allowed = explicit_groups or {"regular"}
+
+    updated = dict(arguments)
+    requested = str(updated.get("route_group") or "regular")
+    if requested not in allowed:
+        if len(allowed) == 1:
+            updated["route_group"] = next(iter(allowed))
+        else:
+            raise ValueError(
+                f"The requested {requested} ranking was not one of the service groups named by the user"
+            )
+    return updated
 
 
 def apply_context_timeframe(result: dict[str, Any], context_timeframe: dict[str, Any] | None) -> dict[str, Any]:
