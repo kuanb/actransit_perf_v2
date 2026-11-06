@@ -140,7 +140,7 @@ class PublicConversationPublisherTest(unittest.TestCase):
         self.assertNotIn("active_queries", payload["response"])
         self.assertNotIn("thread_id", payload)
         self.assertEqual(payload["scope"], {"route_id": "1T", "week_end": None})
-        self.assertEqual(kwargs["cache_control"], "public, max-age=31536000, immutable")
+        self.assertEqual(blob.cache_control, "public, max-age=31536000, immutable")
         self.assertEqual(kwargs["if_generation_match"], 0)
 
     def test_redacts_ip_addresses(self):

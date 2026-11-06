@@ -180,10 +180,11 @@ class PublicConversationPublisher:
             "question": redact_public_text(values["question"]),
             "response": public_response,
         }
-        self.bucket.blob(object_name).upload_from_string(
+        blob = self.bucket.blob(object_name)
+        blob.cache_control = "public, max-age=31536000, immutable"
+        blob.upload_from_string(
             json.dumps(payload, ensure_ascii=False, separators=(",", ":"), default=str),
             content_type="application/json",
-            cache_control="public, max-age=31536000, immutable",
             if_generation_match=0,
         )
         return object_name
