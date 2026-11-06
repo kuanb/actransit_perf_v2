@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 from limiter import FirestoreRateLimiter, LimitConfig, RateLimitError
 from orchestrator import AnalysisAgent, MCPGateway
 from policy import eval_prompt_features, extend_conversation, follow_ups_remaining
-from recorder import ConversationRecorder
+from recorder import ConversationRecorder, PublicConversationPublisher
 
 
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
@@ -43,6 +43,7 @@ class Settings:
     max_tool_calls: int
     max_follow_ups: int
     chat_log_bucket: str
+    public_chat_bucket: str
     limits: LimitConfig
 
     @classmethod
@@ -71,6 +72,10 @@ class Settings:
             chat_log_bucket=os.environ.get(
                 "CHAT_LOG_BUCKET",
                 f"{project_id}-analysis-chats",
+            ),
+            public_chat_bucket=os.environ.get(
+                "PUBLIC_CHAT_BUCKET",
+                f"{project_id}-actransit-cache",
             ),
             limits=LimitConfig(
                 cooldown_seconds=int(os.environ.get("COOLDOWN_SECONDS", "20")),
@@ -111,6 +116,7 @@ agent = AnalysisAgent(
     settings.max_tool_calls,
 )
 recorder = ConversationRecorder(settings.chat_log_bucket)
+public_publisher = PublicConversationPublisher(settings.public_chat_bucket)
 
 app = FastAPI(title="AC Transit analysis agent", docs_url=None, redoc_url=None, openapi_url=None)
 app.add_middleware(
@@ -287,6 +293,22 @@ async def query(body: QueryBody) -> JSONResponse:
             response_body,
             updated_conversation,
         )
+        try:
+            await public_publisher.publish(
+                thread_id=thread_id,
+                turn_index=len(updated_conversation),
+                question=prompt,
+                response=response_body,
+                scope={
+                    "route_id": route_id,
+                    "week_end": body.scope.week_end if route_id else None,
+                },
+            )
+        except Exception:
+            logger.exception(
+                "public analysis conversation publish failed",
+                extra={"request_id": body.request_id},
+            )
         return JSONResponse(response_body)
     except Exception:
         logger.exception("analysis request failed", extra={"request_id": body.request_id})

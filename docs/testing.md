@@ -52,8 +52,9 @@ What's covered:
   week defaults, regular-service ranking defaults, category-sensitive eval
   tagging, eval-case integrity, and structured response caps for charts and tables.
 - **`services/agent/tests/test_recorder.py`** — private conversation-record schema,
-  UTC date/hour object layout, complete question/response retention, and browser
-  session hashing.
+  UTC date/hour object layout, complete question/response retention, browser
+  session hashing, and the separate minimal public-turn schema with text
+  redaction and operational-field exclusion.
 
 ## Live route-category model eval
 
@@ -74,6 +75,9 @@ bounded tool arguments, request IDs, and policy outcomes.
 Raw accepted questions and structured responses are intentionally kept out of
 Cloud Logging and written to the private conversation archive instead. Inspect
 an archive partition with `make analysis-chat-logs DATE=YYYY-MM-DD HOUR=HH`.
+Successful future turns also produce a redacted public record for the static
+conversation-history page; private records created before the public notice are
+not backfilled.
 
 ## Smoke test — `make smoke`
 

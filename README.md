@@ -94,6 +94,7 @@ directly via HTTPS, with permissive CORS for browsers:
 | Published AC Transit KPIs | `https://storage.googleapis.com/transit-203605-actransit-cache/stats/published-kpis/latest.json` |
 | Latest school report | `https://storage.googleapis.com/transit-203605-actransit-cache/stats/schools/latest.json` |
 | Analysis UI config | `https://storage.googleapis.com/transit-203605-actransit-cache/analysis/config.json` |
+| Public analysis conversations | `https://storage.googleapis.com/transit-203605-actransit-cache/analysis/public-chats/` |
 
 ## Stack
 
@@ -101,7 +102,7 @@ directly via HTTPS, with permissive CORS for browsers:
 - **Schedule:** Cloud Scheduler → HTTPS + OIDC
 - **Cache:** Cloud Storage (GCS)
 - **Analysis:** Vertex AI Gemini + FastMCP + Firestore rate limits
-- **Analysis archive:** private GCS JSON records partitioned by UTC date/hour
+- **Analysis archives:** private eval records plus redacted public conversation JSON, both partitioned by UTC date/hour
 - **Warehouse:** BigQuery with partition pruning and per-query byte caps
 - **Secrets:** Secret Manager (`actransit-token`, `actransit-gtfs-token`, `actransit-ridership-token`)
 - **Alerts:** Cloud Monitoring → email
@@ -191,7 +192,11 @@ make analysis-eval-logs
 The service logs only prompt feature tags, bounded tool arguments, and policy
 outcomes—not raw visitor prompts. The checked-in synthetic cases preserve the
 exact category-sensitive and multi-turn chart-contract phrasings used to detect
-model/tool-selection drift.
+model/tool-selection drift. Raw records remain in the private eval archive.
+Successful turns submitted after public history was enabled also produce a
+minimal redacted object in the public cache. The static `/ask/history/` page
+lists and reads those objects directly from GCS without a history API. Earlier
+private-only conversations are not copied into the public archive.
 After a deploy, `make smoke` verifies the live service end-to-end via curl
 and `gsutil`. A pre-commit hook is available — install with
 `make hooks-install` to auto-run `go vet` + `go test` before every commit.

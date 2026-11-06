@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from recorder import ConversationRecorder
+from recorder import ConversationRecorder, PublicConversationPublisher, redact_public_text
 
 
 class FakeBlob:
@@ -95,6 +95,60 @@ class ConversationRecorderTest(unittest.TestCase):
     def test_requires_bucket(self):
         with self.assertRaises(ValueError):
             ConversationRecorder("", client=FakeClient())
+
+
+class PublicConversationPublisherTest(unittest.TestCase):
+    def test_writes_minimal_redacted_public_turn(self):
+        client = FakeClient()
+        publisher = PublicConversationPublisher(
+            "public-bucket",
+            client=client,
+            clock=lambda: datetime(2026, 11, 6, 17, 2, 3, tzinfo=timezone.utc),
+        )
+
+        object_name = asyncio.run(
+            publisher.publish(
+                thread_id="root-123456789",
+                turn_index=2,
+                question="Email me at rider@example.com about 1T",
+                response={
+                    "answer": "See https://example.com and call 510-555-1212.",
+                    "timeframes": [{"start_date": "2026-10-30", "end_date": "2026-11-05"}],
+                    "charts": [{"type": "bar", "title": "Route 1T"}],
+                    "request_id": "must-not-publish",
+                    "active_queries": 1,
+                },
+                scope={"route_id": "1T", "week_end": None, "extra": "omit"},
+            )
+        )
+
+        conversation_id = hashlib.sha256(b"root-123456789").hexdigest()[:16]
+        self.assertEqual(
+            object_name,
+            "analysis/public-chats/date=2026-11-06/hour=17/"
+            f"20261106T170203.000000Z-{conversation_id}-turn-02.json",
+        )
+        blob = client.value.blobs[0]
+        content, kwargs = blob.upload
+        payload = json.loads(content)
+        self.assertEqual(payload["question"], "Email me at [email removed] about 1T")
+        self.assertEqual(
+            payload["response"]["answer"],
+            "See [link removed] and call [phone number removed].",
+        )
+        self.assertNotIn("request_id", payload["response"])
+        self.assertNotIn("active_queries", payload["response"])
+        self.assertNotIn("thread_id", payload)
+        self.assertEqual(payload["scope"], {"route_id": "1T", "week_end": None})
+        self.assertEqual(kwargs["cache_control"], "public, max-age=31536000, immutable")
+        self.assertEqual(kwargs["if_generation_match"], 0)
+
+    def test_redacts_ip_addresses(self):
+        self.assertEqual(redact_public_text("client 192.168.1.4"), "client [IP address removed]")
+
+    def test_requires_bucket(self):
+        with self.assertRaises(ValueError):
+            PublicConversationPublisher("", client=FakeClient())
 
 
 if __name__ == "__main__":

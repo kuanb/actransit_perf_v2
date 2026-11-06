@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Public history of questions and answers submitted to the AC Transit performance analysis tool.">
+  <title>Public conversation history · AC Transit performance</title>
+  <link rel="stylesheet" href="../../styles.css?v=analysis-v7">
+  <link rel="stylesheet" href="styles.css?v=analysis-v7">
+  <script src="../../independence-notice.js" defer></script>
+</head>
+<body>
+  <header>
+    <div class="header-body">
+      <p class="history-eyebrow">Public archive · read-only</p>
+      <h1>Conversation history</h1>
+      <p class="muted">Browse questions and answers submitted to the experimental AC Transit performance analyst.</p>
+    </div>
+    <nav class="header-nav">
+      <a href="../">Ask a question →</a>
+      <a href="../../report-card/">Report card →</a>
+      <a href="../../daily/">Daily →</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="archive-intro" aria-labelledby="archive-heading">
+      <div>
+        <p class="history-eyebrow">Bucket-backed</p>
+        <h2 id="archive-heading">The public analysis record</h2>
+        <p>Every successful turn submitted after public archiving was enabled is written as an immutable JSON object in the public cache bucket. This page reads those objects directly—there is no history API or server-side page action.</p>
+      </div>
+      <aside class="privacy-note">
+        <strong>Public by design</strong>
+        <p>Questions and answers are public. Email addresses, links, phone numbers, and IP addresses receive automated redaction. Session identifiers, request IDs, model traces, latency, and errors are never included.</p>
+        <p>Conversations collected under the earlier private-only notice remain private and are not shown here.</p>
+      </aside>
+    </section>
+
+    <section class="archive-controls" aria-labelledby="filter-heading">
+      <div class="controls-heading">
+        <div>
+          <p class="history-eyebrow">Explore</p>
+          <h2 id="filter-heading">Find conversations</h2>
+        </div>
+        <p id="archive-summary" class="archive-summary">Choose a date range to load the archive.</p>
+      </div>
+      <form id="history-form">
+        <label>
+          Start date (UTC)
+          <input id="start-date" name="start-date" type="date" required>
+        </label>
+        <label>
+          End date (UTC)
+          <input id="end-date" name="end-date" type="date" required>
+        </label>
+        <label class="search-field">
+          Search loaded conversations
+          <input id="search" name="search" type="search" placeholder="Route, metric, or phrase">
+        </label>
+        <button id="load-button" type="submit">Load conversations</button>
+      </form>
+      <p class="control-note">Ranges are limited to 31 days and the 500 most recent turns in the selected period.</p>
+      <div id="history-status" class="history-status" role="status" aria-live="polite"></div>
+    </section>
+
+    <section class="history-results" aria-labelledby="results-heading">
+      <div class="results-heading">
+        <div>
+          <p class="history-eyebrow">Threads</p>
+          <h2 id="results-heading">Questions and responses</h2>
+        </div>
+        <span id="visible-count" class="visible-count"></span>
+      </div>
+      <div id="thread-list" class="thread-list"></div>
+      <div id="empty-state" class="empty-state" hidden>
+        <strong>No matching public conversations</strong>
+        <p>Try another date range or clear the text search.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <a href="https://kuanbutts.com" target="_blank" rel="noopener">A project by Kuan Butts</a>
+  </footer>
+
+  <script src="app.js?v=analysis-v7"></script>
+  <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "0e36b12e46b04a69b5e9ff6883f6d23d"}'></script><!-- End Cloudflare Web Analytics -->
+</body>
+</html>

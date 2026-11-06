@@ -239,6 +239,8 @@ flowchart LR
     V -->|short plain-text explanation| A
     A -->|answer + timeframe + charts + tables + sources| U
     A -->|question + structured response + eval trace| C[Private conversation archive\nGCS by UTC date/hour]
+    A -->|redacted successful turn| R[Public conversation archive\nGCS by UTC date/hour]
+    H[Static conversation-history page] -->|public object list + GET| R
 ```
 
 The scraper remains isolated from this request path. The public agent service
@@ -351,6 +353,19 @@ is prevented, and Terraform deletes records after 365 days. This stable per-turn
 schema can later be imported into an eval/observability service such as
 Braintrust without scraping Cloud Logging. Inspect an hour with
 `make analysis-chat-logs DATE=YYYY-MM-DD HOUR=HH`.
+
+Successful turns submitted after public conversation history was enabled are
+also written to `analysis/public-chats/date=YYYY-MM-DD/hour=HH/` in the public
+cache bucket. These are separate immutable allowlisted records containing only
+an opaque SHA-256-derived conversation group, turn number, publication time,
+route/page scope, redacted question, and public answer fields. The publisher
+removes email addresses, web links, phone numbers, and IP addresses from text.
+It omits request IDs, browser/session identifiers, model and tool traces,
+latency, rate-limit state, and failed requests. The static `/ask/history/` page
+uses the public GCS object-list and object-read endpoints directly, groups turns
+into threads in the browser, and supports date and text filtering without a
+history API. Records collected under the earlier private-only notice are never
+copied into this public prefix.
 
 ## Cost projection
 

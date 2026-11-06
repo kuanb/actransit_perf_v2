@@ -190,6 +190,11 @@ resource "google_cloud_run_v2_service" "analysis_agent" {
       }
 
       env {
+        name  = "PUBLIC_CHAT_BUCKET"
+        value = google_storage_bucket.cache.name
+      }
+
+      env {
         name  = "MAX_TOOL_CALLS"
         value = "4"
       }
@@ -241,6 +246,17 @@ resource "google_storage_bucket_iam_member" "analysis_agent_chat_writer" {
   bucket = google_storage_bucket.analysis_chats.name
   role   = "roles/storage.objectCreator"
   member = "serviceAccount:${google_service_account.analysis_agent.email}"
+}
+
+resource "google_storage_bucket_iam_member" "analysis_agent_public_chat_writer" {
+  bucket = google_storage_bucket.cache.name
+  role   = "roles/storage.objectCreator"
+  member = "serviceAccount:${google_service_account.analysis_agent.email}"
+
+  condition {
+    title      = "analysis_public_chat_prefix"
+    expression = "resource.name.startsWith(\"projects/_/buckets/${google_storage_bucket.cache.name}/objects/analysis/public-chats/\")"
+  }
 }
 
 resource "google_storage_bucket_iam_member" "analysis_mcp_cache_reader" {
