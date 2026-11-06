@@ -238,6 +238,7 @@ flowchart LR
     M -->|bounded structured result| V
     V -->|short plain-text explanation| A
     A -->|answer + timeframe + charts + tables + sources| U
+    A -->|question + structured response + eval trace| C[Private conversation archive\nGCS by UTC date/hour]
 ```
 
 The scraper remains isolated from this request path. The public agent service
@@ -284,9 +285,9 @@ does not provide a complete timeframe:
 Each tool marks the timeframe as assumed or explicit and returns a human-readable
 disclosure. Tool results covering the same period collapse into one notice; an
 answer that genuinely combines different periods receives one consolidated
-notice. The page replaces the prior answer and notice on every turn, so an
-omitted timeframe cannot be silently hidden by model wording or accumulate stale
-alerts.
+notice. The page retains a numbered list of every question in the active thread
+and replaces the structured answer and notice on every turn, so users can see
+their conversational chain without accumulating stale alerts.
 
 ### Abuse and cost controls
 
@@ -331,6 +332,19 @@ manual route-category eval suite replays checked-in synthetic prompts against a
 deployed agent and checks that regular, school, and All Nighter results remain
 segmented. It consumes five questions and observes the normal cooldown, so it
 is deliberately excluded from CI.
+
+Every accepted analysis turn is also archived as one JSON object in the private
+`transit-203605-analysis-chats` bucket. Object names use
+`date=YYYY-MM-DD/hour=HH/<timestamp>-<record-key>.json`, where the partitions
+and filename timestamp are UTC and sort chronologically. Records contain the raw
+question, full structured response, route/page scope, thread/turn identifiers,
+parent request ID, SHA-256 browser-session hash, model, latency, prompt
+feature tags, and bounded tool-call trace. They do not contain the raw browser
+session ID or network metadata. The agent has create-only access, public access
+is prevented, and Terraform deletes records after 365 days. This stable per-turn
+schema can later be imported into an eval/observability service such as
+Braintrust without scraping Cloud Logging. Inspect an hour with
+`make analysis-chat-logs DATE=YYYY-MM-DD HOUR=HH`.
 
 ## Cost projection
 

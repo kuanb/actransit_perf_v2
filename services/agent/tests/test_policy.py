@@ -118,9 +118,16 @@ class MergeResultsTest(unittest.TestCase):
 
 class ConversationTest(unittest.TestCase):
     def test_initial_answer_allows_three_follow_ups(self):
-        context = extend_conversation([], "How did Route 51A perform?", {"answer": "Well."}, 3)
+        context = extend_conversation(
+            [],
+            "How did Route 51A perform?",
+            {"answer": "Well."},
+            3,
+            request_id="request-123456789",
+        )
 
         self.assertEqual(3, follow_ups_remaining(context, 3))
+        self.assertEqual("request-123456789", context[0]["request_id"])
 
     def test_four_turn_thread_has_no_follow_ups_remaining(self):
         context = []

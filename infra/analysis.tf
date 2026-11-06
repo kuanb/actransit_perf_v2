@@ -185,6 +185,11 @@ resource "google_cloud_run_v2_service" "analysis_agent" {
       }
 
       env {
+        name  = "CHAT_LOG_BUCKET"
+        value = google_storage_bucket.analysis_chats.name
+      }
+
+      env {
         name  = "MAX_TOOL_CALLS"
         value = "4"
       }
@@ -230,6 +235,12 @@ resource "google_project_iam_member" "analysis_agent_firestore" {
   project = var.project_id
   role    = "roles/datastore.user"
   member  = "serviceAccount:${google_service_account.analysis_agent.email}"
+}
+
+resource "google_storage_bucket_iam_member" "analysis_agent_chat_writer" {
+  bucket = google_storage_bucket.analysis_chats.name
+  role   = "roles/storage.objectCreator"
+  member = "serviceAccount:${google_service_account.analysis_agent.email}"
 }
 
 resource "google_storage_bucket_iam_member" "analysis_mcp_cache_reader" {

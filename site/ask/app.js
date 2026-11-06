@@ -11,6 +11,7 @@ const statusDot = document.getElementById("status-dot");
 const limitTitle = document.getElementById("limit-title");
 const limitCopy = document.getElementById("limit-copy");
 const charts = [];
+const threadQuestions = [];
 let config = null;
 let status = null;
 let nextAllowedAt = null;
@@ -190,6 +191,7 @@ async function submitQuestion(event) {
     };
     parentRequestID = payload.request_id;
     followUpsRemaining = payload.follow_ups_remaining ?? 0;
+    threadQuestions.push(prompt);
     question.value = "";
     renderResponse(payload);
     renderStatus();
@@ -205,12 +207,35 @@ async function submitQuestion(event) {
 
 function renderResponse(payload) {
   responseSection.hidden = false;
+  renderQuestionHistory();
   renderTimeframes(payload.timeframes || []);
   renderAnswer(payload.answer || "No answer was returned.");
   renderWarnings(payload.warnings || []);
   renderCharts(payload.charts || []);
   renderTables(payload.tables || []);
   renderSources(payload.sources || []);
+}
+
+function renderQuestionHistory() {
+  const list = document.getElementById("question-history");
+  list.replaceChildren();
+  threadQuestions.forEach((text, index) => {
+    const item = document.createElement("li");
+    const label = document.createElement("span");
+    label.className = "thread-question-label";
+    label.textContent = `Question ${index + 1}`;
+    const prompt = document.createElement("span");
+    prompt.className = "thread-question-text";
+    prompt.textContent = text;
+    item.append(label, prompt);
+    if (index === threadQuestions.length - 1) {
+      const current = document.createElement("span");
+      current.className = "thread-current";
+      current.textContent = "Latest";
+      item.appendChild(current);
+    }
+    list.appendChild(item);
+  });
 }
 
 function renderTimeframes(timeframes) {
@@ -345,6 +370,8 @@ function clearResponse() {
   charts.splice(0).forEach(chart => chart.destroy());
   parentRequestID = null;
   followUpsRemaining = null;
+  threadQuestions.splice(0);
+  renderQuestionHistory();
   question.value = "";
   updateFormState();
   question.focus();

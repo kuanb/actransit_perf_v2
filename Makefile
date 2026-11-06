@@ -19,7 +19,7 @@ AGENCY_KPI_VERSION := $(shell sed -nE 's/^[[:space:]]*agencyKPIMethodologyVersio
 PARALLEL ?= 2
 BUNCHING_VERIFY_PARALLEL ?= 16
 
-.PHONY: tf-init tf-plan tf-apply tf-fmt build deploy release logs analysis-logs analysis-eval-logs eval-analysis-route-groups invoke run-local test test-analysis smoke hooks-install backfill backfill-school-stats-history backfill-bunching backfill-bunching-history verify-bunching-history backfill-agency-kpis backfill-agency-kpis-history verify-agency-kpi-history
+.PHONY: tf-init tf-plan tf-apply tf-fmt build deploy release logs analysis-logs analysis-chat-logs analysis-eval-logs eval-analysis-route-groups invoke run-local test test-analysis smoke hooks-install backfill backfill-school-stats-history backfill-bunching backfill-bunching-history verify-bunching-history backfill-agency-kpis backfill-agency-kpis-history verify-agency-kpi-history
 
 tf-init:
 	cd infra && terraform init
@@ -90,6 +90,11 @@ logs:
 analysis-logs:
 	gcloud logging read 'resource.labels.service_name="actransit-analysis-agent" OR resource.labels.service_name="actransit-analysis-mcp"' --limit 50 --freshness=15m \
 		--format='value(timestamp,severity,resource.labels.service_name,textPayload,jsonPayload.message)'
+
+analysis-chat-logs:
+	@test -n "$(DATE)" || (echo "usage: make analysis-chat-logs DATE=YYYY-MM-DD [HOUR=HH]" && exit 1)
+	@H="$(if $(HOUR),$(HOUR),*)"; \
+	gcloud storage cat "gs://$(PROJECT_ID)-analysis-chats/date=$(DATE)/hour=$$H/*.json" | jq -c .
 
 analysis-eval-logs:
 	gcloud logging read 'resource.labels.service_name="actransit-analysis-agent" AND jsonPayload.event="analysis_eval_trace"' --limit 50 --freshness=7d \

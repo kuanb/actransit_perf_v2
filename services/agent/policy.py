@@ -134,6 +134,7 @@ def extend_conversation(
     prompt: str,
     result: dict[str, Any],
     max_follow_ups: int,
+    request_id: str | None = None,
 ) -> list[dict[str, Any]]:
     if len(context) > max_follow_ups:
         raise ValueError("The follow-up limit for this answer has been reached")
@@ -141,6 +142,8 @@ def extend_conversation(
         "question": prompt,
         "answer": str(result.get("answer") or "")[:CONTEXT_ANSWER_CHARS],
     }
+    if request_id:
+        turn["request_id"] = request_id
     timeframes = list(result.get("timeframes") or [])
     if timeframes:
         turn["timeframe"] = timeframes[0]

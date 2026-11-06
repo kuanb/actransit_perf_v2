@@ -57,7 +57,8 @@ interface. A public Cloud Run agent uses Vertex AI to select from a fixed set of
 private MCP tools; those tools can read published report JSON, archived GTFS,
 and bounded BigQuery partitions, but cannot accept SQL or write project data.
 Responses carry structured text, charts, tables, data sources, and the exact
-timeframe used.
+timeframe used. The browser keeps the numbered question chain visible for each
+bounded follow-up thread while rendering the latest structured answer.
 
 Route comparisons are segmented by service type. Open-ended rankings default
 to regular Local/Rapid/Tempo service; 600-series Supplementary School Service,
@@ -98,6 +99,7 @@ directly via HTTPS, with permissive CORS for browsers:
 - **Schedule:** Cloud Scheduler → HTTPS + OIDC
 - **Cache:** Cloud Storage (GCS)
 - **Analysis:** Vertex AI Gemini + FastMCP + Firestore rate limits
+- **Analysis archive:** private GCS JSON records partitioned by UTC date/hour
 - **Warehouse:** BigQuery with partition pruning and per-query byte caps
 - **Secrets:** Secret Manager (`actransit-token`, `actransit-gtfs-token`, `actransit-ridership-token`)
 - **Alerts:** Cloud Monitoring → email
@@ -117,6 +119,7 @@ make build                  # just build (rare; use release instead)
 make invoke                 # curl /scrape with your identity token
 make logs                   # recent Cloud Run logs
 make analysis-logs          # recent analysis-agent and MCP logs
+make analysis-chat-logs DATE=YYYY-MM-DD HOUR=HH  # private archived chats for one UTC hour
 make backfill-agency-kpis-history  # rebuild KPI comparison history after deployment
 make backfill-school-stats-history # build school reports for every indexed service date
 ```

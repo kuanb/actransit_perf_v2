@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+import time
 from dataclasses import dataclass
 from datetime import date
 from typing import Any
@@ -16,6 +17,7 @@ from pydantic import BaseModel, Field
 from limiter import FirestoreRateLimiter, LimitConfig, RateLimitError
 from orchestrator import AnalysisAgent, MCPGateway
 from policy import eval_prompt_features, extend_conversation, follow_ups_remaining
+from recorder import ConversationRecorder
 
 
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
@@ -40,6 +42,7 @@ class Settings:
     max_response_bytes: int
     max_tool_calls: int
     max_follow_ups: int
+    chat_log_bucket: str
     limits: LimitConfig
 
     @classmethod
@@ -65,6 +68,10 @@ class Settings:
             max_response_bytes=int(os.environ.get("MAX_RESPONSE_BYTES", str(256 * 1024))),
             max_tool_calls=int(os.environ.get("MAX_TOOL_CALLS", "4")),
             max_follow_ups=int(os.environ.get("MAX_FOLLOW_UPS", "3")),
+            chat_log_bucket=os.environ.get(
+                "CHAT_LOG_BUCKET",
+                f"{project_id}-analysis-chats",
+            ),
             limits=LimitConfig(
                 cooldown_seconds=int(os.environ.get("COOLDOWN_SECONDS", "20")),
                 max_active_queries=int(os.environ.get("MAX_ACTIVE_QUERIES", "2")),
@@ -103,6 +110,7 @@ agent = AnalysisAgent(
     gateway,
     settings.max_tool_calls,
 )
+recorder = ConversationRecorder(settings.chat_log_bucket)
 
 app = FastAPI(title="AC Transit analysis agent", docs_url=None, redoc_url=None, openapi_url=None)
 app.add_middleware(
@@ -212,6 +220,14 @@ async def query(body: QueryBody) -> JSONResponse:
         response.headers["Retry-After"] = str(exc.retry_after_seconds)
         return response
 
+    started_at = time.monotonic()
+    prompt_features = eval_prompt_features(prompt)
+    eval_trace: list[dict[str, Any]] = []
+    thread_id = str(
+        (conversation[0].get("request_id") if conversation else None)
+        or body.parent_request_id
+        or body.request_id
+    )
     try:
         result = await agent.analyze(
             prompt,
@@ -226,7 +242,7 @@ async def query(body: QueryBody) -> JSONResponse:
             request_id=body.request_id,
             route_scope=route_id,
             prompt_length=len(prompt),
-            prompt_features=eval_prompt_features(prompt),
+            prompt_features=prompt_features,
             tool_calls=eval_trace,
         )
         updated_conversation = extend_conversation(
@@ -234,6 +250,7 @@ async def query(body: QueryBody) -> JSONResponse:
             prompt,
             result,
             settings.max_follow_ups,
+            request_id=body.request_id,
         )
         response_body = {
             **result,
@@ -249,6 +266,21 @@ async def query(body: QueryBody) -> JSONResponse:
         }
         if len(json.dumps(response_body, default=str).encode()) > settings.max_response_bytes:
             raise ValueError("The structured response exceeded the public response-size limit")
+        await recorder.record(
+            request_id=body.request_id,
+            parent_request_id=body.parent_request_id,
+            thread_id=thread_id,
+            turn_index=len(updated_conversation),
+            session_id=body.session_id,
+            question=prompt,
+            response=response_body,
+            scope={"route_id": route_id, "week_end": body.scope.week_end if route_id else None},
+            model=settings.model,
+            status="success",
+            latency_ms=round((time.monotonic() - started_at) * 1000),
+            prompt_features=prompt_features,
+            tool_calls=eval_trace,
+        )
         await limiter.store_result(
             body.session_id,
             body.request_id,
@@ -256,15 +288,31 @@ async def query(body: QueryBody) -> JSONResponse:
             updated_conversation,
         )
         return JSONResponse(response_body)
-    except Exception as exc:
+    except Exception:
         logger.exception("analysis request failed", extra={"request_id": body.request_id})
-        return JSONResponse(
-            {
-                "code": "analysis_failed",
-                "message": "The analysis could not be completed. Please try again after the displayed cooldown.",
-            },
-            status_code=503,
-        )
+        error_body = {
+            "code": "analysis_failed",
+            "message": "The analysis could not be completed. Please try again after the displayed cooldown.",
+        }
+        try:
+            await recorder.record(
+                request_id=body.request_id,
+                parent_request_id=body.parent_request_id,
+                thread_id=thread_id,
+                turn_index=len(conversation) + 1,
+                session_id=body.session_id,
+                question=prompt,
+                response=error_body,
+                scope={"route_id": route_id, "week_end": body.scope.week_end if route_id else None},
+                model=settings.model,
+                status="error",
+                latency_ms=round((time.monotonic() - started_at) * 1000),
+                prompt_features=prompt_features,
+                tool_calls=eval_trace,
+            )
+        except Exception:
+            logger.exception("analysis conversation archive failed", extra={"request_id": body.request_id})
+        return JSONResponse(error_body, status_code=503)
     finally:
         try:
             await limiter.release(body.session_id, body.request_id)

@@ -51,6 +51,9 @@ What's covered:
 - **`services/agent/tests/test_policy.py`** — route-scope enforcement, route-page
   week defaults, regular-service ranking defaults, category-sensitive eval
   tagging, eval-case integrity, and structured response caps for charts and tables.
+- **`services/agent/tests/test_recorder.py`** — private conversation-record schema,
+  UTC date/hour object layout, complete question/response retention, and browser
+  session hashing.
 
 ## Live route-category model eval
 
@@ -67,6 +70,10 @@ cooldown. It is not a CI check because it uses Vertex AI, the live public daily
 allowance, and production data. Inspect recent structured traces with
 `make analysis-eval-logs`; logs omit raw prompts and retain only feature tags,
 bounded tool arguments, request IDs, and policy outcomes.
+
+Raw accepted questions and structured responses are intentionally kept out of
+Cloud Logging and written to the private conversation archive instead. Inspect
+an archive partition with `make analysis-chat-logs DATE=YYYY-MM-DD HOUR=HH`.
 
 ## Smoke test — `make smoke`
 

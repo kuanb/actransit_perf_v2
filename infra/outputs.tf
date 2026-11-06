@@ -27,3 +27,8 @@ output "analysis_mcp_url" {
   description = "Private read-only MCP service URL"
   value       = google_cloud_run_v2_service.analysis_mcp.uri
 }
+
+output "analysis_chat_bucket" {
+  description = "Private UTC-partitioned public analysis conversation archive"
+  value       = google_storage_bucket.analysis_chats.name
+}
