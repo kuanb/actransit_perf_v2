@@ -285,9 +285,11 @@ does not provide a complete timeframe:
 Each tool marks the timeframe as assumed or explicit and returns a human-readable
 disclosure. Tool results covering the same period collapse into one notice; an
 answer that genuinely combines different periods receives one consolidated
-notice. The page retains a numbered list of every question in the active thread
-and replaces the structured answer and notice on every turn, so users can see
-their conversational chain without accumulating stale alerts.
+notice. The page retains a numbered list of every question in the active thread,
+moves the follow-up composer into that thread, and replaces the structured
+answer and notice on every turn. Starting a new question returns the composer to
+the opening panel, so users can see when they are continuing versus resetting
+context without accumulating stale alerts.
 
 ### Abuse and cost controls
 

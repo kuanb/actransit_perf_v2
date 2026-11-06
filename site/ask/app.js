@@ -3,6 +3,9 @@ const params = new URLSearchParams(window.location.search);
 const routeID = sanitizeRoute(params.get("route_id"));
 const weekEnd = sanitizeDate(params.get("week_end"));
 const form = document.getElementById("ask-form");
+const composer = document.getElementById("question-composer");
+const questionFormHome = document.getElementById("question-form-home");
+const followupFormHome = document.getElementById("followup-form-home");
 const question = document.getElementById("question");
 const askButton = document.getElementById("ask-button");
 const message = document.getElementById("message");
@@ -193,6 +196,7 @@ async function submitQuestion(event) {
     followUpsRemaining = payload.follow_ups_remaining ?? 0;
     threadQuestions.push(prompt);
     question.value = "";
+    renderThreadState();
     renderResponse(payload);
     renderStatus();
     responseSection.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -375,12 +379,15 @@ function clearResponse() {
   question.value = "";
   updateFormState();
   question.focus();
+  document.getElementById("ask-heading").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function renderThreadState() {
   const state = document.getElementById("thread-state");
   const label = document.getElementById("question-label");
   const max = config?.max_follow_ups ?? status?.max_follow_ups ?? 3;
+  const composerHome = parentRequestID ? followupFormHome : questionFormHome;
+  if (composer.parentElement !== composerHome) composerHome.appendChild(composer);
   if (!parentRequestID) {
     label.textContent = "Question";
     question.placeholder = "For example: Compare On Time Service Delivered for routes 51A and 72.";

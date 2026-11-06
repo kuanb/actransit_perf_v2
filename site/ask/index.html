@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Ask about AC Transit performance</title>
-  <link rel="stylesheet" href="../styles.css?v=analysis-v3">
-  <link rel="stylesheet" href="styles.css?v=analysis-v3">
+  <link rel="stylesheet" href="../styles.css?v=analysis-v4">
+  <link rel="stylesheet" href="styles.css?v=analysis-v4">
   <script src="../independence-notice.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 </head>
@@ -35,16 +35,21 @@
 
       <div id="suggestions" class="suggestions" aria-label="Suggested questions"></div>
 
-      <form id="ask-form">
-        <label id="question-label" for="question">Question</label>
-        <textarea id="question" name="question" rows="4" maxlength="500" required placeholder="For example: Compare On Time Service Delivered for routes 51A and 72."></textarea>
-        <div class="question-meta">
-          <span id="character-count">0 / 500</span>
-          <span>Questions and responses are retained privately for quality monitoring. Do not include personal or sensitive information.</span>
+      <div id="question-form-home">
+        <div id="question-composer">
+          <form id="ask-form">
+            <label id="question-label" for="question">Question</label>
+            <textarea id="question" name="question" rows="4" maxlength="500" required placeholder="For example: Compare On Time Service Delivered for routes 51A and 72."></textarea>
+            <div class="question-meta">
+              <span id="character-count">0 / 500</span>
+              <span>Questions and responses are retained privately for quality monitoring. Do not include personal or sensitive information.</span>
+            </div>
+            <p id="thread-state" class="thread-state">Each answer can be followed by up to 3 clarifying questions.</p>
+            <button id="ask-button" type="submit" disabled>Ask</button>
+          </form>
+          <div id="message" class="message" hidden role="alert"></div>
         </div>
-        <p id="thread-state" class="thread-state">Each answer can be followed by up to 3 clarifying questions.</p>
-        <button id="ask-button" type="submit" disabled>Ask</button>
-      </form>
+      </div>
 
       <aside class="limit-card" aria-live="polite">
         <div class="limit-status">
@@ -57,7 +62,6 @@
         </p>
       </aside>
 
-      <div id="message" class="message" hidden role="alert"></div>
     </section>
 
     <section id="response" class="response" hidden aria-live="polite">
@@ -71,6 +75,7 @@
       <section id="thread-history" class="thread-history" aria-labelledby="thread-history-title">
         <h3 id="thread-history-title">Question thread</h3>
         <ol id="question-history"></ol>
+        <div id="followup-form-home" class="followup-form-home"></div>
       </section>
       <div id="timeframes" class="timeframes"></div>
       <div id="answer" class="answer"></div>
@@ -88,7 +93,7 @@
     <a href="https://kuanbutts.com" target="_blank" rel="noopener">A project by Kuan Butts</a>
   </footer>
 
-  <script src="app.js?v=analysis-v3"></script>
+  <script src="app.js?v=analysis-v4"></script>
   <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "0e36b12e46b04a69b5e9ff6883f6d23d"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
 </html>

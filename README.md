@@ -57,8 +57,8 @@ interface. A public Cloud Run agent uses Vertex AI to select from a fixed set of
 private MCP tools; those tools can read published report JSON, archived GTFS,
 and bounded BigQuery partitions, but cannot accept SQL or write project data.
 Responses carry structured text, charts, tables, data sources, and the exact
-timeframe used. The browser keeps the numbered question chain visible for each
-bounded follow-up thread while rendering the latest structured answer.
+timeframe used. The browser keeps the numbered question chain and follow-up
+composer inside the analysis panel while rendering the latest structured answer.
 
 Route comparisons are segmented by service type. Open-ended rankings default
 to regular Local/Rapid/Tempo service; 600-series Supplementary School Service,

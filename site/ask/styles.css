@@ -217,6 +217,24 @@ body {
   list-style: none;
 }
 
+.followup-form-home:not(:empty) {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #c8d9e3;
+}
+
+.followup-form-home #question {
+  min-height: 92px;
+}
+
+.followup-form-home .question-meta {
+  margin-bottom: 10px;
+}
+
+.followup-form-home .message {
+  background: #fff;
+}
+
 .thread-history li {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
