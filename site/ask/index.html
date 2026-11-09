@@ -4,10 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Ask about AC Transit performance</title>
-  <link rel="stylesheet" href="../styles.css?v=analysis-v7">
-  <link rel="stylesheet" href="styles.css?v=analysis-v7">
+  <link rel="stylesheet" href="../styles.css?v=analysis-v9">
+  <link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css">
+  <link rel="stylesheet" href="styles.css?v=analysis-v9">
   <script src="../independence-notice.js" defer></script>
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script src="../lib.js?v=analysis-maps-v1"></script>
 </head>
 <body>
   <header>
@@ -81,6 +84,7 @@
       <div id="timeframes" class="timeframes"></div>
       <div id="answer" class="answer"></div>
       <div id="warnings" class="warnings"></div>
+      <div id="maps" class="map-grid"></div>
       <div id="charts" class="chart-grid"></div>
       <div id="tables" class="table-stack"></div>
       <details id="sources-wrap" class="sources-wrap">
@@ -94,7 +98,7 @@
     <a href="https://kuanbutts.com" target="_blank" rel="noopener">A project by Kuan Butts</a>
   </footer>
 
-  <script src="app.js?v=analysis-v7"></script>
+  <script src="app.js?v=analysis-v9"></script>
   <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "0e36b12e46b04a69b5e9ff6883f6d23d"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
 </html>

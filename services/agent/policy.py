@@ -7,7 +7,9 @@ from typing import Any
 
 
 ROUTE_SCOPED_TOOLS = {
+    "get_route_delay_map",
     "get_route_performance",
+    "get_route_segment_performance_map",
     "get_route_service_profile",
     "get_route_time_profile",
     "list_scheduled_arrivals",
@@ -34,7 +36,9 @@ def prepare_tool_call(
     if tool_name == "rank_routes" and not prepared.get("route_group"):
         prepared["route_group"] = "regular"
     if route_id and tool_name in {
+        "get_route_delay_map",
         "get_route_performance",
+        "get_route_segment_performance_map",
         "get_route_service_profile",
         "get_route_time_profile",
         "list_scheduled_arrivals",
@@ -58,7 +62,9 @@ def prepare_tool_call(
                 ),
             }
         elif tool_name in {
+            "get_route_delay_map",
             "get_route_performance",
+            "get_route_segment_performance_map",
             "get_route_service_profile",
             "get_route_time_profile",
         }:
@@ -93,6 +99,7 @@ def eval_prompt_features(prompt: str) -> list[str]:
         "popularity_language": r"\b(popular|common|major|busy)\b",
         "school_service": r"\b(6\d{2}|600.series|school)\b",
         "all_nighter_service": r"\b(8\d{2}|800.series|all.nighter|overnight)\b",
+        "spatial": r"\b(map|where|location|segment|section|corridor|intersection|turn|stop.to.stop)\b",
     }
     for feature, pattern in patterns.items():
         if re.search(pattern, lowered):
@@ -209,6 +216,8 @@ def merge_tool_results(results: list[dict[str, Any]]) -> dict[str, Any]:
     timeframes: list[dict[str, Any]] = []
     charts: list[dict[str, Any]] = []
     chart_candidates: list[dict[str, Any]] = []
+    maps: list[dict[str, Any]] = []
+    map_candidates: list[dict[str, Any]] = []
     tables: list[dict[str, Any]] = []
     sources: list[dict[str, Any]] = []
     warnings: list[str] = []
@@ -221,6 +230,7 @@ def merge_tool_results(results: list[dict[str, Any]]) -> dict[str, Any]:
             timeframes.append(timeframe)
 
         chart_candidates.extend(result.get("charts") or [])
+        map_candidates.extend(result.get("maps") or [])
 
         for table in result.get("tables") or []:
             if len(tables) >= 2:
@@ -236,6 +246,30 @@ def merge_tool_results(results: list[dict[str, Any]]) -> dict[str, Any]:
         for warning in result.get("warnings") or []:
             if warning not in warnings and len(warnings) < 8:
                 warnings.append(str(warning))
+
+    map_candidates.sort(key=lambda item: int(item.get("priority") or 0), reverse=True)
+    total_map_features = 0
+    total_map_coordinates = 0
+    for item in map_candidates:
+        if len(maps) >= 3:
+            break
+        geojson = item.get("geojson") or {}
+        candidates = list(geojson.get("features") or [])
+        features = []
+        for feature in candidates:
+            coordinate_count = count_geojson_coordinates((feature.get("geometry") or {}).get("coordinates"))
+            if total_map_features >= 400 or total_map_coordinates + coordinate_count > 3500:
+                continue
+            features.append(feature)
+            total_map_features += 1
+            total_map_coordinates += coordinate_count
+        if features:
+            normalized = {key: value for key, value in item.items() if key != "priority"}
+            normalized["geojson"] = {
+                "type": "FeatureCollection",
+                "features": features,
+            }
+            maps.append(normalized)
 
     chart_candidates.sort(key=lambda chart: int(chart.get("priority") or 0), reverse=True)
     for chart in chart_candidates:
@@ -266,8 +300,33 @@ def merge_tool_results(results: list[dict[str, Any]]) -> dict[str, Any]:
 
     return {
         "timeframes": consolidate_timeframes(timeframes),
+        "maps": maps,
         "charts": charts,
         "tables": tables,
         "sources": sources,
         "warnings": warnings,
     }
+
+
+def count_geojson_coordinates(value: Any) -> int:
+    if not isinstance(value, list):
+        return 0
+    if len(value) >= 2 and all(isinstance(item, (int, float)) for item in value[:2]):
+        return 1
+    return sum(count_geojson_coordinates(item) for item in value)
+
+
+def compact_tool_result(result: dict[str, Any]) -> dict[str, Any]:
+    compact = dict(result)
+    maps = compact.pop("maps", [])
+    if maps:
+        compact["map_summaries"] = [
+            {
+                "title": item.get("title"),
+                "description": item.get("description"),
+                "feature_count": len((item.get("geojson") or {}).get("features") or []),
+                "value_label": (item.get("style") or {}).get("value_label"),
+            }
+            for item in maps[:3]
+        ]
+    return compact

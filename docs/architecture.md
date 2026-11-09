@@ -237,7 +237,7 @@ flowchart LR
     B --> M
     M -->|bounded structured result| V
     V -->|short plain-text explanation| A
-    A -->|answer + timeframe + charts + tables + sources| U
+    A -->|answer + timeframe + maps + charts + tables + sources| U
     A -->|question + structured response + eval trace| C[Private conversation archive\nGCS by UTC date/hour]
     A -->|redacted successful turn| R[Public conversation archive\nGCS by UTC date/hour]
     H[Static conversation-history page] -->|public object list + GET| R
@@ -254,6 +254,10 @@ The initial tool set covers:
 - systemwide performance summaries;
 - route comparisons and bounded rankings over approved metrics;
 - one-route performance summaries;
+- route stop-delay maps for median delay, 95th-percentile delay, and delay
+  variability, returned as one bounded GeoJSON artifact per direction;
+- route section maps for time added versus schedule, observed travel time, and
+  speed between consecutive scheduled stops;
 - daily scheduled and Dropped / not observed trip counts plus a scheduled-start
   hour-of-week heatmap for one route;
 - hourly route delay/observation profiles;
@@ -269,11 +273,23 @@ comparisons, so the boundary does not depend on the model remembering the
 distinction. Structured results carry the service group, explanatory note, and
 official classification source.
 
-All results use a common envelope: `answer_context`, `timeframe`, `charts`,
-`tables`, `sources`, and `warnings`. The model writes only the short narrative;
-the browser renders the structured fields directly, including `line`, `bar`,
-and accessible 24-hour by 7-day `heatmap` charts, and caps the result at three
-charts, two tables, 500 chart points or heatmap cells, and 250 rows/table.
+All results use a common envelope: `answer_context`, `timeframe`, `maps`,
+`charts`, `tables`, `sources`, and `warnings`. The model writes only the short
+narrative. For spatial tools, the MCP performs the parameterized BigQuery query,
+joins observations to current processed GTFS, slices the route shapes, and emits
+the final styled GeoJSON. The model receives only the map title, description,
+feature count, and metric label rather than raw coordinates. The browser renders
+up to three maps, three `line`, `bar`, or accessible 24-hour by 7-day `heatmap`
+charts, and two tables. Policy caps map payloads at 400 features and 3,500
+coordinates total, chart payloads at 500 points or heatmap cells, and tables at
+250 rows each.
+
+Map analysis is limited to seven calendar days and uses only deduplicated,
+non-stale observed arrivals. Each direction is a separate map. Stop maps include
+the current scheduled route patterns and every stop in that direction, including
+no-data stops. Section maps color the shape between consecutive scheduled stops.
+They can identify a slow section or time added versus schedule, but cannot
+attribute that time to one turn, signal, or intersection within the section.
 
 ### Missing timeframe policy
 
@@ -284,6 +300,7 @@ does not provide a complete timeframe:
 |---|---|
 | route comparison, route summary, ranking, or system summary | seven calendar days ending yesterday in Pacific time |
 | hourly route profile | seven calendar days ending yesterday in Pacific time |
+| route stop or section map | seven calendar days ending yesterday in Pacific time |
 | scheduled-arrival list | 06:00–10:00 Pacific yesterday |
 | question opened from a route page | the Sunday–Saturday week displayed on that page; arrival lists use its ending service date |
 
@@ -338,8 +355,9 @@ structured log with prompt feature tags and bounded tool arguments, but not raw
 visitor text. The manual route-category eval suite checks that regular, school,
 and All Nighter results remain segmented. A separate multi-turn suite replays
 the Route 1T monthly follow-up and requires both the absolute-count bar chart and
-the hour-of-week heatmap. Both suites observe the normal cooldown and are
-deliberately excluded from CI.
+the hour-of-week heatmap. It also runs a Route 51A spatial thread that requires
+a stop-delay map followed by a stop-to-stop section map. Both suites observe the
+normal cooldown and are deliberately excluded from CI.
 
 Every accepted analysis turn is also archived as one JSON object in the private
 `transit-203605-analysis-chats` bucket. Object names use

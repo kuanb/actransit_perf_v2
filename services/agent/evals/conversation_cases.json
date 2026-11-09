@@ -16,5 +16,23 @@
         "forbidden_answer_terms": ["exceeds the data query limits", "request a narrower date window"]
       }
     ]
+  },
+  {
+    "id": "route_51a_spatial_deep_dive",
+    "scope": {"route_id": "51A", "week_end": null},
+    "turns": [
+      {
+        "prompt": "Where does the bus fall furthest behind its schedule?",
+        "minimum_map_count": 1,
+        "required_map_targets": ["stop"],
+        "required_map_title_terms": ["delay"]
+      },
+      {
+        "prompt": "Which stop-to-stop sections add the most time versus schedule?",
+        "minimum_map_count": 1,
+        "required_map_targets": ["segment"],
+        "required_map_title_terms": ["time added versus schedule"]
+      }
+    ]
   }
 ]

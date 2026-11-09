@@ -13,6 +13,7 @@ PUBLIC_RESPONSE_FIELDS = (
     "answer",
     "timeframes",
     "warnings",
+    "maps",
     "charts",
     "tables",
     "sources",
@@ -105,7 +106,7 @@ class ConversationRecorder:
             "question": values["question"],
             "response": values["response"],
             "evaluation": {
-                "policy_version": "route-groups-and-chart-contract-v2",
+                "policy_version": "spatial-map-contract-v3",
                 "prompt_features": values["prompt_features"],
                 "tool_calls": values["tool_calls"],
             },

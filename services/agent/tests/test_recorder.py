@@ -115,6 +115,7 @@ class PublicConversationPublisherTest(unittest.TestCase):
                     "answer": "See https://example.com and call 510-555-1212.",
                     "timeframes": [{"start_date": "2026-10-30", "end_date": "2026-11-05"}],
                     "charts": [{"type": "bar", "title": "Route 1T"}],
+                    "maps": [{"title": "Route 1T delay", "geojson": {"type": "FeatureCollection", "features": []}}],
                     "request_id": "must-not-publish",
                     "active_queries": 1,
                 },
@@ -138,6 +139,7 @@ class PublicConversationPublisherTest(unittest.TestCase):
         )
         self.assertNotIn("request_id", payload["response"])
         self.assertNotIn("active_queries", payload["response"])
+        self.assertEqual("Route 1T delay", payload["response"]["maps"][0]["title"])
         self.assertNotIn("thread_id", payload)
         self.assertEqual(payload["scope"], {"route_id": "1T", "week_end": None})
         self.assertEqual(blob.cache_control, "public, max-age=31536000, immutable")

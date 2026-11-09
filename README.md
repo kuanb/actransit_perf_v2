@@ -56,9 +56,13 @@ The report card and route pages also link to an experimental read-only analysis
 interface. A public Cloud Run agent uses Vertex AI to select from a fixed set of
 private MCP tools; those tools can read published report JSON, archived GTFS,
 and bounded BigQuery partitions, but cannot accept SQL or write project data.
-Responses carry structured text, charts, tables, data sources, and the exact
-timeframe used. The browser keeps the numbered question chain and follow-up
-composer inside the analysis panel while rendering the latest structured answer.
+Responses carry structured text, maps, charts, tables, data sources, and the exact
+timeframe used. Route deep dives can return multiple Mapbox maps with bounded
+GeoJSON for the current route patterns, every scheduled stop, stop-level delay,
+and stop-to-stop time or speed. The private MCP builds the SQL aggregates,
+geometry, and styling; the model only selects a fixed tool and summarizes its
+result. The browser keeps the numbered question chain and follow-up composer
+inside the analysis panel while rendering the latest structured answer.
 Route service-profile answers include absolute scheduled and Dropped / not
 observed trip bars plus a 24-hour by 7-day heatmap keyed to scheduled trip starts.
 

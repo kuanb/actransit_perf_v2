@@ -8,7 +8,7 @@ import re
 import threading
 import time as monotonic_time
 import zipfile
-from collections import defaultdict
+from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, time, timedelta, timezone
 from functools import lru_cache
@@ -42,6 +42,18 @@ PROFILE_METRICS = {
     "observed_arrivals": ("Observed stop arrivals by hour", "n", "Observed arrivals"),
 }
 WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+STOP_MAP_METRICS = {
+    "median_delay": ("Median delay", "p50_delay_s", "minutes"),
+    "p95_delay": ("95th-percentile delay", "p95_delay_s", "minutes"),
+    "delay_variability": ("Delay variability", "stddev_delay_s", "minutes standard deviation"),
+}
+SEGMENT_MAP_METRICS = {
+    "median_schedule_loss": ("Median time added versus schedule", "p50_schedule_loss_s", "minutes"),
+    "p95_schedule_loss": ("95th-percentile time added versus schedule", "p95_schedule_loss_s", "minutes"),
+    "median_travel_time": ("Median stop-to-stop travel time", "p50_travel_time_s", "minutes"),
+    "p95_travel_time": ("95th-percentile stop-to-stop travel time", "p95_travel_time_s", "minutes"),
+    "median_speed": ("Median stop-to-stop speed", "p50_speed_mps", "mph"),
+}
 
 
 class TransitData:
@@ -237,6 +249,321 @@ class TransitData:
             sources=[daily_source(resolved.dates)],
             warnings=resolved.warnings + ["Delay percentiles are summarized from published daily percentiles."],
         )
+
+    def get_route_delay_map(
+        self,
+        route_id: str,
+        metric: str = "median_delay",
+        start_date: str | None = None,
+        end_date: str | None = None,
+        direction_id: int | None = None,
+    ) -> dict[str, Any]:
+        route_id = validate_route_id(route_id)
+        validate_direction_id(direction_id)
+        if metric not in STOP_MAP_METRICS:
+            raise ValueError(f"metric must be one of: {', '.join(STOP_MAP_METRICS)}")
+        resolved = self.resolve_map_dates(start_date, end_date)
+        route = self.read_json(f"gtfs/processed/route_{route_id}.json")
+        rows = self.query_stop_map_stats(
+            route_id,
+            resolved.dates,
+            direction_id,
+        )
+        label, field, unit = STOP_MAP_METRICS[metric]
+        grouped: dict[int, dict[str, dict[str, Any]]] = defaultdict(dict)
+        ranked = []
+        for row in rows:
+            if row.get("direction_id") is None or row.get(field) is None:
+                continue
+            direction = int(row["direction_id"])
+            value = round(float(row[field]) / 60.0, 1)
+            stop_id = str(row["stop_id"])
+            stop = (route.get("stops") or {}).get(stop_id) or {}
+            normalized = {
+                "direction_id": direction,
+                "stop_id": stop_id,
+                "stop_name": stop.get("stop_name") or stop_id,
+                "metric_value": value,
+                "metric_display": format_map_value(value, unit),
+                "observations": int(row.get("observations") or 0),
+            }
+            grouped[direction][stop_id] = normalized
+            ranked.append(normalized)
+        if not ranked:
+            raise ValueError(f"Route {route_id} has no mapped stop-delay observations in the selected period")
+
+        style = map_style(metric, [row["metric_value"] for row in ranked])
+        maps = [
+            build_stop_performance_map(
+                route_id,
+                route,
+                direction,
+                grouped[direction],
+                label,
+                style,
+                100 - index,
+            )
+            for index, direction in enumerate(sorted(grouped))
+        ]
+        ranked.sort(key=lambda row: row["metric_value"], reverse=True)
+        leaders = ", ".join(
+            f"direction {row['direction_id']} at {row['stop_name']} ({row['metric_display']})"
+            for row in ranked[:5]
+        )
+        return tool_result(
+            answer_context=f"Route {route_id} {label.lower()} is highest at {leaders}.",
+            timeframe=resolved.timeframe,
+            maps=maps,
+            charts=[],
+            tables=[
+                {
+                    "title": f"Route {route_id} highest {label.lower()} stops",
+                    "columns": [
+                        {"key": "direction_id", "label": "Direction"},
+                        {"key": "stop_name", "label": "Stop"},
+                        {"key": "metric_display", "label": label},
+                        {"key": "observations", "label": "Observed arrivals"},
+                    ],
+                    "rows": ranked[:20],
+                }
+            ],
+            sources=[
+                spatial_bigquery_source(self.project_id, resolved.dates),
+                processed_gtfs_source(route_id, route),
+            ],
+            warnings=resolved.warnings
+            + [
+                "Map geometry and stop locations use the current processed GTFS feed; the performance values use the selected service dates.",
+                "Each direction map includes the current scheduled patterns and stops, including stops without enough observations to calculate the selected metric.",
+            ],
+        )
+
+    def get_route_segment_performance_map(
+        self,
+        route_id: str,
+        metric: str = "median_schedule_loss",
+        start_date: str | None = None,
+        end_date: str | None = None,
+        direction_id: int | None = None,
+    ) -> dict[str, Any]:
+        route_id = validate_route_id(route_id)
+        validate_direction_id(direction_id)
+        if metric not in SEGMENT_MAP_METRICS:
+            raise ValueError(f"metric must be one of: {', '.join(SEGMENT_MAP_METRICS)}")
+        resolved = self.resolve_map_dates(start_date, end_date)
+        route = self.read_json(f"gtfs/processed/route_{route_id}.json")
+        rows = self.query_segment_map_stats(
+            route_id,
+            resolved.dates,
+            direction_id,
+        )
+        label, field, unit = SEGMENT_MAP_METRICS[metric]
+        grouped: dict[int, list[dict[str, Any]]] = defaultdict(list)
+        ranked = []
+        for row in rows:
+            if row.get("direction_id") is None or row.get(field) is None:
+                continue
+            direction = int(row["direction_id"])
+            raw_value = float(row[field])
+            value = raw_value * 2.236936 if metric == "median_speed" else raw_value / 60.0
+            from_stop_id = str(row["from_stop_id"])
+            to_stop_id = str(row["to_stop_id"])
+            stops = route.get("stops") or {}
+            normalized = {
+                "direction_id": direction,
+                "from_stop_id": from_stop_id,
+                "from_stop_name": (stops.get(from_stop_id) or {}).get("stop_name") or from_stop_id,
+                "to_stop_id": to_stop_id,
+                "to_stop_name": (stops.get(to_stop_id) or {}).get("stop_name") or to_stop_id,
+                "metric_value": round(value, 1),
+                "metric_display": format_map_value(value, unit),
+                "observations": int(row.get("observations") or 0),
+            }
+            grouped[direction].append(normalized)
+            ranked.append(normalized)
+        if not ranked:
+            raise ValueError(f"Route {route_id} has no mapped segment observations in the selected period")
+
+        style = map_style(metric, [row["metric_value"] for row in ranked])
+        maps = [
+            build_segment_performance_map(
+                route_id,
+                route,
+                direction,
+                grouped[direction],
+                label,
+                style,
+                100 - index,
+            )
+            for index, direction in enumerate(sorted(grouped))
+        ]
+        reverse = metric != "median_speed"
+        ranked.sort(key=lambda row: row["metric_value"], reverse=reverse)
+        leaders = ", ".join(
+            f"direction {row['direction_id']} from {row['from_stop_name']} to {row['to_stop_name']} ({row['metric_display']})"
+            for row in ranked[:5]
+        )
+        return tool_result(
+            answer_context=f"Route {route_id} {label.lower()} is most notable on {leaders}.",
+            timeframe=resolved.timeframe,
+            maps=maps,
+            charts=[],
+            tables=[
+                {
+                    "title": f"Route {route_id} stop-to-stop {label.lower()}",
+                    "columns": [
+                        {"key": "direction_id", "label": "Direction"},
+                        {"key": "from_stop_name", "label": "From"},
+                        {"key": "to_stop_name", "label": "To"},
+                        {"key": "metric_display", "label": label},
+                        {"key": "observations", "label": "Observed trips"},
+                    ],
+                    "rows": ranked[:20],
+                }
+            ],
+            sources=[
+                spatial_bigquery_source(self.project_id, resolved.dates),
+                processed_gtfs_source(route_id, route),
+            ],
+            warnings=resolved.warnings
+            + [
+                "Sections run between consecutive scheduled stops. These observations cannot isolate delay at a particular turn or intersection inside a section.",
+                "Longer sections naturally have longer absolute travel times; time added versus schedule or median speed is better for comparing differently sized sections.",
+                "Map geometry and stop locations use the current processed GTFS feed; the performance values use the selected service dates.",
+            ],
+        )
+
+    def resolve_map_dates(
+        self,
+        start_date: str | None,
+        end_date: str | None,
+    ):
+        resolved = resolve_daily_dates(self.published_dates(), start_date, end_date)
+        start = date.fromisoformat(str(resolved.timeframe["start_date"]))
+        end = date.fromisoformat(str(resolved.timeframe["end_date"]))
+        if (end - start).days > 6:
+            raise ValueError("Route maps are limited to seven calendar days")
+        return resolved
+
+    def query_stop_map_stats(
+        self,
+        route_id: str,
+        service_dates: list[str],
+        direction_id: int | None,
+    ) -> list[dict[str, Any]]:
+        sql = f"""
+            WITH obs AS (
+              SELECT *
+              FROM `{self.project_id}.actransit.trip_observations`
+              WHERE service_date IN UNNEST(@service_dates)
+                AND route_id = @route_id
+              QUALIFY ROW_NUMBER() OVER (
+                PARTITION BY service_date, trip_id, stop_sequence
+                ORDER BY IF(actual_arrival IS NULL, 1, 0), ingested_at DESC
+              ) = 1
+            )
+            SELECT
+              direction_id,
+              stop_id,
+              COUNT(*) AS observations,
+              APPROX_QUANTILES(delay_seconds, 100)[OFFSET(50)] AS p50_delay_s,
+              APPROX_QUANTILES(delay_seconds, 100)[OFFSET(95)] AS p95_delay_s,
+              STDDEV(CAST(delay_seconds AS FLOAT64)) AS stddev_delay_s
+            FROM obs
+            WHERE actual_arrival IS NOT NULL
+              AND is_stale = FALSE
+              AND (@direction_id IS NULL OR direction_id = @direction_id)
+            GROUP BY direction_id, stop_id
+            ORDER BY direction_id, stop_id
+        """
+        return self.run_spatial_query(sql, route_id, service_dates, direction_id)
+
+    def query_segment_map_stats(
+        self,
+        route_id: str,
+        service_dates: list[str],
+        direction_id: int | None,
+    ) -> list[dict[str, Any]]:
+        sql = f"""
+            WITH obs AS (
+              SELECT *
+              FROM `{self.project_id}.actransit.trip_observations`
+              WHERE service_date IN UNNEST(@service_dates)
+                AND route_id = @route_id
+              QUALIFY ROW_NUMBER() OVER (
+                PARTITION BY service_date, trip_id, stop_sequence
+                ORDER BY IF(actual_arrival IS NULL, 1, 0), ingested_at DESC
+              ) = 1
+            ), sequenced AS (
+              SELECT
+                direction_id,
+                stop_id AS to_stop_id,
+                LAG(stop_id) OVER trip_stops AS from_stop_id,
+                scheduled_arrival,
+                LAG(scheduled_arrival) OVER trip_stops AS previous_scheduled_arrival,
+                actual_arrival,
+                leg_duration_s,
+                leg_avg_speed_mps,
+                is_stale
+              FROM obs
+              WINDOW trip_stops AS (
+                PARTITION BY service_date, trip_id
+                ORDER BY stop_sequence
+              )
+            ), legs AS (
+              SELECT
+                *,
+                leg_duration_s - TIMESTAMP_DIFF(
+                  scheduled_arrival,
+                  previous_scheduled_arrival,
+                  SECOND
+                ) AS schedule_loss_s
+              FROM sequenced
+              WHERE from_stop_id IS NOT NULL
+                AND scheduled_arrival IS NOT NULL
+                AND previous_scheduled_arrival IS NOT NULL
+                AND actual_arrival IS NOT NULL
+                AND is_stale = FALSE
+                AND leg_duration_s BETWEEN 1 AND 7200
+                AND leg_avg_speed_mps BETWEEN 0 AND 35
+                AND (@direction_id IS NULL OR direction_id = @direction_id)
+            )
+            SELECT
+              direction_id,
+              from_stop_id,
+              to_stop_id,
+              COUNT(*) AS observations,
+              APPROX_QUANTILES(schedule_loss_s, 100)[OFFSET(50)] AS p50_schedule_loss_s,
+              APPROX_QUANTILES(schedule_loss_s, 100)[OFFSET(95)] AS p95_schedule_loss_s,
+              APPROX_QUANTILES(leg_duration_s, 100)[OFFSET(50)] AS p50_travel_time_s,
+              APPROX_QUANTILES(leg_duration_s, 100)[OFFSET(95)] AS p95_travel_time_s,
+              APPROX_QUANTILES(leg_avg_speed_mps, 100)[OFFSET(50)] AS p50_speed_mps
+            FROM legs
+            GROUP BY direction_id, from_stop_id, to_stop_id
+            ORDER BY direction_id, from_stop_id, to_stop_id
+        """
+        return self.run_spatial_query(sql, route_id, service_dates, direction_id)
+
+    def run_spatial_query(
+        self,
+        sql: str,
+        route_id: str,
+        service_dates: list[str],
+        direction_id: int | None,
+    ) -> list[dict[str, Any]]:
+        config = bigquery.QueryJobConfig(
+            maximum_bytes_billed=self.maximum_bytes_billed,
+            query_parameters=[
+                bigquery.ArrayQueryParameter(
+                    "service_dates",
+                    "DATE",
+                    [date.fromisoformat(value) for value in service_dates],
+                ),
+                bigquery.ScalarQueryParameter("route_id", "STRING", route_id),
+                bigquery.ScalarQueryParameter("direction_id", "INT64", direction_id),
+            ],
+        )
+        return [dict(row.items()) for row in self.bigquery.query(sql, job_config=config).result(timeout=20)]
 
     def get_route_service_profile(
         self,
@@ -1003,6 +1330,310 @@ def validate_route_id(route_id: str) -> str:
     return route_id
 
 
+def validate_direction_id(direction_id: int | None) -> None:
+    if direction_id not in {None, 0, 1}:
+        raise ValueError("direction_id must be 0 or 1")
+
+
+def route_direction_features(
+    route_id: str,
+    route: dict[str, Any],
+    direction_id: int,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    trips = [
+        trip
+        for trip in (route.get("trips") or {}).values()
+        if int(trip.get("direction_id") or 0) == direction_id
+    ]
+    if not trips:
+        return [], []
+    shape_counts = Counter(
+        str(trip.get("shape_id"))
+        for trip in trips
+        if trip.get("shape_id") in (route.get("shapes") or {})
+    )
+    selected_shapes = [shape_id for shape_id, _ in shape_counts.most_common()]
+    points_per_shape = max(2, 500 // max(1, len(selected_shapes)))
+    route_features = []
+    for shape_id in selected_shapes:
+        coordinates = sample_shape_coordinates(
+            (route.get("shapes") or {}).get(shape_id) or [],
+            points_per_shape,
+        )
+        if len(coordinates) < 2:
+            continue
+        route_features.append(
+            {
+                "type": "Feature",
+                "geometry": {"type": "LineString", "coordinates": coordinates},
+                "properties": {
+                    "feature_kind": "route",
+                    "name": f"Route {route_id}",
+                    "direction_id": direction_id,
+                    "shape_id": shape_id,
+                },
+            }
+        )
+    stop_ids = sorted(
+        {
+            str(stop_time.get("stop_id"))
+            for trip in trips
+            for stop_time in (trip.get("stop_times") or [])
+            if stop_time.get("stop_id")
+        }
+    )
+    return route_features, stop_ids
+
+
+def build_stop_performance_map(
+    route_id: str,
+    route: dict[str, Any],
+    direction_id: int,
+    stats: dict[str, dict[str, Any]],
+    label: str,
+    style: dict[str, Any],
+    priority: int,
+) -> dict[str, Any]:
+    features, stop_ids = route_direction_features(route_id, route, direction_id)
+    stops = route.get("stops") or {}
+    for stop_id in stop_ids:
+        stop = stops.get(stop_id)
+        if not stop:
+            continue
+        values = stats.get(stop_id) or {}
+        features.append(
+            {
+                "type": "Feature",
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [float(stop["lon"]), float(stop["lat"])],
+                },
+                "properties": {
+                    "feature_kind": "stop",
+                    "name": stop.get("stop_name") or stop_id,
+                    "stop_id": stop_id,
+                    "direction_id": direction_id,
+                    "metric_value": values.get("metric_value"),
+                    "has_metric": values.get("metric_value") is not None,
+                    "metric_display": values.get("metric_display") or "No observations",
+                    "observations": values.get("observations") or 0,
+                },
+            }
+        )
+    return {
+        "priority": priority,
+        "title": f"Route {route_id} direction {direction_id}: {label.lower()} by stop",
+        "description": "The line shows current scheduled route patterns; colored stops show the selected performance measure.",
+        "geojson": {"type": "FeatureCollection", "features": features},
+        "style": {**style, "target": "stop", "value_label": label},
+        "popup_fields": [
+            {"property": "name", "label": "Stop"},
+            {"property": "metric_display", "label": label},
+            {"property": "observations", "label": "Observed arrivals"},
+        ],
+    }
+
+
+def build_segment_performance_map(
+    route_id: str,
+    route: dict[str, Any],
+    direction_id: int,
+    stats: list[dict[str, Any]],
+    label: str,
+    style: dict[str, Any],
+    priority: int,
+) -> dict[str, Any]:
+    features, stop_ids = route_direction_features(route_id, route, direction_id)
+    pair_geometries = route_pair_geometries(route, direction_id)
+    for row in stats:
+        coordinates = pair_geometries.get((row["from_stop_id"], row["to_stop_id"]))
+        if not coordinates:
+            continue
+        features.append(
+            {
+                "type": "Feature",
+                "geometry": {"type": "LineString", "coordinates": coordinates},
+                "properties": {
+                    "feature_kind": "segment",
+                    "has_metric": True,
+                    "name": f"{row['from_stop_name']} to {row['to_stop_name']}",
+                    **row,
+                },
+            }
+        )
+    stops = route.get("stops") or {}
+    for stop_id in stop_ids:
+        stop = stops.get(stop_id)
+        if not stop:
+            continue
+        features.append(
+            {
+                "type": "Feature",
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [float(stop["lon"]), float(stop["lat"])],
+                },
+                "properties": {
+                    "feature_kind": "stop",
+                    "name": stop.get("stop_name") or stop_id,
+                    "stop_id": stop_id,
+                    "direction_id": direction_id,
+                },
+            }
+        )
+    return {
+        "priority": priority,
+        "title": f"Route {route_id} direction {direction_id}: {label.lower()} by section",
+        "description": "Colored lines show performance between consecutive scheduled stops; stop dots provide landmarks.",
+        "geojson": {"type": "FeatureCollection", "features": features},
+        "style": {**style, "target": "segment", "value_label": label},
+        "popup_fields": [
+            {"property": "from_stop_name", "label": "From"},
+            {"property": "to_stop_name", "label": "To"},
+            {"property": "metric_display", "label": label},
+            {"property": "observations", "label": "Observed trips"},
+        ],
+    }
+
+
+def route_pair_geometries(
+    route: dict[str, Any],
+    direction_id: int,
+) -> dict[tuple[str, str], list[list[float]]]:
+    trips = sorted(
+        (
+            trip
+            for trip in (route.get("trips") or {}).values()
+            if int(trip.get("direction_id") or 0) == direction_id
+        ),
+        key=lambda trip: len(trip.get("stop_times") or []),
+        reverse=True,
+    )
+    shapes = route.get("shapes") or {}
+    pairs: dict[tuple[str, str], list[list[float]]] = {}
+    for trip in trips:
+        shape = shapes.get(trip.get("shape_id")) or []
+        stop_times = trip.get("stop_times") or []
+        for previous, current in zip(stop_times, stop_times[1:]):
+            key = (str(previous.get("stop_id")), str(current.get("stop_id")))
+            if key in pairs:
+                continue
+            start_distance = float(previous.get("dist_along_route_m") or 0)
+            end_distance = float(current.get("dist_along_route_m") or 0)
+            coordinates = slice_shape_coordinates(shape, start_distance, end_distance, 20)
+            if len(coordinates) >= 2:
+                pairs[key] = coordinates
+    return pairs
+
+
+def sample_shape_coordinates(shape: list, maximum: int) -> list[list[float]]:
+    coordinates = [[float(point[1]), float(point[0])] for point in shape if len(point) >= 2]
+    return sample_coordinates(coordinates, maximum)
+
+
+def sample_coordinates(coordinates: list[list[float]], maximum: int) -> list[list[float]]:
+    if len(coordinates) <= maximum:
+        return coordinates
+    indices = [round(index * (len(coordinates) - 1) / (maximum - 1)) for index in range(maximum)]
+    return [coordinates[index] for index in dict.fromkeys(indices)]
+
+
+def slice_shape_coordinates(
+    shape: list,
+    start_distance: float,
+    end_distance: float,
+    maximum: int,
+) -> list[list[float]]:
+    if len(shape) < 2 or end_distance <= start_distance:
+        return []
+    coordinates = [coordinate_at_distance(shape, start_distance)]
+    coordinates.extend(
+        [float(point[1]), float(point[0])]
+        for point in shape
+        if len(point) >= 3 and start_distance < float(point[2]) < end_distance
+    )
+    coordinates.append(coordinate_at_distance(shape, end_distance))
+    return sample_coordinates(coordinates, maximum)
+
+
+def coordinate_at_distance(shape: list, target: float) -> list[float]:
+    if target <= float(shape[0][2]):
+        return [float(shape[0][1]), float(shape[0][0])]
+    for previous, current in zip(shape, shape[1:]):
+        previous_distance = float(previous[2])
+        current_distance = float(current[2])
+        if target > current_distance:
+            continue
+        span = current_distance - previous_distance
+        ratio = 0.0 if span <= 0 else (target - previous_distance) / span
+        lat = float(previous[0]) + (float(current[0]) - float(previous[0])) * ratio
+        lon = float(previous[1]) + (float(current[1]) - float(previous[1])) * ratio
+        return [lon, lat]
+    return [float(shape[-1][1]), float(shape[-1][0])]
+
+
+def map_style(metric: str, values: list[float]) -> dict[str, Any]:
+    fixed = {
+        "median_delay": [(0, "#2b8a3e", "On schedule"), (3, "#f59f00", "+3 min"), (7, "#c92a2a", "+7 min or more")],
+        "p95_delay": [(0, "#2b8a3e", "On schedule"), (3, "#f59f00", "+3 min"), (7, "#c92a2a", "+7 min or more")],
+        "delay_variability": [(0, "#2b8a3e", "Consistent"), (2, "#f59f00", "2 min std dev"), (5, "#c92a2a", "5+ min std dev")],
+        "median_schedule_loss": [(-1, "#2b8a3e", "1 min faster"), (1, "#f59f00", "1 min added"), (5, "#c92a2a", "5+ min added")],
+        "p95_schedule_loss": [(-1, "#2b8a3e", "1 min faster"), (2, "#f59f00", "2 min added"), (7, "#c92a2a", "7+ min added")],
+        "median_speed": [(5, "#c92a2a", "5 mph"), (12, "#f59f00", "12 mph"), (20, "#2b8a3e", "20+ mph")],
+    }
+    if metric in fixed:
+        stops = fixed[metric]
+    else:
+        ordered = sorted(values)
+        low = ordered[0]
+        middle = ordered[len(ordered) // 2]
+        high = ordered[-1]
+        if high <= low:
+            high = low + 1
+        middle = max(low + 0.01, min(middle, high - 0.01))
+        stops = [
+            (low, "#2c7fb8", format_map_value(low, "minutes")),
+            (middle, "#fec44f", format_map_value(middle, "minutes")),
+            (high, "#c51b7d", format_map_value(high, "minutes")),
+        ]
+    return {
+        "property": "metric_value",
+        "stops": [
+            {"value": value, "color": color, "label": label}
+            for value, color, label in stops
+        ],
+        "no_data_color": "#a8b2bd",
+    }
+
+
+def format_map_value(value: float, unit: str) -> str:
+    rounded = round(float(value), 1)
+    if unit == "mph":
+        return f"{rounded:.1f} mph"
+    if unit == "minutes standard deviation":
+        return f"{rounded:.1f} min standard deviation"
+    return f"{rounded:+.1f} min" if rounded < 0 else f"{rounded:.1f} min"
+
+
+def spatial_bigquery_source(project_id: str, dates: list[str]) -> dict[str, Any]:
+    return {
+        "kind": "bigquery",
+        "table": f"{project_id}.actransit.trip_observations",
+        "start_date": dates[0],
+        "end_date": dates[-1],
+        "deduplicated": True,
+    }
+
+
+def processed_gtfs_source(route_id: str, route: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "kind": "processed_gtfs",
+        "route_id": route_id,
+        "object": f"gtfs/processed/route_{route_id}.json",
+        "feed_hash": route.get("feed_hash"),
+    }
+
+
 def validate_route_ids(route_ids: list[str], minimum: int, maximum: int) -> list[str]:
     unique = list(dict.fromkeys(validate_route_id(route_id) for route_id in route_ids))
     if len(unique) < minimum or len(unique) > maximum:
@@ -1044,10 +1675,12 @@ def tool_result(
     tables: list[dict[str, Any]],
     sources: list[dict[str, Any]],
     warnings: list[str],
+    maps: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     return {
         "answer_context": answer_context,
         "timeframe": timeframe,
+        "maps": (maps or [])[:3],
         "charts": charts[:3],
         "tables": [{**table, "rows": table.get("rows", [])[:250]} for table in tables[:2]],
         "sources": sources[:8],

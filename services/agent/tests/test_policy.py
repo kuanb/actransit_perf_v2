@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from policy import (
     apply_context_timeframe,
+    compact_tool_result,
     enforce_route_group,
     eval_prompt_features,
     extend_conversation,
@@ -31,6 +32,15 @@ class ScopePolicyTest(unittest.TestCase):
         )
 
         self.assertEqual("51A", arguments["route_id"])
+
+    def test_route_scope_overwrites_map_route_and_applies_page_week(self):
+        arguments, timeframe = prepare_tool_call(
+            "get_route_delay_map", {"route_id": "72"}, "51A", "2026-10-31"
+        )
+
+        self.assertEqual("51A", arguments["route_id"])
+        self.assertEqual("2026-10-25", arguments["start_date"])
+        self.assertIn("week shown by the route page", timeframe["disclosure"])
 
     def test_route_scope_rejects_systemwide_ranking(self):
         with self.assertRaises(ValueError):
@@ -68,6 +78,11 @@ class ScopePolicyTest(unittest.TestCase):
         self.assertIn("hourly", features)
         self.assertIn("dropped_trip_timing", features)
 
+    def test_eval_features_tag_spatial_question(self):
+        features = eval_prompt_features("Where does the bus lose time near an intersection?")
+
+        self.assertIn("spatial", features)
+
     def test_popular_route_ranking_cannot_drift_into_special_service(self):
         arguments = enforce_route_group(
             "rank_routes",
@@ -88,6 +103,28 @@ class ScopePolicyTest(unittest.TestCase):
 
 
 class MergeResultsTest(unittest.TestCase):
+    def test_model_receives_map_summary_without_geojson_coordinates(self):
+        result = {
+            "answer_context": "Route delay map.",
+            "maps": [
+                {
+                    "title": "Direction 0",
+                    "description": "Delay by stop",
+                    "style": {"value_label": "Median delay"},
+                    "geojson": {
+                        "type": "FeatureCollection",
+                        "features": [{"geometry": {"coordinates": [-122.2, 37.8]}}],
+                    },
+                }
+            ],
+        }
+
+        compact = compact_tool_result(result)
+
+        self.assertNotIn("maps", compact)
+        self.assertEqual(1, compact["map_summaries"][0]["feature_count"])
+        self.assertNotIn("geojson", compact["map_summaries"][0])
+
     def test_caps_charts_tables_and_chart_points(self):
         result = {
             "timeframe": {"start_date": "2026-10-01", "end_date": "2026-10-01"},
@@ -153,6 +190,78 @@ class MergeResultsTest(unittest.TestCase):
         self.assertEqual(7, len(merged["charts"][1]["y_labels"]))
         self.assertNotIn("priority", merged["charts"][0])
 
+    def test_merges_multiple_maps_and_caps_total_coordinate_count(self):
+        result = {
+            "maps": [
+                {
+                    "priority": 10,
+                    "title": "Direction 0",
+                    "geojson": {
+                        "type": "FeatureCollection",
+                        "features": [
+                            {
+                                "type": "Feature",
+                                "geometry": {
+                                    "type": "LineString",
+                                    "coordinates": [[value, value] for value in range(3601)],
+                                },
+                                "properties": {},
+                            },
+                            {
+                                "type": "Feature",
+                                "geometry": {"type": "Point", "coordinates": [0, 0]},
+                                "properties": {},
+                            },
+                        ],
+                    },
+                },
+                {
+                    "priority": 9,
+                    "title": "Direction 1",
+                    "geojson": {
+                        "type": "FeatureCollection",
+                        "features": [
+                            {
+                                "type": "Feature",
+                                "geometry": {"type": "Point", "coordinates": [1, 2]},
+                                "properties": {},
+                            }
+                        ],
+                    },
+                },
+            ]
+        }
+
+        merged = merge_tool_results([result])
+
+        self.assertEqual(["Direction 0", "Direction 1"], [item["title"] for item in merged["maps"]])
+        self.assertEqual(1, len(merged["maps"][0]["geojson"]["features"]))
+        self.assertNotIn("priority", merged["maps"][0])
+
+    def test_caps_total_map_features(self):
+        result = {
+            "maps": [
+                {
+                    "title": "Bounded map",
+                    "geojson": {
+                        "type": "FeatureCollection",
+                        "features": [
+                            {
+                                "type": "Feature",
+                                "geometry": {"type": "Point", "coordinates": [value, value]},
+                                "properties": {},
+                            }
+                            for value in range(450)
+                        ],
+                    },
+                }
+            ]
+        }
+
+        merged = merge_tool_results([result])
+
+        self.assertEqual(400, len(merged["maps"][0]["geojson"]["features"]))
+
 
 class ConversationTest(unittest.TestCase):
     def test_initial_answer_allows_three_follow_ups(self):
@@ -200,6 +309,14 @@ class EvalCaseTest(unittest.TestCase):
         final_turn = cases[0]["turns"][-1]
         self.assertEqual({"bar", "heatmap"}, set(final_turn["required_chart_types"]))
         self.assertIn("not run", final_turn["prompt"])
+
+    def test_conversation_eval_requires_stop_and_segment_maps(self):
+        path = Path(__file__).resolve().parents[1] / "evals" / "conversation_cases.json"
+        cases = json.loads(path.read_text())
+
+        spatial = next(case for case in cases if case["id"] == "route_51a_spatial_deep_dive")
+        self.assertEqual(["stop"], spatial["turns"][0]["required_map_targets"])
+        self.assertEqual(["segment"], spatial["turns"][1]["required_map_targets"])
 
 
 if __name__ == "__main__":

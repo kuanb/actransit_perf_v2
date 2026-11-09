@@ -54,6 +54,42 @@ def get_route_performance(
 
 
 @mcp.tool
+def get_route_delay_map(
+    route_id: str,
+    metric: Literal["median_delay", "p95_delay", "delay_variability"] = "median_delay",
+    start_date: str | None = None,
+    end_date: str | None = None,
+    direction_id: int | None = None,
+) -> dict:
+    """Return one styled GeoJSON map per route direction, with the full current GTFS route and its stops colored by median delay, 95th-percentile delay, or delay variability. Use for questions about where buses fall behind schedule or where reliability changes along a route. Dates default to seven days ending yesterday and are limited to seven calendar days."""
+    return data.get_route_delay_map(route_id, metric, start_date, end_date, direction_id)
+
+
+@mcp.tool
+def get_route_segment_performance_map(
+    route_id: str,
+    metric: Literal[
+        "median_schedule_loss",
+        "p95_schedule_loss",
+        "median_travel_time",
+        "p95_travel_time",
+        "median_speed",
+    ] = "median_schedule_loss",
+    start_date: str | None = None,
+    end_date: str | None = None,
+    direction_id: int | None = None,
+) -> dict:
+    """Return one styled GeoJSON map per route direction with stop-to-stop sections colored by time added versus schedule, observed travel time, or speed. Use for questions about slow sections or where buses spend or lose time. The data cannot isolate a particular turn or intersection. Dates default to seven days ending yesterday and are limited to seven calendar days."""
+    return data.get_route_segment_performance_map(
+        route_id,
+        metric,
+        start_date,
+        end_date,
+        direction_id,
+    )
+
+
+@mcp.tool
 def get_route_service_profile(
     route_id: str,
     start_date: str | None = None,
@@ -149,6 +185,7 @@ def get_metric_definition(metric: str) -> dict:
     return {
         "answer_context": definitions[metric],
         "timeframe": None,
+        "maps": [],
         "charts": [],
         "tables": [],
         "sources": [{"kind": "methodology_registry"}],

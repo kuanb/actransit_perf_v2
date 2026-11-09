@@ -46,6 +46,7 @@ def main() -> int:
                 {
                     "turn": turn_index,
                     "request_id": payload.get("request_id"),
+                    "map_count": len(payload.get("maps") or []),
                     "chart_types": [chart.get("type") for chart in payload.get("charts") or []],
                     "errors": errors,
                 }
@@ -103,6 +104,21 @@ def request_turn(
 
 def validate_turn(turn: dict[str, Any], payload: dict[str, Any]) -> list[str]:
     errors = []
+    maps = payload.get("maps") or []
+    minimum_map_count = int(turn.get("minimum_map_count") or 0)
+    if len(maps) < minimum_map_count:
+        errors.append(f"expected at least {minimum_map_count} maps, received {len(maps)}")
+
+    map_targets = {str((item.get("style") or {}).get("target")) for item in maps}
+    required_map_targets = set(turn.get("required_map_targets") or [])
+    if not required_map_targets.issubset(map_targets):
+        errors.append(f"missing map targets: {sorted(required_map_targets - map_targets)}")
+
+    map_titles = [str(item.get("title") or "").lower() for item in maps]
+    for term in turn.get("required_map_title_terms") or []:
+        if not any(term.lower() in title for title in map_titles):
+            errors.append(f"missing map title term: {term}")
+
     chart_types = {str(chart.get("type")) for chart in payload.get("charts") or []}
     required_types = set(turn.get("required_chart_types") or [])
     if not required_types.issubset(chart_types):

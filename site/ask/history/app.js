@@ -151,6 +151,7 @@ function renderFilteredThreads() {
       turn.question,
       turn.response.answer,
       turn.scope?.route_id,
+      ...(turn.response.maps || []).map((map) => map.title),
       ...(turn.response.charts || []).map((chart) => chart.title),
       ...(turn.response.tables || []).map((table) => table.title),
     ].filter(Boolean).join(" ").toLowerCase().includes(query));
@@ -227,6 +228,7 @@ function renderTurn(turn) {
 
   const details = document.createElement("div");
   details.className = "turn-details";
+  for (const map of turn.response.maps || []) details.append(chip(`Map · ${map.title || "Route performance"}`, "artifact-chip"));
   for (const chart of turn.response.charts || []) details.append(chip(`Chart · ${chart.title || chart.type}`, "artifact-chip"));
   for (const table of turn.response.tables || []) details.append(chip(`Table · ${table.title || "Data"}`, "artifact-chip"));
   if (details.childElementCount) body.append(details);

@@ -14,6 +14,7 @@ const statusDot = document.getElementById("status-dot");
 const limitTitle = document.getElementById("limit-title");
 const limitCopy = document.getElementById("limit-copy");
 const charts = [];
+const mapInstances = [];
 const threadQuestions = [];
 let config = null;
 let status = null;
@@ -65,7 +66,8 @@ function renderSuggestions() {
   const suggestions = routeID
     ? [
         `How did Route ${routeID} perform?`,
-        `Which hours had the worst median delay on Route ${routeID}?`,
+        `Where does Route ${routeID} fall furthest behind schedule?`,
+        `How many Route ${routeID} trips were Dropped / not observed each day, and which scheduled start hours were worst?`,
         `Show scheduled arrivals for Route ${routeID} from 7:00 to 9:00 a.m.`,
       ]
     : [
@@ -215,6 +217,7 @@ function renderResponse(payload) {
   renderTimeframes(payload.timeframes || []);
   renderAnswer(payload.answer || "No answer was returned.");
   renderWarnings(payload.warnings || []);
+  renderMaps(payload.maps || []);
   renderCharts(payload.charts || []);
   renderTables(payload.tables || []);
   renderSources(payload.sources || []);
@@ -272,6 +275,162 @@ function renderWarnings(items) {
     warning.textContent = text;
     wrap.appendChild(warning);
   });
+}
+
+function renderMaps(items) {
+  mapInstances.splice(0).forEach(instance => instance.remove());
+  const wrap = document.getElementById("maps");
+  wrap.replaceChildren();
+  items.slice(0, 3).forEach((spec, index) => {
+    const card = document.createElement("article");
+    card.className = "map-card";
+    const title = document.createElement("h3");
+    title.textContent = spec.title || "Route performance map";
+    const description = document.createElement("p");
+    description.className = "map-description";
+    description.textContent = spec.description || "";
+    const container = document.createElement("div");
+    container.className = "analysis-map";
+    container.setAttribute("role", "img");
+    container.setAttribute("aria-label", spec.title || "Route performance map");
+    const legend = buildMapLegend(spec.style || {});
+    card.append(title, description, container, legend);
+    wrap.appendChild(card);
+
+    if (typeof mapboxgl === "undefined" || typeof MAPBOX_TOKEN === "undefined") {
+      container.textContent = "The map renderer is unavailable.";
+      container.classList.add("map-unavailable");
+      return;
+    }
+    mapboxgl.accessToken = MAPBOX_TOKEN;
+    const instance = new mapboxgl.Map({
+      container,
+      style: "mapbox://styles/mapbox/light-v11",
+      center: [-122.2, 37.78],
+      zoom: 10,
+      attributionControl: true,
+    });
+    instance.addControl(new mapboxgl.NavigationControl({ showCompass: false }), "bottom-right");
+    instance.on("load", () => initializeAnalysisMap(instance, spec, index));
+    mapInstances.push(instance);
+  });
+}
+
+function initializeAnalysisMap(instance, spec, mapIndex) {
+  const sourceID = `analysis-map-source-${mapIndex}`;
+  const routeLayer = `analysis-map-route-${mapIndex}`;
+  const segmentLayer = `analysis-map-segments-${mapIndex}`;
+  const stopLayer = `analysis-map-stops-${mapIndex}`;
+  const style = spec.style || {};
+  const target = style.target === "segment" ? "segment" : "stop";
+  instance.addSource(sourceID, { type: "geojson", data: spec.geojson });
+  instance.addLayer({
+    id: routeLayer,
+    type: "line",
+    source: sourceID,
+    filter: ["==", ["get", "feature_kind"], "route"],
+    layout: { "line-cap": "round", "line-join": "round" },
+    paint: { "line-color": "#40515d", "line-width": 3.5, "line-opacity": 0.55 },
+  });
+  instance.addLayer({
+    id: segmentLayer,
+    type: "line",
+    source: sourceID,
+    filter: ["==", ["get", "feature_kind"], "segment"],
+    layout: { "line-cap": "round", "line-join": "round" },
+    paint: {
+      "line-color": target === "segment" ? mapColorExpression(style) : "#40515d",
+      "line-width": target === "segment" ? 7 : 3,
+      "line-opacity": target === "segment" ? 0.9 : 0.5,
+    },
+  });
+  instance.addLayer({
+    id: stopLayer,
+    type: "circle",
+    source: sourceID,
+    filter: ["==", ["get", "feature_kind"], "stop"],
+    paint: {
+      "circle-radius": target === "stop" ? 7 : 4.5,
+      "circle-color": target === "stop" ? mapColorExpression(style) : "#ffffff",
+      "circle-opacity": 0.92,
+      "circle-stroke-color": "#26343d",
+      "circle-stroke-width": target === "stop" ? 1.25 : 1.5,
+    },
+  });
+
+  const interactiveLayer = target === "segment" ? segmentLayer : stopLayer;
+  const popup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false, maxWidth: "280px" });
+  instance.on("mouseenter", interactiveLayer, event => {
+    instance.getCanvas().style.cursor = "pointer";
+    const feature = event.features?.[0];
+    if (!feature) return;
+    popup.setLngLat(event.lngLat)
+      .setDOMContent(buildMapPopup(feature.properties || {}, spec.popup_fields || []))
+      .addTo(instance);
+  });
+  instance.on("mouseleave", interactiveLayer, () => {
+    instance.getCanvas().style.cursor = "";
+    popup.remove();
+  });
+  fitAnalysisMap(instance, spec.geojson);
+}
+
+function mapColorExpression(style) {
+  const property = style.property || "metric_value";
+  const stops = (style.stops || []).flatMap(stop => [Number(stop.value), stop.color]);
+  if (stops.length < 4) return style.no_data_color || "#a8b2bd";
+  return [
+    "case",
+    ["==", ["get", "has_metric"], true],
+    ["interpolate", ["linear"], ["to-number", ["get", property]], ...stops],
+    style.no_data_color || "#a8b2bd",
+  ];
+}
+
+function buildMapLegend(style) {
+  const legend = document.createElement("div");
+  legend.className = "map-legend";
+  const label = document.createElement("strong");
+  label.textContent = style.value_label || "Performance";
+  legend.appendChild(label);
+  (style.stops || []).forEach(stop => {
+    const item = document.createElement("span");
+    const swatch = document.createElement("i");
+    swatch.style.backgroundColor = stop.color;
+    item.append(swatch, document.createTextNode(stop.label || String(stop.value)));
+    legend.appendChild(item);
+  });
+  return legend;
+}
+
+function buildMapPopup(properties, fields) {
+  const wrap = document.createElement("div");
+  wrap.className = "map-popup";
+  fields.forEach((field, index) => {
+    const row = document.createElement("div");
+    const label = document.createElement(index === 0 ? "strong" : "span");
+    label.textContent = field.label;
+    const value = document.createElement("span");
+    value.textContent = displayValue(properties[field.property]);
+    row.append(label, value);
+    wrap.appendChild(row);
+  });
+  return wrap;
+}
+
+function fitAnalysisMap(instance, geojson) {
+  const bounds = new mapboxgl.LngLatBounds();
+  (geojson?.features || []).forEach(feature => extendMapBounds(bounds, feature.geometry?.coordinates));
+  if (!bounds.isEmpty()) instance.fitBounds(bounds, { padding: 42, duration: 0, maxZoom: 14 });
+}
+
+function extendMapBounds(bounds, coordinates) {
+  if (!Array.isArray(coordinates)) return;
+  if (coordinates.length >= 2 && coordinates.slice(0, 2).every(value => typeof value === "number")) {
+    bounds.extend(coordinates);
+    return;
+  }
+  coordinates.forEach(value => extendMapBounds(bounds, value));
 }
 
 function renderCharts(items) {
@@ -449,6 +608,8 @@ function renderSources(items) {
 function clearResponse() {
   responseSection.hidden = true;
   charts.splice(0).forEach(chart => chart.destroy());
+  mapInstances.splice(0).forEach(instance => instance.remove());
+  document.getElementById("maps").replaceChildren();
   parentRequestID = null;
   followUpsRemaining = null;
   threadQuestions.splice(0);
@@ -483,6 +644,7 @@ function sourceLabel(source) {
   if (source.kind === "weekly_stats") return `Published weekly report · ${source.start_date} through ${source.end_date}`;
   if (source.kind === "bigquery") return `Deduplicated BigQuery observations · ${source.start_date || source.service_date || "bounded period"}`;
   if (source.kind === "gtfs") return `Current or archived GTFS schedule · service date ${source.service_date}`;
+  if (source.kind === "processed_gtfs") return `Current processed GTFS geometry · Route ${source.route_id || routeID || "data"}`;
   if (source.kind === "methodology_registry") return "Metric methodology registry";
   return JSON.stringify(source);
 }

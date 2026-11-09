@@ -50,7 +50,7 @@ What's covered:
   classification, and rejection of cross-group comparisons.
 - **`services/agent/tests/test_policy.py`** — route-scope enforcement, route-page
   week defaults, regular-service ranking defaults, category-sensitive eval
-  tagging, eval-case integrity, and structured response caps for charts and tables.
+  tagging, eval-case integrity, and structured response caps for maps, charts, and tables.
 - **`services/agent/tests/test_recorder.py`** — private conversation-record schema,
   UTC date/hour object layout, complete question/response retention, browser
   session hashing, and the separate minimal public-turn schema with text
@@ -64,10 +64,13 @@ comparison refusal. Run them manually against a deployed agent:
 
 ```sh
 make eval-analysis-route-groups ANALYSIS_API_URL=https://actransit-analysis-agent-komsnvluna-uw.a.run.app
+make eval-analysis-conversations ANALYSIS_API_URL=https://actransit-analysis-agent-komsnvluna-uw.a.run.app
 ```
 
-The suite consumes five accepted questions and waits through the configured
-cooldown. It is not a CI check because it uses Vertex AI, the live public daily
+The route-category suite consumes five accepted questions. The conversation
+suite consumes five more across a Route 1T chart thread and a Route 51A spatial
+thread that requires stop and section maps. Both wait through the configured
+cooldown. They are not CI checks because they use Vertex AI, the live public daily
 allowance, and production data. Inspect recent structured traces with
 `make analysis-eval-logs`; logs omit raw prompts and retain only feature tags,
 bounded tool arguments, request IDs, and policy outcomes.
