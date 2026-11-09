@@ -356,6 +356,7 @@ class TransitData:
             route_id,
             resolved.dates,
             direction_id,
+            metric,
         )
         label, field, unit = SEGMENT_MAP_METRICS[metric]
         grouped: dict[int, list[dict[str, Any]]] = defaultdict(list)
@@ -453,13 +454,21 @@ class TransitData:
     ) -> list[dict[str, Any]]:
         sql = f"""
             WITH obs AS (
-              SELECT *
+              SELECT
+                service_date,
+                trip_id,
+                stop_sequence,
+                ingested_at,
+                direction_id,
+                stop_id,
+                delay_seconds,
+                is_stale
               FROM `{self.project_id}.actransit.trip_observations`
               WHERE service_date IN UNNEST(@service_dates)
                 AND route_id = @route_id
               QUALIFY ROW_NUMBER() OVER (
                 PARTITION BY service_date, trip_id, stop_sequence
-                ORDER BY IF(actual_arrival IS NULL, 1, 0), ingested_at DESC
+                ORDER BY IF(delay_seconds IS NULL, 1, 0), ingested_at DESC
               ) = 1
             )
             SELECT
@@ -470,7 +479,7 @@ class TransitData:
               APPROX_QUANTILES(delay_seconds, 100)[OFFSET(95)] AS p95_delay_s,
               STDDEV(CAST(delay_seconds AS FLOAT64)) AS stddev_delay_s
             FROM obs
-            WHERE actual_arrival IS NOT NULL
+            WHERE delay_seconds IS NOT NULL
               AND is_stale = FALSE
               AND (@direction_id IS NULL OR direction_id = @direction_id)
             GROUP BY direction_id, stop_id
@@ -483,62 +492,73 @@ class TransitData:
         route_id: str,
         service_dates: list[str],
         direction_id: int | None,
+        metric: str,
     ) -> list[dict[str, Any]]:
+        source_field = {
+            "median_schedule_loss": "delay_seconds",
+            "p95_schedule_loss": "delay_seconds",
+            "median_travel_time": "leg_duration_s",
+            "p95_travel_time": "leg_duration_s",
+            "median_speed": "leg_avg_speed_mps",
+        }[metric]
+        result_field = SEGMENT_MAP_METRICS[metric][1]
+        percentile = 95 if metric.startswith("p95_") else 50
+        if metric.endswith("schedule_loss"):
+            previous_metric = ", LAG(metric_source) OVER trip_stops AS previous_metric_source"
+            metric_expression = "metric_source - previous_metric_source"
+            metric_filters = "AND previous_metric_source IS NOT NULL AND ABS(metric_source - previous_metric_source) <= 7200"
+        elif metric.endswith("travel_time"):
+            previous_metric = ""
+            metric_expression = "metric_source"
+            metric_filters = "AND metric_source BETWEEN 1 AND 7200"
+        else:
+            previous_metric = ""
+            metric_expression = "metric_source"
+            metric_filters = "AND metric_source BETWEEN 0 AND 35"
         sql = f"""
             WITH obs AS (
-              SELECT *
+              SELECT
+                service_date,
+                trip_id,
+                stop_sequence,
+                ingested_at,
+                direction_id,
+                stop_id,
+                {source_field} AS metric_source,
+                is_stale
               FROM `{self.project_id}.actransit.trip_observations`
               WHERE service_date IN UNNEST(@service_dates)
                 AND route_id = @route_id
               QUALIFY ROW_NUMBER() OVER (
                 PARTITION BY service_date, trip_id, stop_sequence
-                ORDER BY IF(actual_arrival IS NULL, 1, 0), ingested_at DESC
+                ORDER BY IF({source_field} IS NULL, 1, 0), ingested_at DESC
               ) = 1
             ), sequenced AS (
               SELECT
                 direction_id,
                 stop_id AS to_stop_id,
                 LAG(stop_id) OVER trip_stops AS from_stop_id,
-                scheduled_arrival,
-                LAG(scheduled_arrival) OVER trip_stops AS previous_scheduled_arrival,
-                actual_arrival,
-                leg_duration_s,
-                leg_avg_speed_mps,
+                metric_source,
                 is_stale
+                {previous_metric}
               FROM obs
               WINDOW trip_stops AS (
                 PARTITION BY service_date, trip_id
                 ORDER BY stop_sequence
               )
-            ), legs AS (
-              SELECT
-                *,
-                leg_duration_s - TIMESTAMP_DIFF(
-                  scheduled_arrival,
-                  previous_scheduled_arrival,
-                  SECOND
-                ) AS schedule_loss_s
-              FROM sequenced
-              WHERE from_stop_id IS NOT NULL
-                AND scheduled_arrival IS NOT NULL
-                AND previous_scheduled_arrival IS NOT NULL
-                AND actual_arrival IS NOT NULL
-                AND is_stale = FALSE
-                AND leg_duration_s BETWEEN 1 AND 7200
-                AND leg_avg_speed_mps BETWEEN 0 AND 35
-                AND (@direction_id IS NULL OR direction_id = @direction_id)
             )
             SELECT
               direction_id,
               from_stop_id,
               to_stop_id,
               COUNT(*) AS observations,
-              APPROX_QUANTILES(schedule_loss_s, 100)[OFFSET(50)] AS p50_schedule_loss_s,
-              APPROX_QUANTILES(schedule_loss_s, 100)[OFFSET(95)] AS p95_schedule_loss_s,
-              APPROX_QUANTILES(leg_duration_s, 100)[OFFSET(50)] AS p50_travel_time_s,
-              APPROX_QUANTILES(leg_duration_s, 100)[OFFSET(95)] AS p95_travel_time_s,
-              APPROX_QUANTILES(leg_avg_speed_mps, 100)[OFFSET(50)] AS p50_speed_mps
-            FROM legs
+              APPROX_QUANTILES({metric_expression}, 100)[OFFSET({percentile})] AS {result_field}
+            FROM sequenced
+            WHERE from_stop_id IS NOT NULL
+              AND metric_source IS NOT NULL
+              AND is_stale = FALSE
+              {metric_filters}
+              AND (@direction_id IS NULL OR direction_id = @direction_id)
             GROUP BY direction_id, from_stop_id, to_stop_id
             ORDER BY direction_id, from_stop_id, to_stop_id
         """

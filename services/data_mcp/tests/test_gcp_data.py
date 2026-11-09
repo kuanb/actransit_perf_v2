@@ -346,6 +346,48 @@ class RouteMapTest(unittest.TestCase):
         )
         self.assertEqual([date(2026, 11, 2), date(2026, 11, 4)], dates)
 
+    def test_segment_query_reads_only_the_requested_metric(self):
+        class FakeParameter:
+            def __init__(self, name, _kind, value):
+                self.name = name
+                self.value = value
+
+        class FakeConfig:
+            def __init__(self, maximum_bytes_billed, query_parameters):
+                self.maximum_bytes_billed = maximum_bytes_billed
+                self.query_parameters = query_parameters
+
+        class FakeJob:
+            def result(self, timeout):
+                return []
+
+        class FakeClient:
+            def __init__(self):
+                self.sql = ""
+
+            def query(self, sql, job_config):
+                self.sql = sql
+                return FakeJob()
+
+        transit = TransitData.__new__(TransitData)
+        transit.project_id = "transit-203605"
+        transit.maximum_bytes_billed = 100
+        transit.bigquery = FakeClient()
+        with (
+            patch.object(gcp_data.bigquery, "ArrayQueryParameter", FakeParameter, create=True),
+            patch.object(gcp_data.bigquery, "ScalarQueryParameter", FakeParameter, create=True),
+            patch.object(gcp_data.bigquery, "QueryJobConfig", FakeConfig, create=True),
+        ):
+            transit.query_segment_map_stats("1T", ["2026-11-08"], None, "median_schedule_loss")
+            self.assertIn("delay_seconds AS metric_source", transit.bigquery.sql)
+            self.assertNotIn("scheduled_arrival", transit.bigquery.sql)
+            self.assertNotIn("leg_duration_s", transit.bigquery.sql)
+
+            transit.query_segment_map_stats("1T", ["2026-11-08"], None, "median_travel_time")
+            self.assertIn("leg_duration_s AS metric_source", transit.bigquery.sql)
+            self.assertNotIn("delay_seconds", transit.bigquery.sql)
+            self.assertNotIn("leg_avg_speed_mps", transit.bigquery.sql)
+
 
 if __name__ == "__main__":
     unittest.main()
