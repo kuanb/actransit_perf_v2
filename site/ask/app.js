@@ -56,10 +56,10 @@ async function initialize() {
 function configureScope() {
   if (!routeID) return;
   document.getElementById("page-title").textContent = `Ask about Route ${routeID}`;
-  document.getElementById("scope-copy").textContent = `This interface is locked to Route ${routeID}. Start a systemwide question from the report card.`;
+  document.getElementById("scope-copy").textContent = `This interface is locked to Route ${routeID}. Use Ask about all routes to leave the route-scoped view.`;
   const badge = document.getElementById("route-scope");
   badge.textContent = `Route ${routeID}`;
-  badge.hidden = false;
+  document.getElementById("route-scope-actions").hidden = false;
 }
 
 function renderSuggestions() {

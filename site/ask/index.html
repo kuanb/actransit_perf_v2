@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Ask about AC Transit performance</title>
-  <link rel="stylesheet" href="../styles.css?v=analysis-v9">
+  <link rel="stylesheet" href="../styles.css?v=analysis-v10">
   <link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css">
-  <link rel="stylesheet" href="styles.css?v=analysis-v9">
+  <link rel="stylesheet" href="styles.css?v=analysis-v10">
   <script src="../independence-notice.js" defer></script>
   <script src="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
@@ -34,7 +34,10 @@
           <h2 id="ask-heading">What would you like to understand?</h2>
           <p class="muted">Ask about route comparisons, service delivery, delay, dropped trips, hourly patterns, or a bounded scheduled-arrival window.</p>
         </div>
-        <span id="route-scope" class="route-scope" hidden></span>
+        <div id="route-scope-actions" class="route-scope-actions" hidden>
+          <span id="route-scope" class="route-scope"></span>
+          <a class="route-scope-exit" href="./">Ask about all routes</a>
+        </div>
       </div>
 
       <div id="suggestions" class="suggestions" aria-label="Suggested questions"></div>
@@ -98,7 +101,7 @@
     <a href="https://kuanbutts.com" target="_blank" rel="noopener">A project by Kuan Butts</a>
   </footer>
 
-  <script src="app.js?v=analysis-v9"></script>
+  <script src="app.js?v=analysis-v10"></script>
   <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "0e36b12e46b04a69b5e9ff6883f6d23d"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
 </html>

@@ -53,8 +53,18 @@ body {
   margin: 0;
 }
 
-.route-scope {
+.route-scope-actions {
   flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.route-scope-actions[hidden] {
+  display: none;
+}
+
+.route-scope {
   padding: 7px 11px;
   border: 1px solid #99bdd2;
   border-radius: 999px;
@@ -62,6 +72,13 @@ body {
   color: #154b6d;
   font-size: 12px;
   font-weight: 750;
+}
+
+.route-scope-exit {
+  color: #154b6d;
+  font-size: 12px;
+  font-weight: 750;
+  white-space: nowrap;
 }
 
 .suggestions {
@@ -584,7 +601,7 @@ body {
     flex-direction: column;
   }
 
-  .route-scope {
+  .route-scope-actions {
     align-self: flex-start;
   }
 
