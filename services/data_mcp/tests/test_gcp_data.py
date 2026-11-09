@@ -254,10 +254,27 @@ class RouteMapTest(unittest.TestCase):
 
         self.assertEqual(2, len(result["maps"]))
         self.assertEqual("stop", result["maps"][0]["style"]["target"])
+        self.assertEqual(
+            "Route 1T: First → Second — 95th-percentile delay by stop",
+            result["maps"][0]["title"],
+        )
+        self.assertEqual(
+            "Route 1T: Second → First — 95th-percentile delay by stop",
+            result["maps"][1]["title"],
+        )
         features = result["maps"][0]["geojson"]["features"]
         self.assertTrue(any(feature["properties"]["feature_kind"] == "route" for feature in features))
         self.assertTrue(any(feature["properties"]["feature_kind"] == "stop" for feature in features))
+        terminals = [
+            feature["properties"]
+            for feature in features
+            if feature["properties"]["feature_kind"] == "terminal"
+        ]
+        self.assertEqual(["start", "end"], [terminal["terminal_role"] for terminal in terminals])
+        self.assertEqual(["S", "E"], [terminal["marker_label"] for terminal in terminals])
+        self.assertEqual("First → Second", result["tables"][0]["rows"][0]["direction_name"])
         self.assertIn("8.0 min", result["answer_context"])
+        self.assertNotIn("direction 0", result["answer_context"])
 
     def test_segment_map_builds_route_slices_and_stop_landmarks(self):
         transit = self.transit()
@@ -285,6 +302,10 @@ class RouteMapTest(unittest.TestCase):
         self.assertEqual(1, len(result["maps"]))
         map_result = result["maps"][0]
         self.assertEqual("segment", map_result["style"]["target"])
+        self.assertEqual(
+            "Route 1T: First → Second — median time added versus schedule by section",
+            map_result["title"],
+        )
         segment = next(
             feature
             for feature in map_result["geojson"]["features"]
@@ -292,6 +313,37 @@ class RouteMapTest(unittest.TestCase):
         )
         self.assertGreaterEqual(len(segment["geometry"]["coordinates"]), 2)
         self.assertEqual(1.5, segment["properties"]["metric_value"])
+        self.assertTrue(
+            any(
+                feature["properties"]["feature_kind"] == "terminal"
+                for feature in map_result["geojson"]["features"]
+            )
+        )
+
+    def test_direction_name_uses_most_common_current_gtfs_terminals(self):
+        route = processed_route()
+        route["stops"]["c"] = {
+            "stop_id": "c",
+            "stop_name": "Short Turn",
+            "lat": 37.81,
+            "lon": -122.29,
+        }
+        route["trips"]["short"] = {
+            "trip_id": "short",
+            "shape_id": "outbound",
+            "direction_id": 0,
+            "stop_times": [
+                {"stop_sequence": 1, "stop_id": "a"},
+                {"stop_sequence": 2, "stop_id": "c"},
+            ],
+        }
+        route["trips"]["full"] = dict(route["trips"]["t1"], trip_id="full")
+
+        direction = gcp_data.route_direction_details(route, 0)
+
+        self.assertEqual("First → Second", direction["name"])
+        self.assertEqual("a", direction["origin_stop_id"])
+        self.assertEqual("b", direction["destination_stop_id"])
 
     def test_maps_reject_more_than_seven_calendar_days(self):
         transit = self.transit()

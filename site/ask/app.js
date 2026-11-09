@@ -15,6 +15,7 @@ const limitTitle = document.getElementById("limit-title");
 const limitCopy = document.getElementById("limit-copy");
 const charts = [];
 const mapInstances = [];
+const mapResizeObservers = [];
 const threadQuestions = [];
 let config = null;
 let status = null;
@@ -278,9 +279,11 @@ function renderWarnings(items) {
 }
 
 function renderMaps(items) {
+  mapResizeObservers.splice(0).forEach(observer => observer.disconnect());
   mapInstances.splice(0).forEach(instance => instance.remove());
   const wrap = document.getElementById("maps");
   wrap.replaceChildren();
+  const pendingMaps = [];
   items.slice(0, 3).forEach((spec, index) => {
     const card = document.createElement("article");
     card.className = "map-card";
@@ -302,6 +305,10 @@ function renderMaps(items) {
       container.classList.add("map-unavailable");
       return;
     }
+    pendingMaps.push({ spec, index, container });
+  });
+
+  pendingMaps.forEach(({ spec, index, container }) => {
     mapboxgl.accessToken = MAPBOX_TOKEN;
     const instance = new mapboxgl.Map({
       container,
@@ -311,7 +318,19 @@ function renderMaps(items) {
       attributionControl: true,
     });
     instance.addControl(new mapboxgl.NavigationControl({ showCompass: false }), "bottom-right");
-    instance.on("load", () => initializeAnalysisMap(instance, spec, index));
+    instance.on("load", () => {
+      instance.resize();
+      initializeAnalysisMap(instance, spec, index);
+      window.requestAnimationFrame(() => {
+        instance.resize();
+        fitAnalysisMap(instance, spec.geojson);
+      });
+    });
+    if (typeof ResizeObserver !== "undefined") {
+      const observer = new ResizeObserver(() => instance.resize());
+      observer.observe(container);
+      mapResizeObservers.push(observer);
+    }
     mapInstances.push(instance);
   });
 }
@@ -321,6 +340,8 @@ function initializeAnalysisMap(instance, spec, mapIndex) {
   const routeLayer = `analysis-map-route-${mapIndex}`;
   const segmentLayer = `analysis-map-segments-${mapIndex}`;
   const stopLayer = `analysis-map-stops-${mapIndex}`;
+  const terminalLayer = `analysis-map-terminals-${mapIndex}`;
+  const terminalLabelLayer = `analysis-map-terminal-labels-${mapIndex}`;
   const style = spec.style || {};
   const target = style.target === "segment" ? "segment" : "stop";
   instance.addSource(sourceID, { type: "geojson", data: spec.geojson });
@@ -357,6 +378,41 @@ function initializeAnalysisMap(instance, spec, mapIndex) {
       "circle-stroke-width": target === "stop" ? 1.25 : 1.5,
     },
   });
+  instance.addLayer({
+    id: terminalLayer,
+    type: "circle",
+    source: sourceID,
+    filter: ["==", ["get", "feature_kind"], "terminal"],
+    paint: {
+      "circle-radius": 11,
+      "circle-color": [
+        "match",
+        ["get", "terminal_role"],
+        "start", "#1d7a5b",
+        "end", "#b13d58",
+        "#6b4c9a",
+      ],
+      "circle-stroke-color": "#ffffff",
+      "circle-stroke-width": 2,
+    },
+  });
+  instance.addLayer({
+    id: terminalLabelLayer,
+    type: "symbol",
+    source: sourceID,
+    filter: ["==", ["get", "feature_kind"], "terminal"],
+    layout: {
+      "text-field": ["get", "marker_label"],
+      "text-size": 10,
+      "text-allow-overlap": true,
+      "text-ignore-placement": true,
+    },
+    paint: {
+      "text-color": "#ffffff",
+      "text-halo-color": "rgba(0, 0, 0, 0.2)",
+      "text-halo-width": 0.5,
+    },
+  });
 
   const interactiveLayer = target === "segment" ? segmentLayer : stopLayer;
   const popup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false, maxWidth: "280px" });
@@ -369,6 +425,21 @@ function initializeAnalysisMap(instance, spec, mapIndex) {
       .addTo(instance);
   });
   instance.on("mouseleave", interactiveLayer, () => {
+    instance.getCanvas().style.cursor = "";
+    popup.remove();
+  });
+  instance.on("mouseenter", terminalLayer, event => {
+    instance.getCanvas().style.cursor = "pointer";
+    const feature = event.features?.[0];
+    if (!feature) return;
+    popup.setLngLat(event.lngLat)
+      .setDOMContent(buildMapPopup(feature.properties || {}, [
+        { property: "terminal_display", label: "Terminal" },
+        { property: "direction_name", label: "Direction" },
+      ]))
+      .addTo(instance);
+  });
+  instance.on("mouseleave", terminalLayer, () => {
     instance.getCanvas().style.cursor = "";
     popup.remove();
   });
@@ -400,6 +471,20 @@ function buildMapLegend(style) {
     item.append(swatch, document.createTextNode(stop.label || String(stop.value)));
     legend.appendChild(item);
   });
+  if (style.show_terminals) {
+    [
+      ["S", "Start", "#1d7a5b"],
+      ["E", "End", "#b13d58"],
+    ].forEach(([marker, text, color]) => {
+      const item = document.createElement("span");
+      const swatch = document.createElement("i");
+      swatch.className = "terminal-swatch";
+      swatch.style.backgroundColor = color;
+      swatch.textContent = marker;
+      item.append(swatch, document.createTextNode(text));
+      legend.appendChild(item);
+    });
+  }
   return legend;
 }
 

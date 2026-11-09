@@ -400,6 +400,20 @@ body {
   border-radius: 50%;
 }
 
+.map-legend i.terminal-swatch {
+  display: inline-grid;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.22);
+  color: #fff;
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1;
+}
+
 .map-popup {
   display: grid;
   gap: 4px;

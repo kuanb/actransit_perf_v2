@@ -271,16 +271,20 @@ class TransitData:
         )
         label, field, unit = STOP_MAP_METRICS[metric]
         grouped: dict[int, dict[str, dict[str, Any]]] = defaultdict(dict)
+        direction_names: dict[int, str] = {}
         ranked = []
         for row in rows:
             if row.get("direction_id") is None or row.get(field) is None:
                 continue
             direction = int(row["direction_id"])
+            if direction not in direction_names:
+                direction_names[direction] = route_direction_details(route, direction)["name"]
             value = round(float(row[field]) / 60.0, 1)
             stop_id = str(row["stop_id"])
             stop = (route.get("stops") or {}).get(stop_id) or {}
             normalized = {
                 "direction_id": direction,
+                "direction_name": direction_names[direction],
                 "stop_id": stop_id,
                 "stop_name": stop.get("stop_name") or stop_id,
                 "metric_value": value,
@@ -307,7 +311,7 @@ class TransitData:
         ]
         ranked.sort(key=lambda row: row["metric_value"], reverse=True)
         leaders = ", ".join(
-            f"direction {row['direction_id']} at {row['stop_name']} ({row['metric_display']})"
+            f"{row['direction_name']} at {row['stop_name']} ({row['metric_display']})"
             for row in ranked[:5]
         )
         return tool_result(
@@ -319,7 +323,7 @@ class TransitData:
                 {
                     "title": f"Route {route_id} highest {label.lower()} stops",
                     "columns": [
-                        {"key": "direction_id", "label": "Direction"},
+                        {"key": "direction_name", "label": "Direction"},
                         {"key": "stop_name", "label": "Stop"},
                         {"key": "metric_display", "label": label},
                         {"key": "observations", "label": "Observed arrivals"},
@@ -360,11 +364,14 @@ class TransitData:
         )
         label, field, unit = SEGMENT_MAP_METRICS[metric]
         grouped: dict[int, list[dict[str, Any]]] = defaultdict(list)
+        direction_names: dict[int, str] = {}
         ranked = []
         for row in rows:
             if row.get("direction_id") is None or row.get(field) is None:
                 continue
             direction = int(row["direction_id"])
+            if direction not in direction_names:
+                direction_names[direction] = route_direction_details(route, direction)["name"]
             raw_value = float(row[field])
             value = raw_value * 2.236936 if metric == "median_speed" else raw_value / 60.0
             from_stop_id = str(row["from_stop_id"])
@@ -372,6 +379,7 @@ class TransitData:
             stops = route.get("stops") or {}
             normalized = {
                 "direction_id": direction,
+                "direction_name": direction_names[direction],
                 "from_stop_id": from_stop_id,
                 "from_stop_name": (stops.get(from_stop_id) or {}).get("stop_name") or from_stop_id,
                 "to_stop_id": to_stop_id,
@@ -401,7 +409,7 @@ class TransitData:
         reverse = metric != "median_speed"
         ranked.sort(key=lambda row: row["metric_value"], reverse=reverse)
         leaders = ", ".join(
-            f"direction {row['direction_id']} from {row['from_stop_name']} to {row['to_stop_name']} ({row['metric_display']})"
+            f"{row['direction_name']}, {row['from_stop_name']} to {row['to_stop_name']} ({row['metric_display']})"
             for row in ranked[:5]
         )
         return tool_result(
@@ -413,7 +421,7 @@ class TransitData:
                 {
                     "title": f"Route {route_id} stop-to-stop {label.lower()}",
                     "columns": [
-                        {"key": "direction_id", "label": "Direction"},
+                        {"key": "direction_name", "label": "Direction"},
                         {"key": "from_stop_name", "label": "From"},
                         {"key": "to_stop_name", "label": "To"},
                         {"key": "metric_display", "label": label},
@@ -1355,6 +1363,88 @@ def validate_direction_id(direction_id: int | None) -> None:
         raise ValueError("direction_id must be 0 or 1")
 
 
+def route_direction_details(route: dict[str, Any], direction_id: int) -> dict[str, Any]:
+    stops = route.get("stops") or {}
+    terminal_pairs: Counter[tuple[str, str]] = Counter()
+    for trip in (route.get("trips") or {}).values():
+        if int(trip.get("direction_id") or 0) != direction_id:
+            continue
+        stop_ids = [
+            str(stop_time.get("stop_id"))
+            for stop_time in (trip.get("stop_times") or [])
+            if stop_time.get("stop_id") in stops
+        ]
+        if stop_ids:
+            terminal_pairs[(stop_ids[0], stop_ids[-1])] += 1
+
+    if not terminal_pairs:
+        return {
+            "direction_id": direction_id,
+            "name": f"Direction {direction_id}",
+            "origin_stop_id": None,
+            "origin_stop_name": None,
+            "destination_stop_id": None,
+            "destination_stop_name": None,
+        }
+
+    (origin_stop_id, destination_stop_id), _ = sorted(
+        terminal_pairs.items(),
+        key=lambda item: (-item[1], item[0][0], item[0][1]),
+    )[0]
+    origin_stop_name = stops[origin_stop_id].get("stop_name") or origin_stop_id
+    destination_stop_name = stops[destination_stop_id].get("stop_name") or destination_stop_id
+    return {
+        "direction_id": direction_id,
+        "name": f"{origin_stop_name} → {destination_stop_name}",
+        "origin_stop_id": origin_stop_id,
+        "origin_stop_name": origin_stop_name,
+        "destination_stop_id": destination_stop_id,
+        "destination_stop_name": destination_stop_name,
+    }
+
+
+def route_terminal_features(route: dict[str, Any], direction: dict[str, Any]) -> list[dict[str, Any]]:
+    origin_stop_id = direction.get("origin_stop_id")
+    destination_stop_id = direction.get("destination_stop_id")
+    if not origin_stop_id or not destination_stop_id:
+        return []
+    if origin_stop_id == destination_stop_id:
+        terminals = [("start_end", "S/E", origin_stop_id, direction["origin_stop_name"])]
+    else:
+        terminals = [
+            ("start", "S", origin_stop_id, direction["origin_stop_name"]),
+            ("end", "E", destination_stop_id, direction["destination_stop_name"]),
+        ]
+    stops = route.get("stops") or {}
+    features = []
+    for role, marker_label, stop_id, stop_name in terminals:
+        stop = stops[stop_id]
+        features.append(
+            {
+                "type": "Feature",
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [float(stop["lon"]), float(stop["lat"])],
+                },
+                "properties": {
+                    "feature_kind": "terminal",
+                    "name": stop_name,
+                    "stop_id": stop_id,
+                    "direction_id": direction["direction_id"],
+                    "direction_name": direction["name"],
+                    "terminal_role": role,
+                    "terminal_display": (
+                        f"Start and end: {stop_name}"
+                        if role == "start_end"
+                        else f"{'Start' if role == 'start' else 'End'}: {stop_name}"
+                    ),
+                    "marker_label": marker_label,
+                },
+            }
+        )
+    return features
+
+
 def route_direction_features(
     route_id: str,
     route: dict[str, Any],
@@ -1415,6 +1505,8 @@ def build_stop_performance_map(
     priority: int,
 ) -> dict[str, Any]:
     features, stop_ids = route_direction_features(route_id, route, direction_id)
+    direction = route_direction_details(route, direction_id)
+    features.extend(route_terminal_features(route, direction))
     stops = route.get("stops") or {}
     for stop_id in stop_ids:
         stop = stops.get(stop_id)
@@ -1433,6 +1525,7 @@ def build_stop_performance_map(
                     "name": stop.get("stop_name") or stop_id,
                     "stop_id": stop_id,
                     "direction_id": direction_id,
+                    "direction_name": direction["name"],
                     "metric_value": values.get("metric_value"),
                     "has_metric": values.get("metric_value") is not None,
                     "metric_display": values.get("metric_display") or "No observations",
@@ -1442,10 +1535,10 @@ def build_stop_performance_map(
         )
     return {
         "priority": priority,
-        "title": f"Route {route_id} direction {direction_id}: {label.lower()} by stop",
-        "description": "The line shows current scheduled route patterns; colored stops show the selected performance measure.",
+        "title": f"Route {route_id}: {direction['name']} — {label.lower()} by stop",
+        "description": "The line shows current scheduled route patterns; S and E mark the representative start and end terminals; colored stops show the selected performance measure.",
         "geojson": {"type": "FeatureCollection", "features": features},
-        "style": {**style, "target": "stop", "value_label": label},
+        "style": {**style, "target": "stop", "value_label": label, "show_terminals": True},
         "popup_fields": [
             {"property": "name", "label": "Stop"},
             {"property": "metric_display", "label": label},
@@ -1464,6 +1557,8 @@ def build_segment_performance_map(
     priority: int,
 ) -> dict[str, Any]:
     features, stop_ids = route_direction_features(route_id, route, direction_id)
+    direction = route_direction_details(route, direction_id)
+    features.extend(route_terminal_features(route, direction))
     pair_geometries = route_pair_geometries(route, direction_id)
     for row in stats:
         coordinates = pair_geometries.get((row["from_stop_id"], row["to_stop_id"]))
@@ -1498,15 +1593,16 @@ def build_segment_performance_map(
                     "name": stop.get("stop_name") or stop_id,
                     "stop_id": stop_id,
                     "direction_id": direction_id,
+                    "direction_name": direction["name"],
                 },
             }
         )
     return {
         "priority": priority,
-        "title": f"Route {route_id} direction {direction_id}: {label.lower()} by section",
-        "description": "Colored lines show performance between consecutive scheduled stops; stop dots provide landmarks.",
+        "title": f"Route {route_id}: {direction['name']} — {label.lower()} by section",
+        "description": "S and E mark the representative start and end terminals; colored lines show performance between consecutive scheduled stops; stop dots provide landmarks.",
         "geojson": {"type": "FeatureCollection", "features": features},
-        "style": {**style, "target": "segment", "value_label": label},
+        "style": {**style, "target": "segment", "value_label": label, "show_terminals": True},
         "popup_fields": [
             {"property": "from_stop_name", "label": "From"},
             {"property": "to_stop_name", "label": "To"},
