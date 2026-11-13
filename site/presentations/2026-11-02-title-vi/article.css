@@ -32,6 +32,7 @@ h1 { max-width: 1020px; margin: 0; font-size: clamp(45px, 7vw, 78px); letter-spa
 .status-note { display: grid; grid-template-columns: minmax(150px, .32fr) 1fr; gap: 22px; width: min(960px, 100%); margin: 0 auto 48px; padding: 24px 28px; border: 1px solid #d7b66f; border-left: 5px solid var(--gold); background: #fbf5e8; }
 .status-note strong { font-family: Georgia, "Times New Roman", serif; font-size: 22px; font-weight: 500; line-height: 1.25; }
 .status-note span { color: #4e5960; font-size: 15px; line-height: 1.6; }
+.update-note { margin-bottom: 18px; border-color: #d4a0aa; border-left-color: var(--red); background: #fff1f3; }
 
 .title-vi-primer { width: min(960px, 100%); margin: 0 auto 58px; padding: 30px 34px 26px; border-top: 5px solid var(--red); background: rgba(255, 253, 249, .9); box-shadow: 0 12px 32px rgba(24, 35, 42, .07); }
 .title-vi-primer > .eyebrow { margin-bottom: 8px; }
@@ -201,6 +202,11 @@ tbody tr:last-child td { border-bottom: 0; }
 .methodology h2 { margin: 0 0 14px; font-size: 27px; }
 .methodology p { margin: 0 0 13px; color: var(--muted); font-size: 14px; line-height: 1.65; }
 .methodology p:last-child { margin-bottom: 0; }
+.records-update { width: min(920px, 100%); margin: 42px auto 0; padding: 29px 31px; border: 1px solid #d7b66f; border-top: 5px solid var(--gold); background: #fbf5e8; scroll-margin-top: 24px; }
+.records-update > .eyebrow { margin-bottom: 9px; }
+.records-update h2 { margin: 0 0 17px; font-size: clamp(29px, 3.7vw, 39px); letter-spacing: -.025em; }
+.records-update p:not(.eyebrow) { margin: 0 0 16px; color: #3f5059; font-family: Georgia, "Times New Roman", serif; font-size: 17px; line-height: 1.65; }
+.records-update p:last-child { margin-bottom: 0; }
 .author-note { width: min(920px, 100%); margin: 42px auto 0; padding: 25px 30px; border-top: 3px solid var(--purple); border-bottom: 1px solid var(--line); }
 .author-note h2 { margin: 0 0 8px; font-size: 24px; }
 .author-note p { max-width: 780px; margin: 0; color: #3c4c55; font-size: 16px; }
@@ -231,7 +237,7 @@ tbody tr:last-child td { border-bottom: 0; }
   .equity-map { height: 68vh; min-height: 480px; }
   .map-legend { max-width: 220px; font-size: 10px; }
   .table-wrap { width: calc(100% + 14px); margin-left: -7px; border-radius: 4px; }
-  .callout, .methodology, .author-note { padding: 23px 21px; }
+  .callout, .methodology, .records-update, .author-note { padding: 23px 21px; }
   .controls { align-items: stretch; }
   .controls label, .controls input, .controls select { width: 100%; }
   #route-count { margin-left: 0; }
@@ -252,6 +258,6 @@ tbody tr:last-child td { border-bottom: 0; }
   .back, .footer, .controls, .downloads { display: none; }
   body { background: #fff; }
   .shell { width: 100%; }
-  .stat, .plot, .callout, .rider-window-chart, .service-conclusion, .methodology, .author-note { break-inside: avoid; }
+  .stat, .plot, .callout, .rider-window-chart, .service-conclusion, .methodology, .records-update, .author-note { break-inside: avoid; }
   .route-table-wrap, .classification-table-wrap { max-height: none; }
 }
