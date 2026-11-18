@@ -616,7 +616,7 @@ function renderRouteDayGrid(data) {
     const mapHref = `../route/?week_end=${encodeURIComponent(weekEndParam)}&route_id=${encodeURIComponent(r.route_id)}`;
     const ridAttr = String(r.route_id).toLowerCase();
     const limitedAttr = isLimitedRoute(r) ? "true" : "false";
-    html += `<div class="rdgrid-rlabel" data-rid="${ridAttr}" data-limited="${limitedAttr}">${routeBadge(badgeR)}${limitedRouteTag(r)}${p50Suffix}<a class="rdgrid-map-btn" href="${mapHref}" title="Evaluate route ${r.route_id} stop adherence on map">Map analysis</a></div>`;
+    html += `<div class="rdgrid-rlabel" data-rid="${ridAttr}" data-limited="${limitedAttr}">${routeBadge(badgeR)}${limitedRouteTag(r)}${p50Suffix}<a class="rdgrid-map-btn" href="${mapHref}" aria-label="Open route ${r.route_id} map analysis">Map analysis</a></div>`;
     for (const cell of r.by_day) {
       const pct = cell.stop_sd_pct;
       if (pct === null || pct === undefined) {
