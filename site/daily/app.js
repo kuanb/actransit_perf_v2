@@ -67,11 +67,11 @@ function renderDateSelector(dates, current) {
 
     let html = `<div class="cal">
       <div class="cal-nav">
-        <button class="cal-btn" data-a="py" ${viewYear <= minY ? "disabled" : ""} title="Previous year">«</button>
-        <button class="cal-btn" data-a="pm" ${beforeMin ? "disabled" : ""} title="Previous month">‹</button>
-        <span class="cal-title">${MONTHS[viewMonth - 1]} ${viewYear}</span>
-        <button class="cal-btn" data-a="nm" ${afterMax ? "disabled" : ""} title="Next month">›</button>
-        <button class="cal-btn" data-a="ny" ${viewYear >= maxY ? "disabled" : ""} title="Next year">»</button>
+        <button type="button" class="cal-btn" data-a="py" ${viewYear <= minY ? "disabled" : ""} aria-label="Previous year" title="Previous year">«</button>
+        <button type="button" class="cal-btn" data-a="pm" ${beforeMin ? "disabled" : ""} aria-label="Previous month" title="Previous month">‹</button>
+        <span class="cal-title" aria-live="polite">${MONTHS[viewMonth - 1]} ${viewYear}</span>
+        <button type="button" class="cal-btn" data-a="nm" ${afterMax ? "disabled" : ""} aria-label="Next month" title="Next month">›</button>
+        <button type="button" class="cal-btn" data-a="ny" ${viewYear >= maxY ? "disabled" : ""} aria-label="Next year" title="Next year">»</button>
       </div>
       <div class="cal-grid">`;
     for (const d of DAYS) html += `<div class="cal-dow">${d}</div>`;
@@ -81,7 +81,7 @@ function renderDateSelector(dates, current) {
       const has = dateSet.has(ds);
       const cur = ds === current;
       if (has) {
-        html += `<button class="cal-day cal-has${cur ? " cal-cur" : ""}" data-date="${ds}" title="${ds}">${d}</button>`;
+        html += `<button type="button" class="cal-day cal-has${cur ? " cal-cur" : ""}" data-date="${ds}" aria-label="${ds}${cur ? ", selected" : ""}"${cur ? ' aria-current="date"' : ""} title="${ds}">${d}</button>`;
       } else {
         html += `<div class="cal-day cal-none" title="${ds}">${d}</div>`;
       }
@@ -644,7 +644,7 @@ function render(data, indexDates = [], weeklyWeeks = []) {
       </tr>
       <tr class="route-detail" data-rid="${r.route_id}" ${detailHidden}>
         <td colspan="8">
-          <a class="route-week-btn" href="${weekHref}" title="Week-of analysis for route ${r.route_id} (week ending ${weekEnd})">Week ending ${weekEnd} →</a>
+          <a class="route-week-btn" href="${weekHref}" title="Week-of analysis for route ${r.route_id} (week ending ${weekEnd})">Week ending ${weekEnd}</a>
           <dl class="route-detail-list">
             <div><dt>Trips observed</dt><dd>${intFmt(r.trips_observed)}${r.scheduled_trips ? ` (of ${intFmt(r.scheduled_trips)} scheduled)` : ""}</dd></div>
             <div><dt>Stop arrivals</dt><dd>${intFmt(r.observations)}</dd></div>

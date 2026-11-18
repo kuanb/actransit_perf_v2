@@ -12,7 +12,7 @@ if (routeAskLink && routeID) {
   const askParams = new URLSearchParams({ route_id: routeID });
   if (weekEnd) askParams.set("week_end", weekEnd);
   routeAskLink.href = `../ask/?${askParams.toString()}`;
-  routeAskLink.textContent = `Ask about Route ${routeID} →`;
+  routeAskLink.textContent = `Ask about Route ${routeID}`;
 }
 let activeDir = parseInt(params.get("dir") || "0", 10);
 let activePct = params.get("pct") || "p95"; // "p50" | "p95"
@@ -854,7 +854,10 @@ document.getElementById("btn-sp-std").addEventListener("click", () => {
 document.getElementById("info-toggle").addEventListener("click", () => {
   const panel = document.getElementById("info-panel");
   const collapsed = panel.classList.toggle("collapsed");
-  document.getElementById("info-toggle").textContent = collapsed ? "▼" : "▲";
+  const toggle = document.getElementById("info-toggle");
+  toggle.textContent = collapsed ? "▼" : "▲";
+  toggle.setAttribute("aria-expanded", String(!collapsed));
+  toggle.title = collapsed ? "Expand" : "Collapse";
 });
 
 // ── bootstrap ─────────────────────────────────────────────────────────────

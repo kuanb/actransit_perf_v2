@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AC Transit route map</title>
   <link rel="stylesheet" href="../styles.css?v=dashboard-frame-v2">
+  <link rel="stylesheet" href="../theme.css?v=act-brand-prototype-v3">
   <script src="../independence-notice.js" defer></script>
   <link href="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css" rel="stylesheet">
   <script src="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.js"></script>
@@ -417,14 +418,12 @@
       font-size: 12px;
     }
 
-    /* ── route bus-spacing section ─────────────────────── */
+    /* ── route bus-spacing section (same shell as the other analyses) ── */
     #route-bunching-section {
-      margin-block: 0;
       padding-top: 14px;
       padding-bottom: 18px;
-      border: 0;
-      border-bottom: 1px solid #d8e4ee;
-      border-radius: 0;
+      border-bottom: 1px solid #e5e5e5;
+      margin-block: 0;
     }
     #route-bunching-details > summary {
       cursor: pointer;
@@ -462,15 +461,41 @@
       padding: 8px 10px;
       font-size: 13px;
     }
-    #ctrl-dir { top: 12px; left: 12px; display: flex; gap: 6px; align-items: center; }
-    #ctrl-mode {
+    #map-control-deck {
+      position: absolute;
+      z-index: 5;
       top: 12px;
       right: 12px;
+      left: 12px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      pointer-events: none;
+    }
+    #map-control-deck > * { pointer-events: auto; }
+    #ctrl-dir {
+      position: static;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex: 0 1 auto;
+    }
+    #ctrl-right-stack {
+      display: flex;
+      width: min(390px, 100%);
+      flex: 0 1 390px;
+      flex-direction: column;
+      gap: 10px;
+    }
+    #ctrl-mode {
+      position: static;
+      width: 100%;
       display: flex;
       flex-direction: column;
       gap: 6px;
       align-items: stretch;
-      max-width: 340px;
+      max-width: none;
     }
     #ctrl-mode .mode-row {
       display: flex;
@@ -519,11 +544,8 @@
 
     /* ── info panel (below mode controls, right side) ──── */
     #info-panel {
-      position: absolute;
-      z-index: 5;
-      top: 110px;
-      right: 12px;
-      width: 300px;
+      position: static;
+      width: 100%;
       background: rgba(255,255,255,0.93);
       border-radius: 6px;
       box-shadow: 0 1px 6px rgba(0,0,0,0.15);
@@ -533,21 +555,56 @@
       color: #444;
     }
     #info-panel.collapsed #info-body { display: none; }
+    #info-panel.collapsed #info-title { margin-bottom: 0; }
     #info-toggle {
-      background: none;
-      border: none;
-      cursor: pointer;
-      float: right;
-      font-size: 12px;
-      color: #888;
+      width: 30px;
+      min-width: 30px;
+      height: 30px;
+      min-height: 30px;
       padding: 0;
+      border: 2px solid #006b54;
+      background: #fff;
+      cursor: pointer;
+      font-size: 14px;
+      color: #004f3f;
       line-height: 1;
       margin-left: 6px;
     }
-    #info-toggle:hover { color: #333; }
-    #info-title { font-weight: 600; font-size: 12px; color: #222; margin-bottom: 6px; }
+    #info-toggle:hover,
+    #info-toggle:focus-visible { color: #111; background: #6bbf4b; }
+    #info-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 6px;
+      color: #222;
+      font-size: 14px;
+      font-weight: 800;
+    }
     #info-body p { margin: 0 0 6px; }
     #info-body p:last-child { margin-bottom: 0; }
+
+    @media (max-width: 760px) {
+      #map-control-deck {
+        flex-direction: column;
+      }
+      #ctrl-dir,
+      #ctrl-right-stack {
+        width: 100%;
+        flex-basis: auto;
+      }
+      #ctrl-dir {
+        flex-wrap: wrap;
+      }
+      #ctrl-mode .mode-row {
+        justify-content: flex-start;
+      }
+      #ctrl-mode .mode-row label {
+        flex: 1 0 100%;
+        margin-right: 0;
+      }
+    }
 
     /* ── legend (bottom-left) ───────────────────────────── */
     #legend {
@@ -649,12 +706,12 @@
       <div id="meta" class="muted"></div>
     </div>
     <nav class="header-nav">
-      <a href="https://ac-transit.com/" target="_blank" rel="noopener">Live map →</a>
-      <a href="../daily/">Daily →</a>
-      <a href="../weekly/">Weekly →</a>
-      <a href="../schools/">Schools →</a>
-      <a href="../report-card/">Report card →</a>
-      <a id="route-ask-link" href="../ask/">Ask about this route →</a>
+      <a href="https://ac-transit.com/" target="_blank" rel="noopener">Live map</a>
+      <a href="../daily/">Daily</a>
+      <a href="../weekly/">Weekly</a>
+      <a href="../schools/">Schools</a>
+      <a href="../report-card/">Report card</a>
+      <a id="route-ask-link" href="../ask/">Ask about this route</a>
     </nav>
   </header>
 
@@ -720,7 +777,7 @@
     </details>
   </section>
 
-  <section id="route-bunching-section" class="bunching-section dashboard-frame">
+  <section id="route-bunching-section" class="dashboard-frame">
     <details id="route-bunching-details" open>
       <summary>
         <span class="route-bunching-title">Bus spacing and bunching</span>
@@ -884,41 +941,45 @@
   <div id="map-wrap">
     <div id="map"></div>
 
-    <!-- Direction toggle (top-left) -->
-    <div class="map-ctrl" id="ctrl-dir">
-      <label>Direction</label>
-      <button class="ctrl-btn active" id="btn-dir0" data-dir="0">Outbound (0)</button>
-      <button class="ctrl-btn" id="btn-dir1" data-dir="1">Inbound (1)</button>
-    </div>
+    <div id="map-control-deck">
+      <!-- Direction toggle (top-left) -->
+      <div class="map-ctrl" id="ctrl-dir">
+        <label>Direction</label>
+        <button class="ctrl-btn active" id="btn-dir0" data-dir="0">Outbound (0)</button>
+        <button class="ctrl-btn" id="btn-dir1" data-dir="1">Inbound (1)</button>
+      </div>
 
-    <!-- Mode + percentile toggle (top-right) -->
-    <div class="map-ctrl" id="ctrl-mode">
-      <div class="mode-row">
-        <label>Schedule adherence</label>
-        <button class="ctrl-btn active" id="btn-p95" data-pct="p95">p95</button>
-        <button class="ctrl-btn" id="btn-p50" data-pct="p50">p50</button>
-        <button class="ctrl-btn" id="btn-vol">Volatility</button>
-      </div>
-      <div class="mode-row">
-        <label>Route speed</label>
-        <button class="ctrl-btn" id="btn-sp-mean">Avg</button>
-        <button class="ctrl-btn" id="btn-sp-p50">p50</button>
-        <button class="ctrl-btn" id="btn-sp-std">Stddev</button>
-      </div>
-    </div>
+      <div id="ctrl-right-stack">
+        <!-- Mode + percentile toggle (top-right) -->
+        <div class="map-ctrl" id="ctrl-mode">
+          <div class="mode-row">
+            <label>Schedule adherence</label>
+            <button class="ctrl-btn active" id="btn-p95" data-pct="p95">p95</button>
+            <button class="ctrl-btn" id="btn-p50" data-pct="p50">p50</button>
+            <button class="ctrl-btn" id="btn-vol">Volatility</button>
+          </div>
+          <div class="mode-row">
+            <label>Route speed</label>
+            <button class="ctrl-btn" id="btn-sp-mean">Avg</button>
+            <button class="ctrl-btn" id="btn-sp-p50">p50</button>
+            <button class="ctrl-btn" id="btn-sp-std">Stddev</button>
+          </div>
+        </div>
 
-    <!-- Metric explanation panel (top-right, below mode controls) -->
-    <div id="info-panel">
-      <div id="info-title">
-        <button id="info-toggle" title="Collapse">▲</button>
-        About this view
-      </div>
-      <div id="info-body">
-        <p id="info-text"></p>
-        <p class="muted" style="font-size:11px">
-          <strong>Circle color:</strong> green = on time, yellow = moderately late, red = significantly delayed.<br>
-          <strong>Circle size:</strong> larger = more extreme delay or variability at that stop.
-        </p>
+        <!-- Metric explanation panel, stacked below mode controls -->
+        <div id="info-panel">
+          <div id="info-title">
+            <span>About this view</span>
+            <button id="info-toggle" type="button" aria-expanded="true" title="Collapse">▲</button>
+          </div>
+          <div id="info-body">
+            <p id="info-text"></p>
+            <p class="muted" style="font-size:11px">
+              <strong>Circle color:</strong> green = on time, yellow = moderately late, red = significantly delayed.<br>
+              <strong>Circle size:</strong> larger = more extreme delay or variability at that stop.
+            </p>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -952,7 +1013,7 @@
   </div>
 
   <script src="../lib.js?v=bunching-v4"></script>
-  <script src="app.js?v=bunching-v4"></script>
+  <script src="app.js?v=act-brand-prototype-v2"></script>
   <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "0e36b12e46b04a69b5e9ff6883f6d23d"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
 </html>

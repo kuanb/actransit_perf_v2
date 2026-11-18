@@ -17,6 +17,9 @@ const BUNCHING_GRADE_WEIGHT = 35;
 const SKIPPED_SERVICE_PROJECTION_CAP_RATIO = 1.10;
 const REPORT_VIEW_STORAGE_KEY = "actransit-report-card-view";
 
+Chart.defaults.elements.bar.borderRadius = 0;
+Chart.defaults.plugins.tooltip.cornerRadius = 0;
+
 // Composite weights. Components with no data for a route are dropped and
 // the remaining weights renormalized at score time.
 const WEIGHTS = {
@@ -672,7 +675,7 @@ function renderSkippedServiceChart(summary, showProjection) {
         backgroundColor: backgroundColors,
         borderColor: borderColors,
         borderWidth: 1,
-        borderRadius: 4,
+        borderRadius: 0,
         maxBarThickness: 34,
         stack: "trips",
       }, {
@@ -681,7 +684,7 @@ function renderSkippedServiceChart(summary, showProjection) {
         backgroundColor: hatchPattern,
         borderColor: "rgb(194, 107, 18)",
         borderWidth: 1,
-        borderRadius: 4,
+        borderRadius: 0,
         maxBarThickness: 34,
         stack: "trips",
       }],
@@ -796,7 +799,7 @@ function renderV2MissedDailyChart(summary) {
         data: values,
         backgroundColor: "#b83439",
         hoverBackgroundColor: "#971c23",
-        borderRadius: 3,
+        borderRadius: 0,
         borderSkipped: false,
         maxBarThickness: 28,
       }],
@@ -906,7 +909,7 @@ function buildV2FactorList() {
           <span><b id="v2-factor-${factor.id}-weight">—</b> weight</span>
           <span><b id="v2-factor-${factor.id}-contribution">—</b> points</span>
         </span>
-        <span class="v2-factor-chevron" aria-hidden="true">+</span>
+        <span class="v2-factor-chevron" aria-hidden="true"></span>
       </summary>
       <div class="v2-factor-detail">
         <div class="v2-factor-explanation">
@@ -1650,7 +1653,7 @@ function renderBunchingSection(routes, agency) {
         label: "Headway CV",
         data: chartRoutes.map((route) => route.headway_cv),
         backgroundColor: chartRoutes.map((route) => gradeColor(1 - route.headway_cv).bg),
-        borderRadius: 4,
+        borderRadius: 0,
         borderSkipped: false,
       }],
     },
@@ -1953,7 +1956,7 @@ function render(routes, weekEnd) {
         <td title="composite score / 100">${fmt(r.score)}</td>
         <td>${intFmt(r.trips_observed)}</td>
         <td>${intFmt(r.observations)}</td>
-        <td><a class="route-page-btn" href="${routeHref(r.route_id)}" title="Full performance analysis for route ${r.route_id}">Route page →</a></td>
+        <td><a class="route-page-btn" href="${routeHref(r.route_id)}" title="Full performance analysis for route ${r.route_id}">Route page</a></td>
         <td class="expand-cell" aria-hidden="true">${isOpen ? "▾" : "▸"}</td>
       </tr>
       <tr class="route-detail" data-rid="${r.route_id}" ${detailHidden}>
