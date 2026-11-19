@@ -180,56 +180,81 @@ function apiHealthCountLabel(value, label) {
   return `${intFmt(value)} ${label}${Number(value) === 1 ? "" : "s"}`;
 }
 
-function apiHealthStatus(successPct) {
-  if (successPct >= 99.5) return { className: "is-healthy", label: "Healthy" };
-  if (successPct >= 95) return { className: "is-degraded", label: "Degraded" };
+function apiHealthStatus(availabilityPct, longestOutageMinutes) {
+  if (Number(longestOutageMinutes) >= 10) {
+    return { className: "is-unhealthy", label: "Outage recorded" };
+  }
+  if (availabilityPct >= 99.5) return { className: "is-healthy", label: "Healthy" };
+  if (availabilityPct >= 95) return { className: "is-degraded", label: "Degraded" };
   return { className: "is-unhealthy", label: "Unhealthy" };
+}
+
+function apiHealthWindowLabel(health, daily) {
+  if (health.generated_at) {
+    const updated = new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      timeZone: "America/Los_Angeles",
+      timeZoneName: "short",
+    }).format(new Date(health.generated_at));
+    return `Rolling 7 days · updated ${updated}`;
+  }
+  const period = health.period_start === health.period_end
+    ? health.period_start
+    : `${health.period_start} → ${health.period_end}`;
+  return `${period} · ${daily ? "daily" : "hourly"} latency buckets`;
 }
 
 function renderAPIHealth(health) {
   const section = document.getElementById("api-health-section");
   if (!section) return;
   const sources = health && Array.isArray(health.sources)
-    ? health.sources.filter((source) => Number(source.requests) > 0)
+    ? health.sources.filter((source) => Number(source.requests) > 0 || Number(source.expected_polls) > 0)
     : [];
   section.hidden = sources.length === 0;
   if (!sources.length) return;
 
   const daily = health.bucket_granularity === "day";
-  const period = health.period_start === health.period_end
-    ? health.period_start
-    : `${health.period_start} → ${health.period_end}`;
-  document.getElementById("api-health-window").textContent =
-    `${period} · ${daily ? "daily" : "hourly"} latency buckets`;
+  document.getElementById("api-health-window").textContent = apiHealthWindowLabel(health, daily);
 
   document.getElementById("api-health-cards").innerHTML = sources.map((source) => {
-    const successPct = Number(source.success_pct ?? apiHealthPercent(source.successful_requests, source.requests));
-    const status = apiHealthStatus(successPct);
+    const successPct = apiHealthPercent(source.successful_requests, source.requests);
+    const expectedPolls = Number(source.expected_polls);
+    const successfulPolls = Number(source.successful_polls);
+    const hasAvailability = Number.isFinite(expectedPolls) && expectedPolls > 0 &&
+      Number.isFinite(successfulPolls);
+    const availabilityPct = hasAvailability
+      ? apiHealthPercent(successfulPolls, expectedPolls)
+      : successPct;
+    const longestOutage = hasAvailability ? Number(source.longest_outage_minutes || 0) : null;
+    const status = apiHealthStatus(availabilityPct, longestOutage);
     const failures = Math.max(0, Number(source.requests) - Number(source.successful_requests || 0));
-    const latencyLabels = daily
-      ? { p50: "Typical p50", p95: "Typical p95", p99: "Typical p99" }
-      : { p50: "Median", p95: "p95", p99: "p99" };
-    const errors = failures === 0
+    const failureSummary = failures === 0
       ? "No failures recorded in this window"
       : `${apiHealthCountLabel(failures, "failure")} · ${apiHealthCountLabel(source.timeout_count || 0, "timeout")} · ` +
         `${intFmt(source.http_4xx_count || 0)} 4xx · ${intFmt(source.http_5xx_count || 0)} 5xx · ` +
         `${intFmt(source.other_error_count || 0)} other`;
+    const unavailableSummary = hasAvailability
+      ? `${apiHealthCountLabel(Math.max(0, expectedPolls - successfulPolls), "unavailable scheduled minute")}`
+      : "Scheduled-minute availability was not recorded for this archived report";
     return `
       <article class="api-health-card">
         <div class="api-health-card-heading">
           <div>
             <p>${apiHealthSourceLabel(source.source)}</p>
-            <strong>${fmt(successPct)}% successful</strong>
+            <strong>${fmt(availabilityPct, 2)}% ${hasAvailability ? "available" : "request success"}</strong>
           </div>
           <span class="api-health-status ${status.className}">${status.label}</span>
         </div>
         <dl class="api-health-metrics">
-          <div><dt>${latencyLabels.p50}</dt><dd>${formatAPILatency(source.p50_latency_ms)}</dd></div>
-          <div><dt>${latencyLabels.p95}</dt><dd>${formatAPILatency(source.p95_latency_ms)}</dd></div>
-          <div><dt>${latencyLabels.p99}</dt><dd>${formatAPILatency(source.p99_latency_ms)}</dd></div>
-          <div><dt>Requests</dt><dd>${intFmt(source.requests)}</dd></div>
+          <div><dt>Request success</dt><dd>${fmt(successPct, 2)}%</dd></div>
+          <div><dt>Longest outage</dt><dd>${longestOutage === null ? "—" : `${intFmt(longestOutage)} min`}</dd></div>
+          <div><dt>${daily ? "Typical p95" : "p95"}</dt><dd>${formatAPILatency(source.p95_latency_ms)}</dd></div>
+          <div><dt>Attempts</dt><dd>${intFmt(source.requests)}</dd></div>
         </dl>
-        <p class="api-health-errors">${errors}</p>
+        <p class="api-health-errors">${unavailableSummary} · ${failureSummary}</p>
       </article>`;
   }).join("");
 

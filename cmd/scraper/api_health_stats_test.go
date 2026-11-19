@@ -11,21 +11,28 @@ import (
 func TestAssembleAPIHealthStats(t *testing.T) {
 	date := civil.Date{Year: 2026, Month: 8, Day: 31}
 	hour := time.Date(2026, 9, 1, 4, 0, 0, 0, time.UTC)
+	outageStart := time.Date(2026, 8, 31, 16, 5, 0, 0, time.UTC)
+	outageEnd := outageStart.Add(2 * time.Minute)
 	latency := func(value float64) bigquery.NullFloat64 {
 		return bigquery.NullFloat64{Float64: value, Valid: true}
 	}
 	rows := []apiHealthAggregateRow{
 		{
-			Source:             apiSourceRidership,
-			IsTotal:            true,
-			Requests:           100,
-			SuccessfulRequests: 98,
-			P50LatencyMS:       latency(125.44),
-			P95LatencyMS:       latency(505.55),
-			P99LatencyMS:       latency(30000.02),
-			MaxLatencyMS:       latency(30001.08),
-			TimeoutCount:       1,
-			HTTP4xxCount:       1,
+			Source:                 apiSourceRidership,
+			IsTotal:                true,
+			Requests:               100,
+			SuccessfulRequests:     98,
+			P50LatencyMS:           latency(125.44),
+			P95LatencyMS:           latency(505.55),
+			P99LatencyMS:           latency(30000.02),
+			MaxLatencyMS:           latency(30001.08),
+			TimeoutCount:           1,
+			HTTP4xxCount:           1,
+			ExpectedPolls:          bigquery.NullInt64{Int64: 100, Valid: true},
+			SuccessfulPolls:        bigquery.NullInt64{Int64: 98, Valid: true},
+			LongestOutageMinutes:   bigquery.NullInt64{Int64: 2, Valid: true},
+			LongestOutageStartedAt: bigquery.NullTimestamp{Timestamp: outageStart, Valid: true},
+			LongestOutageEndedAt:   bigquery.NullTimestamp{Timestamp: outageEnd, Valid: true},
 		},
 		{
 			Source:             apiSourceRidership,
@@ -66,8 +73,34 @@ func TestAssembleAPIHealthStats(t *testing.T) {
 	if ridership.SuccessPct != 98 || ridership.P50LatencyMS != 125.4 || ridership.P95LatencyMS != 505.6 || ridership.MaxLatencyMS != 30001.1 {
 		t.Fatalf("ridership summary = %+v", ridership)
 	}
+	if ridership.PollAvailabilityPct != 98 || ridership.LongestOutageMinutes != 2 {
+		t.Fatalf("ridership availability = %+v", ridership)
+	}
+	if ridership.LongestOutageStartedAt == nil || !ridership.LongestOutageStartedAt.Equal(outageStart) ||
+		ridership.LongestOutageEndedAt == nil || !ridership.LongestOutageEndedAt.Equal(outageEnd) {
+		t.Fatalf("ridership outage window = %v..%v", ridership.LongestOutageStartedAt, ridership.LongestOutageEndedAt)
+	}
 	if len(ridership.Buckets) != 1 || !ridership.Buckets[0].StartedAt.Equal(hour) {
 		t.Fatalf("ridership buckets = %+v", ridership.Buckets)
+	}
+}
+
+func TestAPIHealthDateWindowPreservesDST(t *testing.T) {
+	start, end, err := apiHealthDateWindow(
+		civil.Date{Year: 2026, Month: 11, Day: 1},
+		civil.Date{Year: 2026, Month: 11, Day: 7},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := end.Sub(start), 169*time.Hour; got != want {
+		t.Fatalf("window duration = %s, want %s", got, want)
+	}
+}
+
+func TestAPISuccessPctKeepsVisibleFailures(t *testing.T) {
+	if got, want := apiSuccessPct(10082, 10083), 99.99; got != want {
+		t.Fatalf("apiSuccessPct = %v, want %v", got, want)
 	}
 }
 

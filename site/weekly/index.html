@@ -142,7 +142,7 @@
       <div>
         <p class="api-health-kicker">Data pipeline</p>
         <h2>Realtime API health</h2>
-        <p class="muted defn">Response performance for AC Transit’s vehicle-location and ridership-attribute feeds. Every scheduled query attempt is included, including timeouts and non-2xx responses.</p>
+        <p class="muted defn">Current seven-day availability and response performance for AC Transit’s vehicle-location and ridership-attribute feeds. Missing scheduled polls, timeouts, non-2xx responses, and unusable payloads count as unavailable minutes.</p>
       </div>
       <span id="api-health-window" class="api-health-window"></span>
     </div>
@@ -161,7 +161,7 @@
       </div>
       <div class="api-health-chart-canvas"><canvas id="api-health-chart"></canvas></div>
     </div>
-    <p class="muted api-health-methodology">A successful request returned HTTP 200 and a usable payload. Health bands: <strong>Healthy</strong> ≥ 99.5% successful, <strong>Degraded</strong> ≥ 95%, and <strong>Unhealthy</strong> below 95%.</p>
+    <p class="muted api-health-methodology">Poll availability requires at least one HTTP 200 response with a usable payload in every scheduled minute; a missing attempt is unavailable. A consecutive outage of 10 minutes or more is marked <strong>Outage recorded</strong> even when the seven-day percentage remains high. Otherwise, health bands are <strong>Healthy</strong> ≥ 99.5% available, <strong>Degraded</strong> ≥ 95%, and <strong>Unhealthy</strong> below 95%. The rolling view refreshes every 15 minutes and excludes the newest unsettled minutes.</p>
   </section>
 
   <footer>
@@ -170,8 +170,8 @@
     </a>
   </footer>
 
-  <script src="../lib.js?v=api-health-v1"></script>
-  <script src="app.js?v=weekly-grid-v1"></script>
+  <script src="../lib.js?v=api-health-v2"></script>
+  <script src="app.js?v=api-health-v2"></script>
   <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "0e36b12e46b04a69b5e9ff6883f6d23d"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
 </html>

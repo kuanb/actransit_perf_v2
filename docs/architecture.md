@@ -418,6 +418,13 @@ end-to-end body-read latency, response bytes, and a stable outcome category.
 Telemetry insertion is best-effort so a BigQuery outage does not prevent a
 valid vehicle snapshot from reaching GCS.
 
+Every 15 minutes, `/generate-api-health` reads the most recent seven days of
+request telemetry and publishes `stats/api-health/latest.json`. It evaluates
+one scheduled poll per minute, so a missing request is unavailable rather than
+silently absent from the denominator, and retains the longest consecutive
+outage for each upstream feed. The public weekly page uses this rolling object
+by default while archived weeks continue to use their embedded health window.
+
 Total marginal cost: **~$0.25/month**, primarily the once-per-minute GCS object
 replacement, on top of the existing project cost.
 

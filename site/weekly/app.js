@@ -12,6 +12,15 @@ function weeklyURL(weekEnd) {
     : `${GCS_BASE}/stats/weekly/latest.json`;
 }
 
+async function loadCurrentAPIHealth(weekEnd) {
+  if (weekEnd) return null;
+  try {
+    return await fetchJSON(`${GCS_BASE}/stats/api-health/latest.json`);
+  } catch (e) {
+    return null;
+  }
+}
+
 async function loadWeeklyIndex() {
   try {
     const idx = await fetchJSON(`${GCS_BASE}/stats/weekly/_index.json`);
@@ -100,13 +109,14 @@ async function load() {
     return;
   }
 
+  const currentAPIHealth = await loadCurrentAPIHealth(weekEnd);
   await hydrateWeeklyRouteSchedules(data);
-  render(data);
+  render(data, currentAPIHealth);
   const weeks = await loadWeeklyIndex();
   renderWeekSelector(weeks, weekEnd || data.week_end);
 }
 
-function render(data) {
+function render(data, currentAPIHealth) {
   document.getElementById("meta").textContent =
     `Week ${data.week_start} → ${data.week_end} · generated ${data.generated_at}`;
 
@@ -117,7 +127,7 @@ function render(data) {
   renderDelayHeatmap(data);
   renderRouteLineChart(data);
   renderRouteDayGrid(data);
-  renderAPIHealth(data.api_health);
+  renderAPIHealth(currentAPIHealth || data.api_health);
   const apiHealthSection = document.getElementById("api-health-section");
   if (window.location.hash === "#api-health-section" && !apiHealthSection.hidden) {
     requestAnimationFrame(() => apiHealthSection.scrollIntoView({ block: "start" }));

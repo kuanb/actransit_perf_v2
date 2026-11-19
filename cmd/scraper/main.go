@@ -149,6 +149,7 @@ func main() {
 	http.HandleFunc("/refresh-stops", handleRefreshStops)
 	http.HandleFunc("/refresh-gtfs", handleRefreshGTFS)
 	http.HandleFunc("/track-performance", handleTrackPerformance)
+	http.HandleFunc("/generate-api-health", handleGenerateAPIHealth)
 	http.HandleFunc("/generate-daily-stats", handleGenerateDailyStats)
 	http.HandleFunc("/generate-school-stats", handleGenerateSchoolStats)
 	http.HandleFunc("/generate-daily-agency-kpis", handleGenerateDailyAgencyKPIs)
@@ -420,6 +421,24 @@ func handleGenerateWeeklyStats(w http.ResponseWriter, r *http.Request) {
 		"week_end", stats.WeekEnd,
 		"routes", len(stats.RouteDailyServiceDelivered),
 		"route_hourly_routes", len(stats.RouteDelayByHour),
+	)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(stats)
+}
+
+func handleGenerateAPIHealth(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	stats, err := generateCurrentAPIHealth(r.Context(), start)
+	if err != nil {
+		slog.Error("generate-api-health failed", "err", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	slog.Info("generate-api-health ok",
+		"duration_ms", time.Since(start).Milliseconds(),
+		"period_start", stats.PeriodStart,
+		"period_end", stats.PeriodEnd,
+		"sources", len(stats.Sources),
 	)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(stats)

@@ -28,7 +28,10 @@ Both minutely upstream requests also write one health observation to BigQuery,
 including latency, HTTP status, response size, and a categorized failure outcome
 for timeouts, 4xx/5xx responses, transport errors, and invalid payloads. Raw
 request rows expire after 90 days; permanent hourly and daily summaries are
-generated with each daily report.
+generated with each daily report. Every 15 minutes, `/generate-api-health`
+publishes a current seven-day health window that treats any scheduled minute
+without a usable response as unavailable and records the longest consecutive
+outage per feed.
 
 A third job (`/refresh-gtfs`) runs nightly at 22:00 America/Los_Angeles,
 downloads the static GTFS zip, hashes it, and writes a new dated archive
@@ -94,6 +97,7 @@ directly via HTTPS, with permissive CORS for browsers:
 | Current GTFS     | `https://storage.googleapis.com/transit-203605-actransit-cache/gtfs/current.zip`          |
 | Latest daily report | `https://storage.googleapis.com/transit-203605-actransit-cache/stats/latest.json`       |
 | Latest weekly report | `https://storage.googleapis.com/transit-203605-actransit-cache/stats/weekly/latest.json` |
+| Current API health | `https://storage.googleapis.com/transit-203605-actransit-cache/stats/api-health/latest.json` |
 | Latest monthly KPI report | `https://storage.googleapis.com/transit-203605-actransit-cache/stats/monthly/latest.json` |
 | Published AC Transit KPIs | `https://storage.googleapis.com/transit-203605-actransit-cache/stats/published-kpis/latest.json` |
 | Latest school report | `https://storage.googleapis.com/transit-203605-actransit-cache/stats/schools/latest.json` |

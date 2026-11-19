@@ -260,6 +260,8 @@ smoke:
 	hit POST /scrape-ridership; \
 	check "$$BUCKET/ridership/latest.json"; \
 	check "$$BUCKET/ridership/24h.json"; \
+	hit POST /generate-api-health; \
+	check "$$BUCKET/stats/api-health/latest.json"; \
 	hit POST /refresh-stops; \
 	check "$$BUCKET/route_stops.json"; \
 	hit POST /track-performance; \

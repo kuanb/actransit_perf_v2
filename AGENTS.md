@@ -23,7 +23,7 @@ User-facing project docs are in `README.md` and `docs/`. Read those for
 ```
 cmd/scraper/        Single Go binary; one HTTP handler per Cloud Scheduler job
   main.go             Routes, GCS read/write, /scrape, /refresh-stops, /refresh-gtfs,
-                      /generate-daily-stats, /backfill-day handler wiring
+                      /generate-api-health, /generate-daily-stats, /backfill-day handler wiring
   ridership.go        /scrape-ridership: APC attributes → BQ + live 24-hour GCS JSON
   track.go            /track-performance handler + state machine + metric emit +
                       arrival detection + trailing-stop tolerance fallback
@@ -65,6 +65,7 @@ Makefile            Authoritative entry points — see README.md "Deploy"
 | `/track-performance`      | `* * * * *`        | UTC       | Reads `latest.json` + `state.json`, writes `state.json`, finalizes trips into BQ, emits two custom metrics |
 | `/refresh-stops`          | `0 */6 * * *`      | UTC       | Writes `route_stops.json` |
 | `/refresh-gtfs`           | `0 22 * * *`       | PT        | Refreshes `gtfs/current.zip` + per-route processed JSONs |
+| `/generate-api-health`    | `7,22,37,52 * * * *` | UTC     | Writes the current seven-day poll availability and outage summary to `stats/api-health/latest.json` |
 | `/generate-daily-stats`   | `0 2 * * *`        | PT        | Reads BQ for prior PT day, writes `stats/<date>.json`, `stats/latest.json`, updates `stats/_index.json` |
 | `/generate-daily-agency-kpis` | `0 7 * * *`    | PT        | Recomputes prior day's SO/OTP comparison after owl service closes |
 | `/generate-weekly-stats`  | `0 8 * * SUN`      | PT        | Rolls Sunday–Saturday daily reports into `stats/weekly/` |
