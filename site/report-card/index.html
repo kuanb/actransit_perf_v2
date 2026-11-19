@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AC Transit route report card</title>
-  <link rel="stylesheet" href="../styles.css?v=report-card-v2-missed-chart-clean">
+  <link rel="stylesheet" href="../styles.css?v=report-card-v2-ai-cta">
   <link rel="stylesheet" href="../theme.css?v=act-brand-prototype-v3">
   <script src="../independence-notice.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
@@ -55,10 +55,15 @@
         <p id="v2-report-period" class="v2-report-period">Loading the latest 28 service days…</p>
         <p id="v2-report-summary" class="v2-report-summary">The grade combines the four rider-facing factors shown below.</p>
         <nav class="v2-hero-resources" aria-label="Additional analysis">
-          <span>Additional analysis</span>
-          <a href="../ask/">Ask about the data</a>
-          <a href="../kpi-comparison/">Published KPI comparison</a>
-          <a href="../presentations/">Data presentations</a>
+          <div class="v2-hero-resource-row">
+            <span>Additional analysis</span>
+            <a href="../kpi-comparison/">Published KPI comparison</a>
+            <a href="../presentations/">Data presentations</a>
+          </div>
+          <a class="v2-ai-agent-cta" href="../ask/">
+            <span class="v2-ai-agent-icon" aria-hidden="true">✨</span>
+            <span>AI Agent: Ask open questions about data</span>
+          </a>
         </nav>
         <a href="#v2-grade-breakdown">See what drives the grade</a>
       </div>
