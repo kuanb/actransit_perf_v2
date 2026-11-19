@@ -361,13 +361,13 @@ td { font-size: 14px; font-variant-numeric: tabular-nums; }
   gap: 70px;
   margin: 76px 0;
   padding: 48px;
-  color: #eaf6f1;
-  background: var(--green-900);
+  color: var(--ink);
+  background: var(--white);
   border-radius: 18px;
 }
 
-.methodology .section-kicker { color: var(--green-200); }
-.methodology-copy { color: rgba(255, 255, 255, 0.76); }
+.methodology .section-kicker { color: var(--green-700); }
+.methodology-copy { color: var(--muted); }
 .methodology-copy p { margin: 0 0 16px; }
 .methodology-copy p:last-child { margin-bottom: 0; }
 
