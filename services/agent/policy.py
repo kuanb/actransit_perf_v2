@@ -15,12 +15,33 @@ ROUTE_SCOPED_TOOLS = {
     "list_scheduled_arrivals",
     "get_metric_definition",
 }
-GENERAL_TOOLS = ROUTE_SCOPED_TOOLS | {"compare_routes", "get_system_performance", "rank_routes"}
+GENERAL_TOOLS = ROUTE_SCOPED_TOOLS | {
+    "compare_routes",
+    "get_system_performance",
+    "rank_route_trends",
+    "rank_routes",
+}
 CONTEXT_ANSWER_CHARS = 2000
 
 
-def allowed_tool_names(route_id: str | None) -> set[str]:
-    return ROUTE_SCOPED_TOOLS if route_id else GENERAL_TOOLS
+def allowed_tool_names(route_id: str | None, prompt: str | None = None) -> set[str]:
+    allowed = set(ROUTE_SCOPED_TOOLS if route_id else GENERAL_TOOLS)
+    if not route_id and prompt and is_route_trend_request(prompt):
+        allowed.discard("rank_routes")
+    return allowed
+
+
+def is_route_trend_request(prompt: str) -> bool:
+    lowered = prompt.lower()
+    change_language = re.search(
+        r"\b(trends?|changes?|changed|improve[ds]?|decline[ds]?|worsen(?:ed|ing)?|over time|got(?:ten)?\b.{0,24}\bworse)\b",
+        lowered,
+    )
+    multiple_periods = re.search(
+        r"\b(days?|daily|weeks?|weekly|months?|monthly|periods?|past|previous|prior|before|over time)\b",
+        lowered,
+    )
+    return bool(change_language and multiple_periods)
 
 
 def prepare_tool_call(
@@ -33,8 +54,11 @@ def prepare_tool_call(
         raise ValueError(f"Tool {tool_name} is not available in this analysis scope")
 
     prepared = dict(arguments)
-    if tool_name == "rank_routes" and not prepared.get("route_group"):
+    if tool_name in {"rank_routes", "rank_route_trends"} and not prepared.get("route_group"):
         prepared["route_group"] = "regular"
+    if tool_name == "rank_route_trends":
+        prepared.setdefault("period", "week")
+        prepared.setdefault("order", "worsened")
     if route_id and tool_name in {
         "get_route_delay_map",
         "get_route_performance",
@@ -88,6 +112,7 @@ def eval_prompt_features(prompt: str) -> list[str]:
     features = []
     patterns = {
         "ranking": r"\b(worst|best|rank|ranking|worse)\b",
+        "trend": r"\b(trend|change|changed|improve|improved|decline|declined|worse|worsened|over time)\b",
         "comparison": r"\b(compare|comparison|versus|vs\.?|worse than|better than)\b",
         "hourly": r"\b(hour|hours|hourly|time of day)\b",
         "dropped_trip_timing": (
@@ -108,7 +133,7 @@ def eval_prompt_features(prompt: str) -> list[str]:
 
 
 def enforce_route_group(tool_name: str, arguments: dict[str, Any], prompt: str) -> dict[str, Any]:
-    if tool_name != "rank_routes":
+    if tool_name not in {"rank_routes", "rank_route_trends"}:
         return arguments
 
     lowered = prompt.lower()

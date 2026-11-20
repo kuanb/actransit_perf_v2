@@ -21,9 +21,12 @@ from core import (
     METRICS,
     ROUTE_GROUPS,
     aggregate_metric,
+    build_trend_periods,
+    calculate_metric_change,
     comparable_route_group,
     daily_metric_value,
     default_analysis_window,
+    default_trend_window,
     format_metric,
     number,
     resolve_daily_dates,
@@ -934,6 +937,268 @@ class TransitData:
             ],
             sources=[daily_source(resolved.dates), route_group_source(route_group)],
             warnings=resolved.warnings + [ROUTE_GROUPS[route_group]["definition"]],
+        )
+
+    def rank_route_trends(
+        self,
+        metric: str,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        period: Literal["day", "week"] = "week",
+        order: Literal["worsened", "improved"] = "worsened",
+        limit: int = 10,
+        route_group: Literal["regular", "school", "all_nighter", "transbay"] = "regular",
+    ) -> dict[str, Any]:
+        if metric != "dropped_trips":
+            raise ValueError("route trends currently support only dropped_trips")
+        if route_group not in ROUTE_GROUPS:
+            raise ValueError(f"route_group must be one of: {', '.join(ROUTE_GROUPS)}")
+        if period not in {"day", "week"}:
+            raise ValueError("period must be day or week")
+        if order not in {"worsened", "improved"}:
+            raise ValueError("order must be worsened or improved")
+        if limit < 1 or limit > 10:
+            raise ValueError("limit must be between 1 and 10")
+
+        default_start, default_end = default_trend_window()
+        assumed = start_date is None or end_date is None
+        if start_date is None and end_date is None:
+            range_start, range_end = default_start, default_end
+            disclosure = (
+                "No timeframe was provided, so this trend analysis uses the 28-day period ending yesterday: "
+                f"{range_start} through {range_end}."
+            )
+            basis = "four_week_period_ending_yesterday"
+        elif start_date is None:
+            range_end = end_date
+            range_start = (
+                date.fromisoformat(range_end) - timedelta(days=27)
+            ).isoformat()
+            disclosure = (
+                "No start date was provided, so this trend analysis uses the 28-day period ending "
+                f"{range_end}: {range_start} through {range_end}."
+            )
+            basis = "end_date_with_four_week_default"
+        elif end_date is None:
+            range_start, range_end = start_date, default_end
+            disclosure = (
+                "No end date was provided, so this trend analysis ends yesterday: "
+                f"{range_start} through {range_end}."
+            )
+            basis = "start_date_through_yesterday"
+        else:
+            range_start, range_end = start_date, end_date
+            disclosure = f"Analyzed route trends from {range_start} through {range_end}."
+            basis = "user_supplied_or_interpreted_dates"
+        resolved = resolve_daily_dates(
+            self.published_dates(),
+            range_start,
+            range_end,
+        )
+        timeframe = {
+            "start_date": range_start,
+            "end_date": range_end,
+            "assumed": assumed,
+            "basis": basis,
+            "disclosure": disclosure,
+        }
+        reports_by_date = dict(zip(resolved.dates, self.daily_reports(resolved.dates)))
+        periods = build_trend_periods(range_start, range_end, period)
+        route_ids = route_ids_for_group(
+            [
+                str(route["route_id"])
+                for report in reports_by_date.values()
+                for route in report.get("routes") or []
+            ],
+            route_group,
+        )
+
+        rows: list[dict[str, Any]] = []
+        omitted_from_change = 0
+        for route_id in route_ids:
+            all_route_days: list[dict[str, Any]] = []
+            period_values = []
+            for trend_period in periods:
+                published_dates = [
+                    service_date
+                    for service_date in trend_period.dates
+                    if service_date in reports_by_date
+                ]
+                route_days = [
+                    route
+                    for service_date in published_dates
+                    if (route := find_route(reports_by_date[service_date], route_id))
+                ]
+                all_route_days.extend(route_days)
+                value, service_days = aggregate_metric(route_days, metric)
+                period_values.append(
+                    {
+                        "start_date": trend_period.start_date,
+                        "end_date": trend_period.end_date,
+                        "value": value,
+                        "formatted_value": format_metric(value, metric),
+                        "published_days": len(published_dates),
+                        "service_days": service_days,
+                    }
+                )
+
+            total_value, total_service_days = aggregate_metric(all_route_days, metric)
+            if total_value is None:
+                continue
+            row = {
+                "route_id": route_id,
+                "route_group": route_group,
+                "route_group_label": ROUTE_GROUPS[route_group]["label"],
+                "total_value": total_value,
+                "formatted_total": format_metric(total_value, metric),
+                "service_days": total_service_days,
+                "periods": period_values,
+                "period_values": "; ".join(
+                    f"{item['start_date']}–{item['end_date']}: {item['formatted_value']}"
+                    for item in period_values
+                ),
+            }
+            first_value = period_values[0]["value"]
+            last_value = period_values[-1]["value"]
+            if len(period_values) < 2 or first_value is None or last_value is None:
+                row["change_available"] = False
+                omitted_from_change += 1
+            else:
+                change = calculate_metric_change(first_value, last_value, metric)
+                row.update(
+                    {
+                        "change_available": True,
+                        "first_value": first_value,
+                        "last_value": last_value,
+                        "formatted_first": format_metric(first_value, metric),
+                        "formatted_last": format_metric(last_value, metric),
+                        "formatted_change": f"{change['absolute_change']:+.0f} trips",
+                        "formatted_percentage_change": (
+                            f"{change['percentage_change']:+.1f}%"
+                            if change["percentage_change"] is not None
+                            else "Not meaningful from a zero baseline"
+                        ),
+                        **change,
+                    }
+                )
+            rows.append(row)
+
+        total_ranked = sorted(
+            rows,
+            key=lambda row: (-row["total_value"], row["route_id"]),
+        )[:limit]
+        change_rows = [row for row in rows if row["change_available"]]
+        change_ranked = sorted(
+            change_rows,
+            key=(
+                (lambda row: (-row["worsening_change"], row["route_id"]))
+                if order == "worsened"
+                else (lambda row: (row["worsening_change"], row["route_id"]))
+            ),
+        )[:limit]
+        total_ranked = [dict(row, rank=position) for position, row in enumerate(total_ranked, 1)]
+        change_ranked = [dict(row, rank=position) for position, row in enumerate(change_ranked, 1)]
+
+        total_context = ", ".join(
+            f"{row['route_id']} ({row['formatted_total']})" for row in total_ranked
+        ) or "no routes with data"
+        change_context = ", ".join(
+            f"{row['route_id']} ({row['formatted_first']} to {row['formatted_last']}, {row['formatted_change']})"
+            for row in change_ranked
+        ) or "no routes with both a first and last period value"
+        period_label = "daily" if period == "day" else "consecutive seven-day"
+        warnings = resolved.warnings + [
+            (
+                f"Change compares the first and last {period_label} periods in the selected range. "
+                "Absolute change is last minus first; percentage change is omitted when the first value is zero."
+            ),
+            ROUTE_GROUPS[route_group]["definition"],
+        ]
+        if omitted_from_change:
+            warnings.append(
+                f"{omitted_from_change} routes without both a first and last period value were omitted from the change ranking."
+            )
+
+        methodology = {
+            "kind": "methodology_registry",
+            "metric": metric,
+            "comparison": "first_period_to_last_period",
+            "period": period,
+            "period_alignment": (
+                "One service date per period"
+                if period == "day"
+                else "Consecutive seven-day periods anchored to start_date; the final period may be shorter"
+            ),
+            "absolute_change": "last period value minus first period value",
+            "percentage_change": "absolute change divided by first period value; null when the first value is zero",
+            "ranking": f"{order} by absolute metric change, with route ID ascending as the tie-breaker",
+        }
+        return tool_result(
+            answer_context=(
+                f"Highest {ROUTE_GROUPS[route_group]['label']} totals for {METRICS[metric]['label']}: {total_context}. "
+                f"Routes ranked by change ({order}): {change_context}."
+            ),
+            timeframe=timeframe,
+            charts=[
+                {
+                    "type": "bar",
+                    "title": f"Highest totals: {METRICS[metric]['label']}",
+                    "x_label": "Route",
+                    "labels": [row["route_id"] for row in total_ranked],
+                    "y_label": METRICS[metric]["unit"].title(),
+                    "series": [
+                        {
+                            "name": METRICS[metric]["label"],
+                            "values": [row["total_value"] for row in total_ranked],
+                        }
+                    ],
+                },
+                {
+                    "type": "line",
+                    "title": f"{METRICS[metric]['label']} by {period}",
+                    "x_label": "Period start",
+                    "labels": [item.start_date for item in periods],
+                    "y_label": METRICS[metric]["unit"].title(),
+                    "series": [
+                        {
+                            "name": f"Route {row['route_id']}",
+                            "values": [item["value"] for item in row["periods"]],
+                        }
+                        for row in change_ranked[:5]
+                    ],
+                },
+            ],
+            tables=[
+                {
+                    "title": f"Highest total {METRICS[metric]['label']}",
+                    "columns": [
+                        {"key": "rank", "label": "Rank"},
+                        {"key": "route_id", "label": "Route"},
+                        {"key": "formatted_total", "label": "Range total"},
+                        {"key": "period_values", "label": "Period values"},
+                    ],
+                    "rows": total_ranked,
+                },
+                {
+                    "title": f"Routes that {order} most",
+                    "columns": [
+                        {"key": "rank", "label": "Rank"},
+                        {"key": "route_id", "label": "Route"},
+                        {"key": "formatted_first", "label": "First period"},
+                        {"key": "formatted_last", "label": "Last period"},
+                        {"key": "formatted_change", "label": "Absolute change"},
+                        {"key": "formatted_percentage_change", "label": "Percentage change"},
+                        {"key": "period_values", "label": "Period values"},
+                    ],
+                    "rows": change_ranked,
+                },
+            ],
+            sources=[
+                daily_source(resolved.dates),
+                route_group_source(route_group),
+                methodology,
+            ],
+            warnings=warnings,
         )
 
     def get_route_time_profile(

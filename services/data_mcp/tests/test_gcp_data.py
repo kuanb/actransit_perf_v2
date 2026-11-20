@@ -2,7 +2,7 @@ import io
 import sys
 import unittest
 import zipfile
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from types import ModuleType
 from unittest.mock import patch
@@ -206,6 +206,109 @@ class RouteServiceProfileTest(unittest.TestCase):
         )
         self.assertEqual(("2026-10-06", "2026-10-12"), date_ranges[0])
         self.assertEqual(("2026-11-03", "2026-11-05"), date_ranges[-1])
+
+
+class RouteTrendRankingTest(unittest.TestCase):
+    def transit(self):
+        start = date(2026, 10, 12)
+        weekly_dropped = {
+            "1": [10, 10, 10, 11],
+            "2": [3, 4, 5, 12],
+            "3": [0, 5, 5, 9],
+            "4": [10, 5, 4, 1],
+            "99": [None, 1, 1, 1],
+            "633": [100, 100, 100, 100],
+        }
+        reports = {}
+        for offset in range(28):
+            service_date = start + timedelta(days=offset)
+            week = offset // 7
+            routes = []
+            for route_id, values in weekly_dropped.items():
+                dropped = values[week]
+                if dropped is None:
+                    continue
+                daily_dropped = dropped if offset % 7 == 0 else 0
+                routes.append(
+                    {
+                        "route_id": route_id,
+                        "scheduled_trips": daily_dropped,
+                        "ran_trips": 0,
+                    }
+                )
+            reports[service_date.isoformat()] = {"routes": routes}
+
+        transit = TransitData.__new__(TransitData)
+        transit.published_dates = lambda: list(reports)
+        transit.daily_reports = lambda dates: [reports[value] for value in dates]
+        return transit
+
+    def test_returns_separate_total_and_first_to_last_rankings(self):
+        result = self.transit().rank_route_trends(
+            "dropped_trips",
+            "2026-10-12",
+            "2026-11-08",
+            "week",
+            "worsened",
+            10,
+            "regular",
+        )
+
+        totals = result["tables"][0]["rows"]
+        changes = result["tables"][1]["rows"]
+        self.assertEqual("1", totals[0]["route_id"])
+        self.assertNotIn("633", [row["route_id"] for row in totals])
+        self.assertEqual(["2", "3"], [row["route_id"] for row in changes[:2]])
+        self.assertEqual([3, 4, 5, 12], [item["value"] for item in changes[0]["periods"]])
+        self.assertEqual(9, changes[0]["absolute_change"])
+        self.assertEqual(300, changes[0]["percentage_change"])
+        route_three = next(row for row in changes if row["route_id"] == "3")
+        self.assertIsNone(route_three["percentage_change"])
+        self.assertNotIn("99", [row["route_id"] for row in changes])
+        self.assertTrue(any("omitted from the change ranking" in warning for warning in result["warnings"]))
+        self.assertEqual("first_period_to_last_period", result["sources"][-1]["comparison"])
+
+    def test_improved_order_uses_metric_direction(self):
+        result = self.transit().rank_route_trends(
+            "dropped_trips",
+            "2026-10-12",
+            "2026-11-08",
+            order="improved",
+        )
+
+        first = result["tables"][1]["rows"][0]
+        self.assertEqual("4", first["route_id"])
+        self.assertEqual("improved", first["direction"])
+
+    def test_one_sided_ranges_use_trend_boundaries(self):
+        transit = self.transit()
+        with patch.object(
+            gcp_data,
+            "default_trend_window",
+            return_value=("2026-10-12", "2026-11-08"),
+        ):
+            from_start = transit.rank_route_trends(
+                "dropped_trips",
+                start_date="2026-10-12",
+            )
+            through_end = transit.rank_route_trends(
+                "dropped_trips",
+                end_date="2026-11-08",
+            )
+
+        self.assertEqual("2026-11-08", from_start["timeframe"]["end_date"])
+        self.assertEqual("start_date_through_yesterday", from_start["timeframe"]["basis"])
+        self.assertEqual("2026-10-12", through_end["timeframe"]["start_date"])
+        self.assertEqual("end_date_with_four_week_default", through_end["timeframe"]["basis"])
+
+    def test_rejects_unapproved_metric_and_invalid_ranking_options(self):
+        transit = self.transit()
+        with self.assertRaisesRegex(ValueError, "only dropped_trips"):
+            transit.rank_route_trends("median_delay", "2026-10-12", "2026-11-08")
+        with self.assertRaisesRegex(ValueError, "period must"):
+            transit.rank_route_trends("dropped_trips", "2026-10-12", "2026-11-08", period="month")
+        with self.assertRaisesRegex(ValueError, "order must"):
+            transit.rank_route_trends("dropped_trips", "2026-10-12", "2026-11-08", order="worst")
 
 
 class RouteMapTest(unittest.TestCase):

@@ -40,6 +40,17 @@
       }]
     },
     {
+      "id": "four_week_dropped_trip_route_trends",
+      "critical": true,
+      "turns": [{
+        "prompt": "Show me lines with the most dropped trips and the ones that have gotten most worse in this regard over the past 4 weeks.",
+        "expected_calls": [{"name": "rank_route_trends", "arguments": {"metric": "dropped_trips", "period": "week", "order": "worsened", "route_group": "regular"}}],
+        "answer_contains_all": ["1T", "28 trips", "51A", "from 2", "to 10"],
+        "answer_forbidden": ["cannot", "can't", "impossible"],
+        "max_calls": 1
+      }]
+    },
+    {
       "id": "regular_route_ranking",
       "turns": [{
         "prompt": "Which regular routes have the worst On Time Service Delivered?",

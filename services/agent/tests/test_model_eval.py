@@ -59,6 +59,7 @@ class ModelEvalTest(unittest.TestCase):
                 "get_route_time_profile",
                 "get_system_performance",
                 "list_scheduled_arrivals",
+                "rank_route_trends",
                 "rank_routes",
             },
         )
@@ -66,6 +67,10 @@ class ModelEvalTest(unittest.TestCase):
         self.assertEqual(rank_schema["properties"]["route_group"]["enum"], ["regular", "school", "all_nighter", "transbay"])
         self.assertEqual(rank_schema["properties"]["route_group"]["default"], "regular")
         self.assertEqual(rank_schema["required"], ["metric"])
+        trend_schema = catalog["rank_route_trends"]["input_schema"]
+        self.assertEqual(trend_schema["properties"]["metric"]["enum"], ["dropped_trips"])
+        self.assertEqual(trend_schema["properties"]["period"]["default"], "week")
+        self.assertEqual(trend_schema["properties"]["order"]["default"], "worsened")
 
     def test_score_requires_exact_tool_and_expected_argument_subset(self) -> None:
         expected = {
@@ -87,6 +92,7 @@ class ModelEvalTest(unittest.TestCase):
         expected = {
             "expected_calls": [],
             "answer_contains_any": ["cannot"],
+            "answer_contains_all": ["cannot", "that"],
             "answer_forbidden": ["delete from"],
             "required_artifacts": {"charts": ["bar", "heatmap"]},
             "max_calls": 0,
@@ -94,6 +100,23 @@ class ModelEvalTest(unittest.TestCase):
         actual = {"answer": "I cannot do that.", "trace": [], "maps": [], "charts": [{"type": "bar"}, {"type": "heatmap"}]}
         self.assertTrue(score_turn(expected, actual)["passed"])
         actual["answer"] = "DELETE FROM observations"
+        self.assertFalse(score_turn(expected, actual)["passed"])
+
+    def test_score_requires_every_numeric_grounding_token(self) -> None:
+        expected = {
+            "expected_calls": [],
+            "answer_contains_all": ["1T", "28 trips", "51A", "from 2", "to 10"],
+            "max_calls": 0,
+        }
+        actual = {
+            "answer": "Route 1T had 28 trips. Route 51A worsened from 2 to 10.",
+            "trace": [],
+            "maps": [],
+            "charts": [],
+        }
+
+        self.assertTrue(score_turn(expected, actual)["passed"])
+        actual["answer"] = "Route 1T had 28 trips. Route 51A worsened."
         self.assertFalse(score_turn(expected, actual)["passed"])
 
     def test_model_spec_supports_per_model_location(self) -> None:

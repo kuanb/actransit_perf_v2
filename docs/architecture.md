@@ -263,6 +263,8 @@ The initial tool set covers:
 
 - systemwide performance summaries;
 - route comparisons and bounded rankings over approved metrics;
+- bounded route trend rankings with separate total and first-to-last change
+  results plus every daily or consecutive seven-day period value;
 - one-route performance summaries;
 - route stop-delay maps for median delay, 95th-percentile delay, and delay
   variability, returned as one bounded GeoJSON artifact per direction;
@@ -308,7 +310,8 @@ does not provide a complete timeframe:
 
 | Question shape | Default |
 |---|---|
-| route comparison, route summary, ranking, or system summary | seven calendar days ending yesterday in Pacific time |
+| route comparison, route summary, snapshot ranking, or system summary | seven calendar days ending yesterday in Pacific time |
+| route trend ranking | 28 calendar days ending yesterday in Pacific time |
 | hourly route profile | seven calendar days ending yesterday in Pacific time |
 | route stop or section map | seven calendar days ending yesterday in Pacific time |
 | scheduled-arrival list | 06:00–10:00 Pacific yesterday |
@@ -369,6 +372,11 @@ the Route 1T monthly follow-up and requires both the absolute-count bar chart an
 the hour-of-week heatmap. It also runs a Route 51A spatial thread that requires
 a stop-delay map followed by a stop-to-stop section map. Both suites observe the
 normal cooldown and are deliberately excluded from CI.
+
+The managed-model comparison suite also includes the production four-week
+dropped-trip question as a critical case. It requires one `rank_route_trends`
+call using the deterministic 28-day default, weekly periods, regular-service
+scope, grounded total and change values, and no refusal language.
 
 Every accepted analysis turn is also archived as one JSON object in the private
 `transit-203605-analysis-chats` bucket. Object names use

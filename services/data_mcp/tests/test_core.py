@@ -8,8 +8,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from core import (
     aggregate_metric,
+    build_trend_periods,
+    calculate_metric_change,
     comparable_route_group,
     default_analysis_window,
+    default_trend_window,
     resolve_daily_dates,
     route_group_for_id,
     route_ids_for_group,
@@ -34,11 +37,43 @@ class ResolveDatesTest(unittest.TestCase):
             default_analysis_window(date(2026, 11, 5)),
         )
 
+    def test_default_trend_window_is_28_calendar_days(self):
+        self.assertEqual(
+            ("2026-10-08", "2026-11-04"),
+            default_trend_window(date(2026, 11, 5)),
+        )
+
     def test_explicit_range_uses_only_published_dates(self):
         resolved = resolve_daily_dates(["2026-10-01", "2026-10-03"], "2026-10-01", "2026-10-03")
 
         self.assertFalse(resolved.timeframe["assumed"])
         self.assertEqual(1, len(resolved.warnings))
+
+
+class TrendPeriodTest(unittest.TestCase):
+    def test_week_periods_are_anchored_to_start_and_bound_the_last_period(self):
+        periods = build_trend_periods("2026-10-12", "2026-11-08", "week")
+
+        self.assertEqual(4, len(periods))
+        self.assertEqual(("2026-10-12", "2026-10-18"), (periods[0].start_date, periods[0].end_date))
+        self.assertEqual(("2026-11-02", "2026-11-08"), (periods[-1].start_date, periods[-1].end_date))
+
+        partial = build_trend_periods("2026-10-12", "2026-10-20", "week")
+        self.assertEqual(("2026-10-19", "2026-10-20"), (partial[-1].start_date, partial[-1].end_date))
+
+    def test_day_periods_preserve_date_boundaries(self):
+        periods = build_trend_periods("2026-11-01", "2026-11-03", "day")
+
+        self.assertEqual(["2026-11-01", "2026-11-02", "2026-11-03"], [item.start_date for item in periods])
+
+    def test_change_uses_first_to_last_and_omits_zero_baseline_percentage(self):
+        worsened = calculate_metric_change(2, 10, "dropped_trips")
+        zero_baseline = calculate_metric_change(0, 4, "dropped_trips")
+
+        self.assertEqual(8, worsened["absolute_change"])
+        self.assertEqual(400, worsened["percentage_change"])
+        self.assertEqual("worsened", worsened["direction"])
+        self.assertIsNone(zero_baseline["percentage_change"])
 
 
 class AggregateMetricTest(unittest.TestCase):

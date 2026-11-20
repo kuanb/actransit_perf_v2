@@ -46,8 +46,9 @@ What's covered:
   unknown route → preserved (we can't tell which stop is last); nil
   cache → no-op.
 - **`services/data_mcp/tests/test_core.py`** — deterministic timeframe defaults,
-  disclosure of inferred dates, count-weighted metric aggregation, route-group
-  classification, and rejection of cross-group comparisons.
+  disclosure of inferred dates, count-weighted metric aggregation, route trend
+  periods and change math, route-group classification, and rejection of
+  cross-group comparisons.
 - **`services/agent/tests/test_policy.py`** — route-scope enforcement, route-page
   week defaults, regular-service ranking defaults, category-sensitive eval
   tagging, eval-case integrity, and structured response caps for maps, charts, and tables.
@@ -95,6 +96,13 @@ prompt, tool loop, provider request shape, and token accounting are the same cod
 used by Cloud Run. This isolates model and interface behavior, avoids the public
 chatbot allowance, and makes MCP signature or description changes part of the
 next run.
+
+The fixture rankings contain several routes with distinct numeric values. The
+critical four-week dropped-trip case checks the dedicated trend tool, its
+deterministic 28-day default, weekly granularity, regular-service scope, and
+numeric grounding for both the highest total and the largest first-to-last
+increase. It also rejects refusal language. Use `EVAL_REPEATS=3` or more to
+expose nondeterministic tool planning.
 
 Run the default comparison across Gemini 3.5 Flash-Lite, Gemma 4, gpt-oss 120B,
 DeepSeek V4.1 Flash, Llama 4 Scout, Mistral Small 3.1, and Grok 4.7 with

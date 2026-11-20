@@ -74,7 +74,9 @@ to regular Local/Rapid/Tempo service; 600-series Supplementary School Service,
 800-series All Nighter service, and lettered Transbay routes are ranked only
 within their own groups. The MCP rejects cross-group comparisons and includes
 the service type and official AC Transit classification source in structured
-results.
+results. Multi-period route questions use a dedicated trend ranking that keeps
+highest totals separate from first-to-last change, returns every daily or
+seven-day period value, and uses an explicit zero-baseline policy.
 
 ## Design docs
 

@@ -15,6 +15,7 @@ mcp = FastMCP(
     instructions=(
         "Read-only, bounded tools for published AC Transit performance reports and observations. "
         "When dates are omitted, tools use the seven-day period ending yesterday in America/Los_Angeles. "
+        "Route trend rankings instead default to the 28-day period ending yesterday. "
         "Route comparisons are service-group aware: regular Local/Rapid/Tempo, 600-series Supplementary "
         "School Service, 800-series All Nighter, and lettered Transbay routes must be analyzed separately."
     ),
@@ -129,6 +130,28 @@ def rank_routes(
 ) -> dict:
     """Rank at most ten routes within one service group using an approved metric. Defaults to regular Local/Rapid/Tempo routes; 600-series school, 800-series All Nighter, and Transbay routes require their own separate ranking. Dates default to seven days ending yesterday."""
     return data.rank_routes(metric, start_date, end_date, order, limit, route_group)
+
+
+@mcp.tool
+def rank_route_trends(
+    metric: Literal["dropped_trips"],
+    start_date: str | None = None,
+    end_date: str | None = None,
+    period: Literal["day", "week"] = "week",
+    order: Literal["worsened", "improved"] = "worsened",
+    limit: int = 10,
+    route_group: Literal["regular", "school", "all_nighter", "transbay"] = "regular",
+) -> dict:
+    """Rank route changes across daily or consecutive seven-day periods in at most 31 calendar days. Returns separate highest-total and first-to-last change rankings with every period value. Percentage change is omitted for a zero first-period baseline. Defaults to regular Local/Rapid/Tempo routes and the 28 days ending yesterday; special-service groups remain separate."""
+    return data.rank_route_trends(
+        metric,
+        start_date,
+        end_date,
+        period,
+        order,
+        limit,
+        route_group,
+    )
 
 
 @mcp.tool

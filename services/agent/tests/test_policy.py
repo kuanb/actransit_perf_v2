@@ -7,12 +7,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from policy import (
+    allowed_tool_names,
     apply_context_timeframe,
     compact_tool_result,
     enforce_route_group,
     eval_prompt_features,
     extend_conversation,
     follow_ups_remaining,
+    is_route_trend_request,
     merge_tool_results,
     prepare_tool_call,
 )
@@ -45,6 +47,8 @@ class ScopePolicyTest(unittest.TestCase):
     def test_route_scope_rejects_systemwide_ranking(self):
         with self.assertRaises(ValueError):
             prepare_tool_call("rank_routes", {"metric": "dropped_trips"}, "51A", None)
+        with self.assertRaises(ValueError):
+            prepare_tool_call("rank_route_trends", {"metric": "dropped_trips"}, "51A", None)
 
     def test_route_page_week_is_applied_and_disclosed(self):
         arguments, timeframe = prepare_tool_call(
@@ -63,12 +67,37 @@ class ScopePolicyTest(unittest.TestCase):
 
         self.assertEqual("regular", arguments["route_group"])
 
+        trend_arguments, _ = prepare_tool_call(
+            "rank_route_trends", {"metric": "dropped_trips"}, None, None
+        )
+        self.assertEqual("regular", trend_arguments["route_group"])
+        self.assertEqual("week", trend_arguments["period"])
+        self.assertEqual("worsened", trend_arguments["order"])
+
+    def test_multi_period_change_prompt_exposes_only_the_trend_ranking(self):
+        prompt = "Which lines have gotten most worse over the past 4 weeks?"
+
+        self.assertTrue(is_route_trend_request(prompt))
+        self.assertIn("rank_route_trends", allowed_tool_names(None, prompt))
+        self.assertNotIn("rank_routes", allowed_tool_names(None, prompt))
+        self.assertIn(
+            "rank_routes",
+            allowed_tool_names(None, "Which routes had the most dropped trips in the past 4 weeks?"),
+        )
+
     def test_eval_features_tag_category_sensitive_prompt_without_storing_it(self):
         features = eval_prompt_features(
             "Tell me about the worst hours of 1T performance this week? Any other popular routes that were worse?"
         )
 
-        self.assertEqual(["ranking", "hourly", "popularity_language"], features)
+        self.assertEqual(["ranking", "trend", "hourly", "popularity_language"], features)
+
+    def test_eval_features_tag_route_trend_prompt(self):
+        features = eval_prompt_features(
+            "Which routes have worsened over time during the past four weeks?"
+        )
+
+        self.assertIn("trend", features)
 
     def test_eval_features_tag_dropped_trip_timing(self):
         features = eval_prompt_features(
@@ -94,7 +123,7 @@ class ScopePolicyTest(unittest.TestCase):
 
     def test_explicit_school_request_selects_school_group(self):
         arguments = enforce_route_group(
-            "rank_routes",
+            "rank_route_trends",
             {"metric": "median_delay", "route_group": "regular"},
             "Which 600-series school routes were worst?",
         )
@@ -317,6 +346,23 @@ class EvalCaseTest(unittest.TestCase):
         spatial = next(case for case in cases if case["id"] == "route_51a_spatial_deep_dive")
         self.assertEqual(["stop"], spatial["turns"][0]["required_map_targets"])
         self.assertEqual(["segment"], spatial["turns"][1]["required_map_targets"])
+
+    def test_model_eval_covers_four_week_route_trends_as_critical(self):
+        path = Path(__file__).resolve().parents[1] / "evals" / "model_comparison_cases.json"
+        suite = json.loads(path.read_text())
+
+        case = next(
+            item
+            for item in suite["cases"]
+            if item["id"] == "four_week_dropped_trip_route_trends"
+        )
+        turn = case["turns"][0]
+        self.assertTrue(case["critical"])
+        self.assertEqual("rank_route_trends", turn["expected_calls"][0]["name"])
+        self.assertEqual("week", turn["expected_calls"][0]["arguments"]["period"])
+        self.assertIn("from 2", turn["answer_contains_all"])
+        self.assertIn("to 10", turn["answer_contains_all"])
+        self.assertIn("cannot", turn["answer_forbidden"])
 
 
 if __name__ == "__main__":

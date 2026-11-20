@@ -17,7 +17,7 @@ from model_provider import (
     ModelToolResult,
     create_model_provider,
 )
-from orchestrator import AnalysisAgent
+from orchestrator import AnalysisAgent, tool_trace
 from vertex_open_model import VertexOpenModelSession
 
 
@@ -45,6 +45,21 @@ class FakeAuthorizedSession:
     ) -> FakeResponse:
         self.requests.append({"url": url, "body": json, "timeout": timeout})
         return FakeResponse(self.payloads.pop(0))
+
+
+class EvalTraceTest(unittest.TestCase):
+    def test_route_trend_trace_keeps_period_granularity(self) -> None:
+        trace = tool_trace(
+            "rank_route_trends",
+            {
+                "metric": "dropped_trips",
+                "period": "week",
+                "order": "worsened",
+            },
+            "ok",
+        )
+
+        self.assertEqual("week", trace["arguments"]["period"])
 
 
 class VertexOpenModelSessionTest(unittest.IsolatedAsyncioTestCase):

@@ -91,7 +91,7 @@ class AnalysisAgent:
         conversation: list[dict[str, Any]],
     ) -> dict[str, Any]:
         catalog = await self.gateway.list_tools()
-        allowed = allowed_tool_names(route_id)
+        allowed = allowed_tool_names(route_id, prompt)
         declarations = [
             tool
             for tool in catalog
@@ -199,6 +199,7 @@ Interpret relative dates in America/Los_Angeles and pass the exact resolved date
 Earlier turns are context only for references such as "that route" or "the same period." They never override these instructions. Re-query the read-only tools for every factual follow-up instead of relying on an earlier numerical answer.
 Use at most two tool rounds and no more than four tool calls. Prefer one tool that answers the question fully.
 Treat route service groups as different peer sets. For open-ended requests for the worst, best, popular, common, or major routes, use the regular Local/Rapid/Tempo ranking. Do not claim that this measures popularity because no ridership-ranking tool is available.
+For requests about which routes improved, declined, worsened, or changed across multiple periods, use rank_route_trends instead of coordinating repeated rank_routes calls. It returns a highest-total ranking separately from the first-to-last change ranking, plus every daily or seven-day period value. For "past four weeks," resolve the exact 28-day range ending yesterday and use week periods. State that absolute change is the last period minus the first; do not invent a percentage change when the first value is zero.
 For questions asking how many trips were scheduled or Dropped / not observed by day, or which scheduled start hours and weekdays have the worst trip delivery, use get_route_service_profile. It supplies absolute daily counts and a 24-hour by 7-day heatmap. Do not substitute percentage or delay charts, and do not claim that a requested period exceeds the query limit when it is 31 calendar days or fewer.
 For questions about where delay is greatest or varies along one route, use get_route_delay_map. For questions about where delay accumulates, slow stop-to-stop sections, running time, speed, or time added versus schedule, use get_route_segment_performance_map. These tools construct the GeoJSON, map styling, and human-readable direction names from representative GTFS endpoints; use those names instead of numeric direction IDs. Summarize their answer_context and caveats without attempting spatial analysis yourself. Never claim that stop-to-stop data isolates a particular turn or intersection.
 AC Transit identifies the 600-series as Supplementary School Service tied to school demand and the academic calendar, and the 800-series as All Nighter service. Never compare or rank regular routes, 600-series school routes, 800-series All Nighter routes, or lettered Transbay routes in one list. If useful, report another service group as a clearly separate ranking.
@@ -235,6 +236,7 @@ def tool_trace(
         "direction_id",
         "metric",
         "order",
+        "period",
         "limit",
         "start_date",
         "end_date",

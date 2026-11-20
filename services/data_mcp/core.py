@@ -123,6 +123,13 @@ class ResolvedDates:
     warnings: list[str]
 
 
+@dataclass(frozen=True)
+class TrendPeriod:
+    start_date: str
+    end_date: str
+    dates: list[str]
+
+
 def route_group_for_id(route_id: str) -> str:
     normalized = route_id.strip().upper()
     if re.fullmatch(r"6\d{2}", normalized):
@@ -235,6 +242,75 @@ def default_analysis_window(today: date | None = None) -> tuple[str, str]:
     end = current - timedelta(days=1)
     start = end - timedelta(days=6)
     return start.isoformat(), end.isoformat()
+
+
+def default_trend_window(today: date | None = None) -> tuple[str, str]:
+    current = today or datetime.now(PACIFIC).date()
+    end = current - timedelta(days=1)
+    start = end - timedelta(days=27)
+    return start.isoformat(), end.isoformat()
+
+
+def build_trend_periods(
+    start_date: str,
+    end_date: str,
+    period: str,
+) -> list[TrendPeriod]:
+    start = date.fromisoformat(start_date)
+    end = date.fromisoformat(end_date)
+    if end < start:
+        raise ValueError("end_date must be on or after start_date")
+    if period not in {"day", "week"}:
+        raise ValueError("period must be day or week")
+
+    width = 1 if period == "day" else 7
+    periods: list[TrendPeriod] = []
+    cursor = start
+    while cursor <= end:
+        period_end = min(cursor + timedelta(days=width - 1), end)
+        dates = [
+            (cursor + timedelta(days=offset)).isoformat()
+            for offset in range((period_end - cursor).days + 1)
+        ]
+        periods.append(
+            TrendPeriod(
+                start_date=cursor.isoformat(),
+                end_date=period_end.isoformat(),
+                dates=dates,
+            )
+        )
+        cursor = period_end + timedelta(days=1)
+    return periods
+
+
+def calculate_metric_change(
+    first_value: float,
+    last_value: float,
+    metric: str,
+) -> dict[str, Any]:
+    absolute_change = round(last_value - first_value, 1)
+    percentage_change = (
+        round(absolute_change / first_value * 100, 1)
+        if first_value != 0
+        else None
+    )
+    worsening_change = (
+        absolute_change
+        if METRICS[metric]["higher_is_worse"]
+        else -absolute_change
+    )
+    if worsening_change > 0:
+        direction = "worsened"
+    elif worsening_change < 0:
+        direction = "improved"
+    else:
+        direction = "unchanged"
+    return {
+        "absolute_change": absolute_change,
+        "percentage_change": percentage_change,
+        "worsening_change": worsening_change,
+        "direction": direction,
+    }
 
 
 def daily_metric_value(route: dict[str, Any], metric: str) -> float | None:

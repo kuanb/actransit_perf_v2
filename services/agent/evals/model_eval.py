@@ -147,7 +147,8 @@ class FixtureGateway:
         arguments: dict[str, Any],
     ) -> dict[str, Any]:
         end_date = arguments.get("end_date") or (self.evaluation_date - timedelta(days=1)).isoformat()
-        start_date = arguments.get("start_date") or (date.fromisoformat(end_date) - timedelta(days=6)).isoformat()
+        default_days = 27 if name == "rank_route_trends" else 6
+        start_date = arguments.get("start_date") or (date.fromisoformat(end_date) - timedelta(days=default_days)).isoformat()
         timeframe = {"start_date": start_date, "end_date": end_date, "assumed": not arguments.get("start_date")}
         route = arguments.get("route_id") or "the system"
         result: dict[str, Any] = {
@@ -175,11 +176,55 @@ class FixtureGateway:
                 result["warnings"] = ["Stop-to-stop data cannot isolate a particular turn or intersection."]
         elif name == "get_metric_definition":
             result["answer_context"] = "On Time Service Delivered means an eligible scheduled stop was reached between one minute early and seven minutes late; the complement is outside rider window."
+        elif name == "rank_route_trends":
+            group = arguments.get("route_group", "regular")
+            result["answer_context"] = (
+                f"Fixture {group} route trend ranking for dropped trips. "
+                "Highest totals: 1T (28 trips), 72 (21 trips), 51A (20 trips). "
+                "Most worsened from first to last period: 51A (2 to 10, +8 trips), "
+                "72 (0 to 4, +4 trips; percentage change not meaningful), and 1T (7 to 9, +2 trips)."
+            )
+            result["tables"] = [
+                {
+                    "title": "Highest total dropped trips",
+                    "rows": [
+                        {"rank": 1, "route_id": "1T", "total_value": 28, "period_values": [7, 6, 6, 9]},
+                        {"rank": 2, "route_id": "72", "total_value": 21, "period_values": [0, 8, 9, 4]},
+                        {"rank": 3, "route_id": "51A", "total_value": 20, "period_values": [2, 3, 5, 10]},
+                    ],
+                },
+                {
+                    "title": "Most worsened dropped trips",
+                    "rows": [
+                        {"rank": 1, "route_id": "51A", "first_value": 2, "last_value": 10, "absolute_change": 8, "percentage_change": 400.0},
+                        {"rank": 2, "route_id": "72", "first_value": 0, "last_value": 4, "absolute_change": 4, "percentage_change": None},
+                        {"rank": 3, "route_id": "1T", "first_value": 7, "last_value": 9, "absolute_change": 2, "percentage_change": 28.6},
+                    ],
+                },
+            ]
         elif name == "rank_routes":
-            result["answer_context"] = f"Fixture {arguments.get('route_group', 'regular')} route ranking for {arguments.get('metric')}."
+            group = arguments.get("route_group", "regular")
+            fixture_rows = {
+                "regular": [("51A", 12.0), ("72", 9.0), ("1T", 7.0)],
+                "school": [("633", 8.0), ("654", 5.0), ("600", 3.0)],
+                "all_nighter": [("802", 11.0), ("800", 6.0), ("801", 4.0)],
+                "transbay": [("NL", 10.0), ("F", 7.0), ("O", 2.0)],
+            }[group]
+            result["answer_context"] = (
+                f"Fixture {group} route ranking for {arguments.get('metric')}: "
+                + ", ".join(f"{route_id} ({value:g})" for route_id, value in fixture_rows)
+                + "."
+            )
             if arguments.get("metric") == "on_time_service_delivered":
                 result["answer_context"] += " The public metric is On Time Service Delivered."
-            result["tables"] = [{"rows": [{"route_id": "1T", "route_group": arguments.get("route_group", "regular")}]}]
+            result["tables"] = [
+                {
+                    "rows": [
+                        {"rank": rank, "route_id": route_id, "route_group": group, "value": value}
+                        for rank, (route_id, value) in enumerate(fixture_rows, 1)
+                    ]
+                }
+            ]
         elif name == "compare_routes":
             route_ids = arguments.get("route_ids") or []
             result["answer_context"] = f"Performance data is available to compare {', '.join(route_ids)}."
@@ -289,8 +334,13 @@ def score_turn(expected: dict[str, Any], actual: dict[str, Any]) -> dict[str, An
     arguments = statistics.mean(argument_parts) if argument_parts else selection
     answer = str(actual.get("answer") or "").lower()
     contains = [value.lower() for value in expected.get("answer_contains_any") or []]
+    contains_all = [value.lower() for value in expected.get("answer_contains_all") or []]
     forbidden = [value.lower() for value in expected.get("answer_forbidden") or []]
-    policy = float((not contains or any(value in answer for value in contains)) and not any(value in answer for value in forbidden))
+    policy = float(
+        (not contains or any(value in answer for value in contains))
+        and all(value in answer for value in contains_all)
+        and not any(value in answer for value in forbidden)
+    )
     artifact_parts = []
     artifacts = expected.get("required_artifacts") or {}
     if "maps" in artifacts:
