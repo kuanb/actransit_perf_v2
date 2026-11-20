@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from typing import Any
 
 from model_provider import ModelReply, ModelToolCall, ModelToolResult
@@ -12,6 +13,9 @@ class VertexOpenModelProvider:
         self.project_id = project_id
         self.location = location
         self.model = model
+        self.timeout_seconds = float(
+            os.environ.get("ANALYSIS_MODEL_TIMEOUT_SECONDS", "30")
+        )
 
     def start_session(
         self,
@@ -42,6 +46,7 @@ class VertexOpenModelProvider:
             system_instruction,
             messages,
             tools,
+            self.timeout_seconds,
         )
 
 
@@ -54,6 +59,7 @@ class VertexOpenModelSession:
         system_instruction: str,
         messages: list[dict[str, str]],
         tools: list[dict[str, Any]],
+        timeout_seconds: float = 30,
     ) -> None:
         self.authorized_session = authorized_session
         self.url = url
@@ -74,6 +80,7 @@ class VertexOpenModelSession:
             }
             for tool in tools
         ]
+        self.timeout_seconds = timeout_seconds
 
     async def generate(self) -> ModelReply:
         body: dict[str, Any] = {
@@ -121,14 +128,20 @@ class VertexOpenModelSession:
             self.authorized_session.post,
             self.url,
             json=body,
-            timeout=30,
+            timeout=self.timeout_seconds,
         )
         if not response.ok:
             raise RuntimeError(
                 f"Vertex returned HTTP {response.status_code}: {response.text[:1000]}"
             )
         payload = response.json()
-        message = payload["choices"][0]["message"]
+        choices = payload.get("choices") or []
+        if not choices:
+            raise RuntimeError(
+                "Vertex response did not contain choices: "
+                + json.dumps(payload, separators=(",", ":"))[:1000]
+            )
+        message = choices[0]["message"]
         calls = message.get("tool_calls") or []
         usage = payload.get("usage") or {}
         return ModelReply(
@@ -148,10 +161,14 @@ class VertexOpenModelSession:
     @staticmethod
     def _tool_call(call: dict[str, Any], index: int) -> ModelToolCall:
         function = call.get("function") or {}
-        try:
-            arguments = json.loads(function.get("arguments") or "{}")
-        except json.JSONDecodeError:
-            arguments = {}
+        raw_arguments = function.get("arguments") or {}
+        if isinstance(raw_arguments, dict):
+            arguments = raw_arguments
+        else:
+            try:
+                arguments = json.loads(raw_arguments)
+            except (json.JSONDecodeError, TypeError):
+                arguments = {}
         if not isinstance(arguments, dict):
             arguments = {}
         return ModelToolCall(

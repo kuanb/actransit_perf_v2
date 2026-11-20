@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import sys
 import unittest
@@ -9,10 +10,41 @@ from pathlib import Path
 EVAL_DIR = Path(__file__).resolve().parents[1] / "evals"
 sys.path.insert(0, str(EVAL_DIR))
 
-from model_eval import load_tool_catalog, parse_model_spec, score_turn
+from model_eval import ManagedModelRunner, ModelSpec, load_tool_catalog, parse_model_spec, score_turn, summarize
+
+
+class LoopBoundAgent:
+    def __init__(self) -> None:
+        self.loop = None
+
+    async def analyze(self, prompt, route_id, week_end, conversation):
+        loop = asyncio.get_running_loop()
+        if self.loop is None:
+            self.loop = loop
+        elif self.loop is not loop:
+            raise RuntimeError("event loop changed")
+        return {
+            "answer": prompt,
+            "_eval_trace": [],
+            "_model_usage": {
+                "input_tokens": 1,
+                "output_tokens": 1,
+                "cached_tokens": 0,
+            },
+        }
 
 
 class ModelEvalTest(unittest.TestCase):
+    def test_runner_reuses_one_event_loop_across_turns(self) -> None:
+        runner = ManagedModelRunner.__new__(ManagedModelRunner)
+        runner.agent = LoopBoundAgent()
+        runner.loop = asyncio.new_event_loop()
+        try:
+            self.assertEqual(runner.run_turn("first", {}, [])["answer"], "first")
+            self.assertEqual(runner.run_turn("second", {}, [])["answer"], "second")
+        finally:
+            runner.close()
+
     def test_catalog_is_derived_from_mcp_tool_signatures(self) -> None:
         catalog = {item["name"]: item for item in load_tool_catalog()}
         self.assertEqual(
@@ -69,6 +101,52 @@ class ModelEvalTest(unittest.TestCase):
         self.assertEqual(spec.location, "us-east5")
         self.assertEqual(spec.input_price, 0.25)
         self.assertEqual(spec.cached_input_price, 0.25)
+
+    def test_model_spec_supports_mistral_endpoint(self) -> None:
+        spec = parse_model_spec("mistral:mistral-small-2503@us-central1", "global")
+        self.assertEqual(spec.provider, "mistral")
+        self.assertEqual(spec.location, "us-central1")
+        self.assertEqual(spec.output_price, 0.30)
+
+    def test_summary_excludes_provider_failures_from_quality_and_latency(self) -> None:
+        spec = ModelSpec("open", "test/model", "global", 1.0, 2.0, 0.5)
+        completed = {
+            "scores": {
+                "passed": True,
+                "score": 1.0,
+                "tool_selection": 1.0,
+                "arguments": 1.0,
+                "answer_policy": 1.0,
+                "artifacts": 1.0,
+            },
+            "usage": {"input_tokens": 100, "output_tokens": 50, "cached_tokens": 20},
+            "latency_seconds": 2.0,
+            "critical": True,
+            "error": None,
+        }
+        failed = {
+            "scores": {
+                "passed": False,
+                "score": 0.0,
+                "tool_selection": 0.0,
+                "arguments": 0.0,
+                "answer_policy": 0.0,
+                "artifacts": 0.0,
+            },
+            "usage": {"input_tokens": 0, "output_tokens": 0, "cached_tokens": 0},
+            "latency_seconds": 30.0,
+            "critical": True,
+            "error": "model unavailable",
+        }
+
+        summary = summarize(spec, [completed, failed])
+
+        self.assertEqual(summary["completed_runs"], 1)
+        self.assertEqual(summary["errors"], 1)
+        self.assertEqual(summary["pass_rate"], 1.0)
+        self.assertEqual(summary["critical_pass_rate"], 1.0)
+        self.assertEqual(summary["mean_latency_seconds"], 2.0)
+        self.assertEqual(summary["estimated_cost_per_turn_usd"], 0.00019)
 
     def test_cases_only_expect_current_mcp_tools_and_arguments(self) -> None:
         catalog = {item["name"]: item for item in load_tool_catalog()}

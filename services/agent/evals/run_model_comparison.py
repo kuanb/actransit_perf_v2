@@ -18,6 +18,7 @@ sys.path.insert(0, str(EVAL_DIR))
 
 from model_eval import (  # noqa: E402
     GeminiRunner,
+    MistralRunner,
     OpenModelRunner,
     load_tool_catalog,
     parse_model_spec,
@@ -29,8 +30,12 @@ from model_eval import (  # noqa: E402
 DEFAULT_MODELS = ",".join(
     [
         "gemini:gemini-3.5-flash-lite",
-        "open:openai/gpt-oss-120b-maas",
         "open:google/gemma-4-26b-a4b-it-maas",
+        "open:openai/gpt-oss-120b-maas",
+        "open:deepseek-ai/deepseek-v4.1-flash-maas",
+        "open:meta/llama-4-scout-17b-16e-instruct-maas",
+        "mistral:mistral-small-2503@us-central1",
+        "open:xai/grok-4.7",
     ]
 )
 
@@ -46,9 +51,16 @@ def main() -> int:
     parser.add_argument("--output-dir", default="output/model-eval")
     parser.add_argument("--min-pass-rate", type=float, default=0.0)
     parser.add_argument("--min-critical-pass-rate", type=float, default=0.0)
+    parser.add_argument("--request-timeout", type=float, default=90.0)
+    parser.add_argument("--provider-retries", type=int, default=1)
     args = parser.parse_args()
     if args.repeats < 1:
         parser.error("--repeats must be at least 1")
+    if args.request_timeout <= 0:
+        parser.error("--request-timeout must be positive")
+    if args.provider_retries < 0:
+        parser.error("--provider-retries cannot be negative")
+    os.environ["ANALYSIS_MODEL_TIMEOUT_SECONDS"] = str(args.request_timeout)
 
     suite = json.loads(Path(args.cases).read_text())
     selected_cases = [case for case in suite["cases"] if not args.case_ids or case["id"] in args.case_ids]
@@ -65,7 +77,12 @@ def main() -> int:
 
     for spec in specs:
         try:
-            runner = GeminiRunner(args.project, spec, catalog, evaluation_date) if spec.provider == "gemini" else OpenModelRunner(args.project, spec, catalog, evaluation_date)
+            runner_class = {
+                "gemini": GeminiRunner,
+                "open": OpenModelRunner,
+                "mistral": MistralRunner,
+            }[spec.provider]
+            runner = runner_class(args.project, spec, catalog, evaluation_date)
             initialization_error = None
         except Exception as exc:
             runner = None
@@ -79,12 +96,16 @@ def main() -> int:
                     failure_latency = 0.0
                     if runner is not None and provider_error is None:
                         started = time.monotonic()
-                        try:
-                            actual = runner.run_turn(turn["prompt"], case.get("scope") or {}, conversation)
-                        except Exception as exc:
-                            error = f"{type(exc).__name__}: {exc}"
-                            provider_error = error
-                            failure_latency = time.monotonic() - started
+                        for attempt in range(args.provider_retries + 1):
+                            try:
+                                actual = runner.run_turn(turn["prompt"], case.get("scope") or {}, conversation)
+                                error = None
+                                break
+                            except Exception as exc:
+                                error = f"{type(exc).__name__}: {exc}"
+                                if attempt == args.provider_retries:
+                                    provider_error = error
+                                    failure_latency = time.monotonic() - started
                     if error:
                         actual = {
                             "answer": "",
@@ -130,6 +151,8 @@ def main() -> int:
                         handle.write(json.dumps(record) + "\n")
                     print(json.dumps({"model": spec.label, "repeat": repeat, "case": case["id"], "turn": turn_index, "passed": scores["passed"], "score": round(scores["score"], 3), "error": error}), flush=True)
                     conversation.append({"question": turn["prompt"], "answer": actual["answer"]})
+        if runner is not None:
+            runner.close()
 
     summaries = [summarize(spec, [record for record in records if record["model_id"] == spec.model]) for spec in specs]
     metadata = {
@@ -139,7 +162,9 @@ def main() -> int:
         "repeats": args.repeats,
         "case_count": len(selected_cases),
         "turn_count": sum(len(case["turns"]) for case in selected_cases),
-        "pricing_as_of": "2026-11-09",
+        "pricing_as_of": "2026-11-19",
+        "request_timeout_seconds": args.request_timeout,
+        "provider_retries": args.provider_retries,
         "summaries": summaries,
     }
     (output_dir / "summary.json").write_text(json.dumps(metadata, indent=2) + "\n")
@@ -160,14 +185,15 @@ def main() -> int:
 
 def render_table(summaries: list[dict[str, Any]]) -> str:
     lines = [
-        "| Model | Pass | Critical | Tool | Args | p95 latency | Cost/turn | Errors |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|",
+        "| Model | Pass | Critical | Tool | Args | Completed | p95 latency | Cost/completed turn | Error/skip turns |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for item in summaries:
         lines.append(
             f"| {item['model']} | {item['pass_rate']:.1%} | {item['critical_pass_rate']:.1%} | "
             f"{item['tool_selection_accuracy']:.1%} | {item['argument_accuracy']:.1%} | "
-            f"{item['p95_latency_seconds']:.2f}s | ${item['estimated_cost_per_turn_usd']:.6f} | {item['errors']} |"
+            f"{item['completed_runs']}/{item['runs']} | {item['p95_latency_seconds']:.2f}s | "
+            f"${item['estimated_cost_per_turn_usd']:.6f} | {item['errors']} |"
         )
     return "\n".join(lines)
 

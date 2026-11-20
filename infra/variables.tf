@@ -32,12 +32,12 @@ variable "analysis_enabled" {
 
 variable "analysis_model_provider" {
   type        = string
-  description = "Analysis model API adapter: gemini or vertex_open"
+  description = "Analysis model API adapter: gemini, vertex_open, or vertex_mistral"
   default     = "vertex_open"
 
   validation {
-    condition     = contains(["gemini", "vertex_open"], var.analysis_model_provider)
-    error_message = "analysis_model_provider must be gemini or vertex_open."
+    condition     = contains(["gemini", "vertex_open", "vertex_mistral"], var.analysis_model_provider)
+    error_message = "analysis_model_provider must be gemini, vertex_open, or vertex_mistral."
   }
 }
 

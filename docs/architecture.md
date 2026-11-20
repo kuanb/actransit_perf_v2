@@ -223,11 +223,12 @@ Route context is enforced again in the agent policy; it is not merely prompt
 text that the model can override.
 
 The shared policy and MCP loop is model-independent. `ANALYSIS_MODEL_PROVIDER`
-selects either `vertex_open` for Vertex AI's OpenAI-compatible managed-model
-endpoint or `gemini` for the native Gemini SDK, while `ANALYSIS_MODEL` supplies
-the provider-specific model ID. Production defaults to
+selects `vertex_open` for Vertex AI's OpenAI-compatible managed-model endpoint,
+`vertex_mistral` for Mistral's managed `rawPredict` endpoint, or `gemini` for
+the native Gemini SDK, while `ANALYSIS_MODEL` supplies the provider-specific
+model ID. Production defaults to
 `google/gemma-4-26b-a4b-it-maas`; setting the pair to `gemini` and
-`gemini-3.5-flash-lite` is the rollback path. Both adapters receive the same
+`gemini-3.5-flash-lite` is the rollback path. All adapters receive the same
 system instruction, conversation, tool schemas, compact tool results, and
 two-round/four-call limits.
 

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import unittest
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -129,6 +131,7 @@ class VertexOpenModelSessionTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(final.text, "Route 51A performed reliably.")
         first_body = http.requests[0]["body"]
+        self.assertEqual(http.requests[0]["timeout"], 30)
         self.assertEqual(first_body["messages"][0], {"role": "system", "content": "System instruction"})
         self.assertEqual(first_body["tools"][0]["function"]["name"], "get_route_performance")
         second_messages = http.requests[1]["body"]["messages"]
@@ -137,6 +140,19 @@ class VertexOpenModelSessionTest(unittest.IsolatedAsyncioTestCase):
             json.loads(second_messages[-1]["content"]),
             {"answer_context": "Fixture result"},
         )
+
+    async def test_reports_success_response_without_choices(self) -> None:
+        session = VertexOpenModelSession(
+            FakeAuthorizedSession([{"error": {"message": "capacity unavailable"}}]),
+            "https://example.test/chat/completions",
+            "model",
+            "System",
+            [],
+            [],
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "capacity unavailable"):
+            await session.generate()
 
 
 class FakeModelSession:
@@ -254,8 +270,43 @@ class ModelProviderFactoryTest(unittest.TestCase):
 
         self.assertEqual(type(provider).__name__, "VertexOpenModelProvider")
 
+    def test_constructs_vertex_mistral_provider_without_authentication(self) -> None:
+        provider = create_model_provider(
+            "vertex_mistral",
+            "project",
+            "us-central1",
+            "mistral-small-2503",
+        )
+
+        self.assertEqual(type(provider).__name__, "VertexMistralModelProvider")
+
+    def test_vertex_mistral_uses_regional_raw_predict_endpoint(self) -> None:
+        provider = create_model_provider(
+            "vertex_mistral",
+            "project",
+            "us-central1",
+            "mistral-small-2503",
+        )
+        self.assertEqual(
+            provider.endpoint_url(),
+            "https://us-central1-aiplatform.googleapis.com/v1/projects/project/"
+            "locations/us-central1/publishers/mistralai/models/"
+            "mistral-small-2503:rawPredict",
+        )
+
+    def test_vertex_open_timeout_can_be_overridden_for_evals(self) -> None:
+        with patch.dict(os.environ, {"ANALYSIS_MODEL_TIMEOUT_SECONDS": "90"}):
+            provider = create_model_provider(
+                "vertex_open",
+                "project",
+                "global",
+                "google/gemma-test",
+            )
+
+        self.assertEqual(provider.timeout_seconds, 90)
+
     def test_rejects_unknown_provider(self) -> None:
-        with self.assertRaisesRegex(ValueError, "gemini.*vertex_open"):
+        with self.assertRaisesRegex(ValueError, "gemini.*vertex_open.*vertex_mistral"):
             create_model_provider("other", "project", "global", "model")
 
 

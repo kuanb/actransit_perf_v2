@@ -96,21 +96,26 @@ used by Cloud Run. This isolates model and interface behavior, avoids the public
 chatbot allowance, and makes MCP signature or description changes part of the
 next run.
 
-Run the default Gemini 3.5 Flash-Lite, gpt-oss 120B, and Gemma 4 comparison with
+Run the default comparison across Gemini 3.5 Flash-Lite, Gemma 4, gpt-oss 120B,
+DeepSeek V4.1 Flash, Llama 4 Scout, Mistral Small 3.1, and Grok 4.7 with
 Application Default Credentials that can call Vertex AI:
 
 ```sh
 make eval-analysis-models EVAL_REPEATS=3
 ```
 
-Override `EVAL_MODELS` with comma-separated `gemini:MODEL` or
-`open:PUBLISHER/MODEL` values. A non-global open-model endpoint can use
-`@LOCATION`, for example
-`open:meta/llama-4-scout-17b-16e-instruct-maas@us-east5`. Detailed per-turn
-records, a JSON summary, and a comparison CSV are written under
+Override `EVAL_MODELS` with comma-separated `gemini:MODEL`,
+`open:PUBLISHER/MODEL`, or `mistral:MODEL` values. A non-global endpoint can use
+`@LOCATION`, for example `mistral:mistral-small-2503@us-central1`. Detailed
+per-turn records, a JSON summary, and a comparison CSV are written under
 `output/model-eval/`. Prices are estimates pinned in the evaluator with an
 as-of date; update them when Vertex pricing changes. During case development,
 pass `--case CASE_ID` directly to the Python runner to run only selected cases.
+The evaluator uses a 90-second request timeout by default so slower reasoning
+models can complete without changing the production service's 30-second model
+timeout. It retries one failed provider request before skipping the rest of that
+model's paid calls, which tolerates a transient backend response without
+repeatedly calling an unavailable or unentitled model.
 
 `.github/workflows/model-eval.yml` exposes the same comparison through a manual
 GitHub Actions `workflow_dispatch`. It does not run on pushes or pull requests.

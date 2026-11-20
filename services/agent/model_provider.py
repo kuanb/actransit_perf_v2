@@ -67,6 +67,11 @@ def create_model_provider(
         from vertex_open_model import VertexOpenModelProvider
 
         return VertexOpenModelProvider(project_id, location, model)
+    if provider == "vertex_mistral":
+        from vertex_mistral_model import VertexMistralModelProvider
+
+        return VertexMistralModelProvider(project_id, location, model)
     raise ValueError(
-        f"Unsupported analysis model provider {provider!r}; use 'gemini' or 'vertex_open'"
+        f"Unsupported analysis model provider {provider!r}; use 'gemini', "
+        "'vertex_open', or 'vertex_mistral'"
     )

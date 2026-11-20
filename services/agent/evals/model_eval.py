@@ -29,18 +29,24 @@ class ModelSpec:
 
 
 PRICING = {
-    "gemini-3.5-flash-lite": (0.30, 2.50, 0.03),
-    "gemini-3.1-flash-lite": (0.25, 1.50, 0.025),
+    "gemini-3.5-flash-lite": (0.15, 1.25, 0.015),
+    "gemini-3.1-flash-lite": (0.125, 0.75, 0.0125),
     "openai/gpt-oss-120b-maas": (0.09, 0.36, 0.09),
     "google/gemma-4-26b-a4b-it-maas": (0.15, 0.60, 0.015),
+    "deepseek-ai/deepseek-v4.1-flash-maas": (0.30, 1.20, 0.03),
     "meta/llama-4-scout-17b-16e-instruct-maas": (0.25, 0.70, 0.25),
+    "mistral-small-2503": (0.10, 0.30, 0.10),
+    "xai/grok-4.7": (2.00, 6.00, 0.50),
 }
 
 
 def parse_model_spec(value: str, default_location: str) -> ModelSpec:
     provider, separator, remainder = value.partition(":")
-    if not separator or provider not in {"gemini", "open"}:
-        raise ValueError(f"Invalid model {value!r}; use gemini:MODEL or open:PUBLISHER/MODEL")
+    if not separator or provider not in {"gemini", "open", "mistral"}:
+        raise ValueError(
+            f"Invalid model {value!r}; use gemini:MODEL, open:PUBLISHER/MODEL, "
+            "or mistral:MODEL"
+        )
     model, at, location = remainder.rpartition("@")
     if not at:
         model = remainder
@@ -208,6 +214,7 @@ class ManagedModelRunner:
             max_tool_calls=4,
             today=evaluation_date,
         )
+        self.loop = asyncio.new_event_loop()
 
     def run_turn(
         self,
@@ -216,7 +223,7 @@ class ManagedModelRunner:
         conversation: list[dict[str, Any]],
     ) -> dict[str, Any]:
         started = time.monotonic()
-        result = asyncio.run(
+        result = self.loop.run_until_complete(
             self.agent.analyze(
                 prompt,
                 scope.get("route_id"),
@@ -232,6 +239,9 @@ class ManagedModelRunner:
             "usage": usage,
             "latency_seconds": time.monotonic() - started,
         }
+
+    def close(self) -> None:
+        self.loop.close()
 
 
 class GeminiRunner(ManagedModelRunner):
@@ -254,6 +264,17 @@ class OpenModelRunner(ManagedModelRunner):
         evaluation_date: date,
     ) -> None:
         super().__init__("vertex_open", project_id, spec, catalog, evaluation_date)
+
+
+class MistralRunner(ManagedModelRunner):
+    def __init__(
+        self,
+        project_id: str,
+        spec: ModelSpec,
+        catalog: list[dict[str, Any]],
+        evaluation_date: date,
+    ) -> None:
+        super().__init__("vertex_mistral", project_id, spec, catalog, evaluation_date)
 
 
 def score_turn(expected: dict[str, Any], actual: dict[str, Any]) -> dict[str, Any]:
@@ -299,7 +320,8 @@ def percentile(values: list[float], quantile: float) -> float:
 
 
 def summarize(model: ModelSpec, records: list[dict[str, Any]]) -> dict[str, Any]:
-    scores = [record["scores"] for record in records]
+    completed_records = [record for record in records if not record.get("error")]
+    scores = [record["scores"] for record in completed_records]
     usage = {key: sum(record["usage"][key] for record in records) for key in ("input_tokens", "output_tokens", "cached_tokens")}
     billable_input = max(0, usage["input_tokens"] - usage["cached_tokens"])
     cost = (
@@ -312,17 +334,18 @@ def summarize(model: ModelSpec, records: list[dict[str, Any]]) -> dict[str, Any]
         "provider": model.provider,
         "location": model.location,
         "runs": len(records),
+        "completed_runs": len(completed_records),
         "pass_rate": statistics.mean(item["passed"] for item in scores) if scores else 0.0,
-        "critical_pass_rate": statistics.mean(record["scores"]["passed"] for record in records if record["critical"]) if any(record["critical"] for record in records) else 0.0,
+        "critical_pass_rate": statistics.mean(record["scores"]["passed"] for record in completed_records if record["critical"]) if any(record["critical"] for record in completed_records) else 0.0,
         "mean_score": statistics.mean(item["score"] for item in scores) if scores else 0.0,
         "tool_selection_accuracy": statistics.mean(item["tool_selection"] for item in scores) if scores else 0.0,
         "argument_accuracy": statistics.mean(item["arguments"] for item in scores) if scores else 0.0,
         "answer_policy_accuracy": statistics.mean(item["answer_policy"] for item in scores) if scores else 0.0,
         "artifact_accuracy": statistics.mean(item["artifacts"] for item in scores) if scores else 0.0,
-        "mean_latency_seconds": statistics.mean(record["latency_seconds"] for record in records) if records else 0.0,
-        "p95_latency_seconds": percentile([record["latency_seconds"] for record in records], 0.95),
+        "mean_latency_seconds": statistics.mean(record["latency_seconds"] for record in completed_records) if completed_records else 0.0,
+        "p95_latency_seconds": percentile([record["latency_seconds"] for record in completed_records], 0.95),
         **usage,
         "estimated_cost_usd": cost,
-        "estimated_cost_per_turn_usd": cost / len(records) if records else 0.0,
+        "estimated_cost_per_turn_usd": cost / len(completed_records) if completed_records else 0.0,
         "errors": sum(bool(record.get("error")) for record in records),
     }
