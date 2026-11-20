@@ -7,6 +7,7 @@ from typing import Any
 
 
 ROUTE_SCOPED_TOOLS = {
+    "describe_data",
     "get_route_delay_map",
     "get_route_performance",
     "get_route_segment_performance_map",
@@ -14,6 +15,7 @@ ROUTE_SCOPED_TOOLS = {
     "get_route_time_profile",
     "list_scheduled_arrivals",
     "get_metric_definition",
+    "query_data",
 }
 GENERAL_TOOLS = ROUTE_SCOPED_TOOLS | {
     "compare_routes",
@@ -68,6 +70,22 @@ def prepare_tool_call(
         "list_scheduled_arrivals",
     }:
         prepared["route_id"] = route_id
+    if route_id and tool_name == "query_data":
+        if prepared.get("table") not in {
+            "trip_observations",
+            "trip_probes",
+            "ridership_observations",
+        }:
+            raise ValueError("Route-scoped exploratory queries require a table with route_id")
+        filters = [
+            value
+            for value in list(prepared.get("filters") or [])
+            if not (isinstance(value, dict) and value.get("column") == "route_id")
+        ]
+        if len(filters) >= 10:
+            raise ValueError("Route-scoped exploratory queries allow at most nine additional filters")
+        filters.append({"column": "route_id", "operator": "eq", "value": route_id})
+        prepared["filters"] = filters
 
     context_timeframe = None
     if week_end and not any(prepared.get(key) for key in ("start_date", "end_date", "service_date")):
@@ -91,6 +109,7 @@ def prepare_tool_call(
             "get_route_segment_performance_map",
             "get_route_service_profile",
             "get_route_time_profile",
+            "query_data",
         }:
             prepared["start_date"] = start.isoformat()
             prepared["end_date"] = end.isoformat()

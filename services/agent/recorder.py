@@ -106,7 +106,7 @@ class ConversationRecorder:
             "question": values["question"],
             "response": values["response"],
             "evaluation": {
-                "policy_version": "spatial-map-contract-v3",
+                "policy_version": "structured-query-contract-v1",
                 "prompt_features": values["prompt_features"],
                 "tool_calls": values["tool_calls"],
             },

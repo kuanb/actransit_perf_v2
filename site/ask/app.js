@@ -635,15 +635,18 @@ function renderCharts(items, wrap) {
     chartWrap.appendChild(canvas);
     card.appendChild(chartWrap);
     wrap.appendChild(card);
+    const isPie = spec.type === "pie";
     const instance = new Chart(canvas, {
-      type: spec.type === "bar" ? "bar" : "line",
+      type: isPie ? "pie" : spec.type === "bar" ? "bar" : "line",
       data: {
         labels: spec.labels || [],
         datasets: (spec.series || []).map((series, index) => ({
           label: series.name,
           data: series.values,
           borderColor: colors[(chartIndex + index) % colors.length],
-          backgroundColor: `${colors[(chartIndex + index) % colors.length]}99`,
+          backgroundColor: isPie
+            ? (spec.labels || []).map((_, colorIndex) => `${colors[(chartIndex + colorIndex) % colors.length]}cc`)
+            : `${colors[(chartIndex + index) % colors.length]}99`,
           borderWidth: 2,
           pointRadius: spec.type === "bar" ? 0 : 2,
           tension: 0.15,
@@ -654,7 +657,7 @@ function renderCharts(items, wrap) {
         maintainAspectRatio: false,
         interaction: { mode: "index", intersect: false },
         plugins: { legend: { position: "bottom" } },
-        scales: {
+        scales: isPie ? undefined : {
           x: { title: { display: Boolean(spec.x_label), text: spec.x_label } },
           y: { beginAtZero: spec.type === "bar", title: { display: Boolean(spec.y_label), text: spec.y_label } },
         },
@@ -667,9 +670,13 @@ function renderCharts(items, wrap) {
 function renderHeatmap(card, spec) {
   const note = document.createElement("p");
   note.className = "heatmap-note";
-  note.textContent = spec.note || "Cell color represents severity.";
+  note.textContent = spec.note || `Cell color represents ${spec.value_label || "severity"}.`;
 
   const cellMap = new Map((spec.cells || []).map(cell => [`${cell.y}\u0000${cell.x}`, cell]));
+  const serviceProfile = (spec.cells || []).some(cell => (
+    Object.prototype.hasOwnProperty.call(cell, "scheduled")
+    || Object.prototype.hasOwnProperty.call(cell, "dropped")
+  ));
   const scroll = document.createElement("div");
   scroll.className = "heatmap-scroll";
   const table = document.createElement("table");
@@ -678,12 +685,12 @@ function renderHeatmap(card, spec) {
   const headRow = document.createElement("tr");
   const corner = document.createElement("th");
   corner.scope = "col";
-  corner.textContent = "Weekday";
+  corner.textContent = spec.y_label || "Weekday";
   headRow.appendChild(corner);
   (spec.x_labels || []).forEach(label => {
     const th = document.createElement("th");
     th.scope = "col";
-    th.textContent = String(label).replace(":00", "");
+    th.textContent = /^\d{2}:00$/.test(String(label)) ? String(label).slice(0, 2) : String(label);
     th.title = String(label);
     headRow.appendChild(th);
   });
@@ -694,7 +701,7 @@ function renderHeatmap(card, spec) {
     const row = document.createElement("tr");
     const th = document.createElement("th");
     th.scope = "row";
-    th.textContent = String(yLabel).slice(0, 3);
+    th.textContent = serviceProfile ? String(yLabel).slice(0, 3) : String(yLabel);
     th.title = String(yLabel);
     row.appendChild(th);
     (spec.x_labels || []).forEach(xLabel => {
@@ -703,16 +710,26 @@ function renderHeatmap(card, spec) {
       const scheduled = Number(cell.scheduled || 0);
       const dropped = Number(cell.dropped || 0);
       const value = cell.value == null ? null : Number(cell.value);
-      if (!scheduled || !Number.isFinite(value)) {
+      const serviceProfileCell = Object.prototype.hasOwnProperty.call(cell, "scheduled")
+        || Object.prototype.hasOwnProperty.call(cell, "dropped");
+      if ((serviceProfileCell && !scheduled) || !Number.isFinite(value)) {
         td.className = "no-service";
         td.textContent = "–";
-        td.setAttribute("aria-label", `${yLabel} ${xLabel}: no scheduled trips`);
+        td.setAttribute(
+          "aria-label",
+          `${yLabel} ${xLabel}: ${serviceProfileCell ? "no scheduled trips" : "no data"}`,
+        );
       } else {
-        const intensity = Math.max(0, Math.min(1, value / 100));
+        const minimum = Number(spec.min_value ?? 0);
+        const maximum = Number(spec.max_value ?? 100);
+        const span = maximum > minimum ? maximum - minimum : 1;
+        const intensity = Math.max(0, Math.min(1, (value - minimum) / span));
         td.style.backgroundColor = `rgba(177, 61, 88, ${0.08 + intensity * 0.82})`;
         if (intensity >= 0.62) td.style.color = "#fff";
-        td.textContent = String(dropped);
-        const detail = `${yLabel} ${xLabel}: ${dropped} dropped of ${scheduled} scheduled trips (${value.toFixed(1)}%)`;
+        td.textContent = serviceProfileCell ? String(dropped) : String(cell.display ?? value);
+        const detail = serviceProfileCell
+          ? `${yLabel} ${xLabel}: ${dropped} dropped of ${scheduled} scheduled trips (${value.toFixed(1)}%)`
+          : `${yLabel} ${xLabel}: ${cell.display ?? value} ${spec.value_label || ""}`.trim();
         td.title = detail;
         td.tabIndex = 0;
         td.setAttribute("aria-label", detail);
@@ -726,7 +743,13 @@ function renderHeatmap(card, spec) {
 
   const legend = document.createElement("div");
   legend.className = "heatmap-legend";
-  legend.innerHTML = '<span>Lower dropped share</span><i aria-hidden="true"></i><span>Higher dropped share</span>';
+  const lower = document.createElement("span");
+  lower.textContent = spec.low_label || "Lower dropped share";
+  const gradient = document.createElement("i");
+  gradient.setAttribute("aria-hidden", "true");
+  const higher = document.createElement("span");
+  higher.textContent = spec.high_label || "Higher dropped share";
+  legend.append(lower, gradient, higher);
   card.append(note, scroll, legend);
 }
 
@@ -812,9 +835,11 @@ function sourceLabel(source) {
   if (source.kind === "daily_stats") return `Published daily reports · ${source.start_date} through ${source.end_date} · ${source.object_count} objects`;
   if (source.kind === "weekly_stats") return `Published weekly report · ${source.start_date} through ${source.end_date}`;
   if (source.kind === "bigquery") return `Deduplicated BigQuery observations · ${source.start_date || source.service_date || "bounded period"}`;
+  if (source.kind === "bigquery_structured_query") return `Bounded BigQuery query · ${source.table} · ${source.start_date} through ${source.end_date}`;
   if (source.kind === "gtfs") return `Current or archived GTFS schedule · service date ${source.service_date}`;
   if (source.kind === "processed_gtfs") return `Current processed GTFS geometry · Route ${source.route_id || routeID || "data"}`;
   if (source.kind === "methodology_registry") return "Metric methodology registry";
+  if (source.kind === "schema_registry") return "Allowlisted structured-query schema registry";
   return JSON.stringify(source);
 }
 

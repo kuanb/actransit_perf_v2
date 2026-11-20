@@ -51,6 +51,7 @@ class ModelEvalTest(unittest.TestCase):
             set(catalog),
             {
                 "compare_routes",
+                "describe_data",
                 "get_metric_definition",
                 "get_route_delay_map",
                 "get_route_performance",
@@ -59,6 +60,7 @@ class ModelEvalTest(unittest.TestCase):
                 "get_route_time_profile",
                 "get_system_performance",
                 "list_scheduled_arrivals",
+                "query_data",
                 "rank_route_trends",
                 "rank_routes",
             },
@@ -71,6 +73,16 @@ class ModelEvalTest(unittest.TestCase):
         self.assertEqual(trend_schema["properties"]["metric"]["enum"], ["dropped_trips"])
         self.assertEqual(trend_schema["properties"]["period"]["default"], "week")
         self.assertEqual(trend_schema["properties"]["order"]["default"], "worsened")
+        query_schema = catalog["query_data"]["input_schema"]
+        aggregation_schema = query_schema["properties"]["aggregations"]["items"]
+        self.assertEqual(
+            aggregation_schema["properties"]["operation"]["enum"],
+            ["count", "count_distinct", "sum", "avg", "min", "max", "median", "p95", "stddev"],
+        )
+        self.assertEqual(
+            aggregation_schema["required"],
+            ["operation", "alias"],
+        )
 
     def test_score_requires_exact_tool_and_expected_argument_subset(self) -> None:
         expected = {

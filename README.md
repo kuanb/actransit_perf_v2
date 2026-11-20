@@ -56,20 +56,28 @@ Reports are limited to weekdays within each school's effective-dated academic
 calendar and exclude district holidays, recesses, and secondary no-school days.
 
 The report card and route pages also link to an experimental read-only analysis
-interface. A public Cloud Run agent uses Vertex AI to select from a fixed set of
-private MCP tools; those tools can read published report JSON, archived GTFS,
-and bounded BigQuery partitions, but cannot accept SQL or write project data.
+interface. A public Cloud Run agent uses Vertex AI to prefer purpose-built
+private MCP tools, then fall back to a structured warehouse query when those
+methods do not cover an otherwise answerable question. The fallback exposes the
+allowlisted table schema and accepts table, columns, typed filters, approved
+aggregates, grouping, ordering, and visualization instructions. It never accepts
+SQL, expressions, joins, arbitrary object names, or write operations. Every
+warehouse query has a mandatory completed-service-date partition, a 31-day and
+200-row cap, parameterized values, the existing 100 MiB billing limit, and the
+MCP service account's read-only IAM.
 Responses carry structured text, maps, charts, tables, data sources, and the exact
 timeframe used. Route deep dives can return multiple Mapbox maps with bounded
 GeoJSON for the current route patterns, every scheduled stop, stop-level delay,
 and stop-to-stop time or speed. The private MCP builds the SQL aggregates,
-geometry, and styling; the model only selects a fixed tool and summarizes its
-result. The browser keeps the numbered question chain and follow-up composer
+geometry, and styling; the model selects a typed tool and summarizes its result.
+The browser keeps the numbered question chain and follow-up composer
 inside the analysis panel while preserving every answer and its structured
 maps, charts, tables, warnings, and sources for the active thread. Answer prose
 supports safe bold, italic, underline, code, and list formatting.
 Route service-profile answers include absolute scheduled and Dropped / not
 observed trip bars plus a 24-hour by 7-day heatmap keyed to scheduled trip starts.
+Exploratory results can also request bounded line, bar, pie, heatmap, or point-map
+artifacts while always retaining the underlying result table.
 
 Route comparisons are segmented by service type. Open-ended rankings default
 to regular Local/Rapid/Tempo service; 600-series Supplementary School Service,
@@ -135,6 +143,7 @@ make invoke                 # curl /scrape with your identity token
 make logs                   # recent Cloud Run logs
 make analysis-logs          # recent analysis-agent and MCP logs
 make analysis-chat-logs DATE=YYYY-MM-DD HOUR=HH  # private archived chats for one UTC hour
+make analysis-query-logs    # structured-query usage and bounded query specs (30 days)
 make backfill-agency-kpis-history  # rebuild KPI comparison history after deployment
 make backfill-school-stats-history # build school reports for every indexed service date
 ```
@@ -202,7 +211,11 @@ make analysis-eval-logs
 ```
 
 The service logs only prompt feature tags, bounded tool arguments, and policy
-outcomes—not raw visitor prompts. The checked-in synthetic cases preserve the
+outcomes—not raw visitor prompts. Every structured-query fallback also logs its
+validated table, fields, filters, grouping, ordering, visualization, row count,
+bytes processed, and outcome. `make analysis-query-logs FRESHNESS=90d` exposes
+those events for finding recurring patterns worth promoting into purpose-built
+tools. The checked-in synthetic cases preserve the
 exact category-sensitive and multi-turn chart-contract phrasings used to detect
 model/tool-selection drift. Raw records remain in the private eval archive.
 Successful turns submitted after public history was enabled also produce a

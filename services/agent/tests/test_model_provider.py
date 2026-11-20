@@ -61,6 +61,25 @@ class EvalTraceTest(unittest.TestCase):
 
         self.assertEqual("week", trace["arguments"]["period"])
 
+    def test_structured_query_trace_keeps_bounded_query_shape(self) -> None:
+        trace = tool_trace(
+            "query_data",
+            {
+                "table": "trip_observations",
+                "columns": ["route_id"],
+                "aggregations": [
+                    {"operation": "count", "alias": "arrival_rows"}
+                ],
+                "group_by": ["route_id"],
+                "start_date": "2026-11-01",
+                "end_date": "2026-11-07",
+            },
+            "ok",
+        )
+
+        self.assertEqual("trip_observations", trace["arguments"]["table"])
+        self.assertEqual("count", trace["arguments"]["aggregations"][0]["operation"])
+
 
 class VertexOpenModelSessionTest(unittest.IsolatedAsyncioTestCase):
     async def test_translates_tools_calls_and_results(self) -> None:

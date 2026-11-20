@@ -241,7 +241,7 @@ flowchart LR
     P -->|OIDC-authenticated MCP| M[Private FastMCP service\nCloud Run]
     M --> J[Published daily/weekly JSON\nGCS]
     M --> G[Current + archived GTFS\nGCS]
-    M -->|parameterized templates only\n100 MiB/query cap| B[(BigQuery read-only)]
+    M -->|purpose-built templates or\nallowlisted query compiler\n100 MiB/query cap| B[(BigQuery read-only)]
     J --> M
     G --> M
     B --> M
@@ -256,8 +256,24 @@ flowchart LR
 The scraper remains isolated from this request path. The public agent service
 account can invoke the MCP and use Vertex AI and Firestore. The private MCP
 service account has only GCS object-viewer, BigQuery data-viewer, and BigQuery
-job-user roles. The MCP exposes fixed Python functions; users and the model
-cannot supply SQL, object paths, table names, or write operations.
+job-user roles. The MCP exposes purpose-built Python functions plus one bounded
+structured-query compiler. Users and the model cannot supply SQL, expressions,
+joins, object paths, arbitrary table or column names, or write operations.
+
+The agent prefers a purpose-built tool whenever one answers the question. For a
+supported question outside those methods, it can inspect the allowlisted schema
+and submit a typed specification containing one table, selected columns, typed
+filters, approved aggregates, grouping, ordering, and an optional visualization.
+The MCP validates every identifier against an in-process registry and
+interpolates only those known identifiers; every user/model value is a BigQuery
+query parameter. It also injects a completed-service-date partition, limits the
+window to 31 days and the result to 200 rows, rejects raw `service_date`
+predicates, and retains the per-job 100 MiB maximum-bytes-billed control.
+Route-page policy restricts this fallback to route-bearing tables, replaces any
+model-supplied `route_id` filter with the locked page route, and applies the
+displayed week when the question omits dates. `trip_observations` and
+`trip_probes` are deduplicated inside the generated query before user filters or
+aggregates run.
 
 The initial tool set covers:
 
@@ -275,7 +291,9 @@ The initial tool set covers:
 - hourly route delay/observation profiles;
 - scheduled arrivals for one route, service date, and at most four hours,
   joined to deduplicated observations and capped at 250 rows;
-- public metric definitions.
+- public metric definitions;
+- schema discovery and a bounded structured-query fallback across the five
+  allowlisted warehouse tables for questions not covered above.
 
 Route ranking and comparison are service-group aware. The default peer set is
 regular Local/Rapid/Tempo service. AC Transit's 600-series Supplementary School
@@ -291,7 +309,7 @@ narrative. For spatial tools, the MCP performs the parameterized BigQuery query,
 joins observations to current processed GTFS, slices the route shapes, and emits
 the final styled GeoJSON. The model receives only the map title, description,
 feature count, and metric label rather than raw coordinates. The browser renders
-up to three maps, three `line`, `bar`, or accessible 24-hour by 7-day `heatmap`
+up to three maps, three `line`, `bar`, `pie`, or accessible `heatmap`
 charts, and three tables. Duplicate artifacts from multiple tool calls are
 removed before those limits are applied. Policy caps map payloads at 400 features and 3,500
 coordinates total, chart payloads at 500 points or heatmap cells, and tables at
@@ -316,6 +334,7 @@ does not provide a complete timeframe:
 | hourly route profile | seven calendar days ending yesterday in Pacific time |
 | route stop or section map | seven calendar days ending yesterday in Pacific time |
 | scheduled-arrival list | 06:00–10:00 Pacific yesterday |
+| structured-query fallback | seven completed service dates ending yesterday in Pacific time |
 | question opened from a route page | the Sunday–Saturday week displayed on that page; arrival lists use its ending service date |
 
 Each tool marks the timeframe as assumed or explicit and returns a human-readable
@@ -356,7 +375,8 @@ the global cap.
 
 ### Rollout order
 
-1. Build and unit-test the fixed data functions and structured response schema.
+1. Build and unit-test the purpose-built data functions, structured-query
+   compiler, and response schema.
 2. Deploy the private MCP with read-only IAM and verify its health and bounds.
 3. Deploy the public agent with Vertex AI, Firestore limits, and the kill switch
    still disabled.
@@ -379,6 +399,14 @@ dropped-trip question as a critical case. It requires separate worsened and
 improved `rank_route_trends` calls using the deterministic 28-day default,
 weekly periods, regular-service scope, grounded total and change values, all
 three deduplicated charts and tables, and no refusal language.
+
+Each structured-query fallback emits an `analysis_structured_query` event from
+the agent with request scope and the bounded tool specification, and another
+from the MCP with the validated specification, outcome, row count, elapsed
+time, and BigQuery bytes processed and billed. The event deliberately omits the
+raw visitor prompt. `make analysis-query-logs` reads both services' events so
+repeated query shapes can be reviewed and promoted into faster purpose-built
+tools.
 
 Every accepted analysis turn is also archived as one JSON object in the private
 `transit-203605-analysis-chats` bucket. Object names use

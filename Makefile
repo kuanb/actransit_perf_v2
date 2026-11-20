@@ -22,7 +22,7 @@ EVAL_MODELS ?= gemini:gemini-3.5-flash-lite,open:google/gemma-4-26b-a4b-it-maas,
 EVAL_REPEATS ?= 1
 EVAL_REQUEST_TIMEOUT ?= 90
 
-.PHONY: tf-init tf-plan tf-apply tf-fmt build deploy release logs analysis-logs analysis-chat-logs analysis-eval-logs eval-analysis-route-groups eval-analysis-conversations eval-analysis-models invoke run-local test test-analysis smoke hooks-install backfill backfill-school-stats-history backfill-bunching backfill-bunching-history verify-bunching-history backfill-agency-kpis backfill-agency-kpis-history verify-agency-kpi-history
+.PHONY: tf-init tf-plan tf-apply tf-fmt build deploy release logs analysis-logs analysis-chat-logs analysis-eval-logs analysis-query-logs eval-analysis-route-groups eval-analysis-conversations eval-analysis-models invoke run-local test test-analysis smoke hooks-install backfill backfill-school-stats-history backfill-bunching backfill-bunching-history verify-bunching-history backfill-agency-kpis backfill-agency-kpis-history verify-agency-kpi-history
 
 tf-init:
 	cd infra && terraform init
@@ -101,6 +101,11 @@ analysis-chat-logs:
 
 analysis-eval-logs:
 	gcloud logging read 'resource.labels.service_name="actransit-analysis-agent" AND jsonPayload.event="analysis_eval_trace"' --limit 50 --freshness=7d \
+		--format=json
+
+analysis-query-logs:
+	@FRESHNESS="$(if $(FRESHNESS),$(FRESHNESS),30d)"; \
+	gcloud logging read '(resource.labels.service_name="actransit-analysis-agent" OR resource.labels.service_name="actransit-analysis-mcp") AND jsonPayload.event="analysis_structured_query"' --limit 100 --freshness="$$FRESHNESS" \
 		--format=json
 
 eval-analysis-route-groups:

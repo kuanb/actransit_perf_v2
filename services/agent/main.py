@@ -253,9 +253,20 @@ async def query(body: QueryBody) -> JSONResponse:
         )
         eval_trace = result.pop("_eval_trace", [])
         model_usage = result.pop("_model_usage", {})
+        structured_queries = [
+            call for call in eval_trace if call.get("tool") == "query_data"
+        ]
+        if structured_queries:
+            structured_log(
+                "analysis_structured_query",
+                request_id=body.request_id,
+                route_scope=route_id,
+                prompt_features=prompt_features,
+                queries=structured_queries,
+            )
         structured_log(
             "analysis_eval_trace",
-            policy_version="spatial-map-contract-v3",
+            policy_version="structured-query-contract-v1",
             model_provider=settings.model_provider,
             model=settings.model,
             model_usage=model_usage,

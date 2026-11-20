@@ -123,6 +123,63 @@ class GTFSTemplateTest(unittest.TestCase):
         self.assertIsNone(gtfs_time_seconds("08:90:00"))
 
 
+class StructuredQueryExecutionTest(unittest.TestCase):
+    def test_executes_compiled_query_with_billing_cap_and_structured_log(self):
+        class FakeParameter:
+            def __init__(self, name, kind, value):
+                self.name = name
+                self.kind = kind
+                self.value = value
+
+        class FakeConfig:
+            def __init__(self, **values):
+                self.values = values
+
+        class FakeRow(dict):
+            pass
+
+        class FakeJob:
+            total_bytes_processed = 1234
+            total_bytes_billed = 0
+
+            def result(self, timeout):
+                self.timeout = timeout
+                return [FakeRow(route_id="51A", arrival_rows=42)]
+
+        class FakeClient:
+            def query(self, sql, job_config):
+                self.sql = sql
+                self.job_config = job_config
+                return FakeJob()
+
+        transit = TransitData.__new__(TransitData)
+        transit.project_id = "test-project"
+        transit.maximum_bytes_billed = 100_000
+        transit.bigquery = FakeClient()
+        events = []
+        with (
+            patch.object(gcp_data.bigquery, "ScalarQueryParameter", FakeParameter, create=True),
+            patch.object(gcp_data.bigquery, "ArrayQueryParameter", FakeParameter, create=True),
+            patch.object(gcp_data.bigquery, "QueryJobConfig", FakeConfig, create=True),
+            patch.object(gcp_data, "structured_log", lambda event, **fields: events.append((event, fields))),
+        ):
+            result = transit.query_data(
+                table="trip_observations",
+                columns=["route_id"],
+                aggregations=[{"operation": "count", "alias": "arrival_rows"}],
+                group_by=["route_id"],
+                filters=[{"column": "route_id", "operator": "eq", "value": "51A"}],
+                start_date="2026-11-01",
+                end_date="2026-11-07",
+            )
+
+        self.assertEqual(100_000, transit.bigquery.job_config.values["maximum_bytes_billed"])
+        self.assertIn("@filter_0", transit.bigquery.sql)
+        self.assertEqual(42, result["tables"][0]["rows"][0]["arrival_rows"])
+        self.assertEqual("analysis_structured_query", events[0][0])
+        self.assertEqual(1234, events[0][1]["total_bytes_processed"])
+
+
 class RouteServiceProfileTest(unittest.TestCase):
     def test_returns_daily_absolute_bars_and_hour_of_week_heatmap(self):
         body = gtfs_zip()

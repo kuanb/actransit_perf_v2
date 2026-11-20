@@ -50,6 +50,40 @@ class ScopePolicyTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             prepare_tool_call("rank_route_trends", {"metric": "dropped_trips"}, "51A", None)
 
+    def test_route_scope_forces_structured_query_route_and_page_week(self):
+        arguments, timeframe = prepare_tool_call(
+            "query_data",
+            {
+                "table": "trip_observations",
+                "columns": ["stop_id"],
+                "filters": [
+                    {"column": "route_id", "operator": "eq", "value": "72"},
+                    {"column": "is_stale", "operator": "eq", "value": False},
+                ],
+            },
+            "51A",
+            "2026-10-31",
+        )
+
+        route_filters = [
+            value for value in arguments["filters"] if value["column"] == "route_id"
+        ]
+        self.assertEqual(
+            [{"column": "route_id", "operator": "eq", "value": "51A"}],
+            route_filters,
+        )
+        self.assertEqual("2026-10-25", arguments["start_date"])
+        self.assertIn("week shown by the route page", timeframe["disclosure"])
+
+    def test_route_scope_rejects_non_route_structured_table(self):
+        with self.assertRaisesRegex(ValueError, "table with route_id"):
+            prepare_tool_call(
+                "query_data",
+                {"table": "api_request_hourly", "columns": ["source"]},
+                "51A",
+                None,
+            )
+
     def test_route_page_week_is_applied_and_disclosed(self):
         arguments, timeframe = prepare_tool_call(
             "get_route_performance", {"route_id": "51A"}, "51A", "2026-10-31"

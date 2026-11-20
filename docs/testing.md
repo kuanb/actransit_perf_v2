@@ -49,9 +49,14 @@ What's covered:
   disclosure of inferred dates, count-weighted metric aggregation, route trend
   periods and change math, route-group classification, and rejection of
   cross-group comparisons.
+- **`services/data_mcp/tests/test_structured_query.py`** — schema allowlists,
+  mandatory completed-date bounds, identifier and alias rejection, parameterized
+  filter values, deduplication SQL, aggregate constraints, and bounded pie,
+  heatmap, and point-map artifact construction.
 - **`services/agent/tests/test_policy.py`** — route-scope enforcement, route-page
-  week defaults, regular-service ranking defaults, category-sensitive eval
-  tagging, eval-case integrity, and structured response caps for maps, charts, and tables.
+  week defaults, structured-query route-filter replacement, regular-service
+  ranking defaults, category-sensitive eval tagging, eval-case integrity, and
+  structured response caps for maps, charts, and tables.
 - **`services/agent/tests/test_recorder.py`** — private conversation-record schema,
   UTC date/hour object layout, complete question/response retention, browser
   session hashing, and the separate minimal public-turn schema with text

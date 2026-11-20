@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import os
-from typing import Literal
+from typing import Any, Literal
 
 from fastmcp import FastMCP
+from pydantic import BaseModel, Field
 from starlette.responses import JSONResponse
 
 from core import METRICS
@@ -17,10 +18,85 @@ mcp = FastMCP(
         "When dates are omitted, tools use the seven-day period ending yesterday in America/Los_Angeles. "
         "Route trend rankings instead default to the 28-day period ending yesterday. "
         "Route comparisons are service-group aware: regular Local/Rapid/Tempo, 600-series Supplementary "
-        "School Service, 800-series All Nighter, and lettered Transbay routes must be analyzed separately."
+        "School Service, 800-series All Nighter, and lettered Transbay routes must be analyzed separately. "
+        "Prefer purpose-built tools. Use the structured query fallback only for supported questions those tools "
+        "cannot answer; it accepts allowlisted fields and operations but never SQL."
     ),
 )
 data = TransitData()
+
+
+class QueryFilter(BaseModel):
+    column: str = Field(description="Exact allowlisted column name from describe_data.")
+    operator: Literal[
+        "eq",
+        "ne",
+        "lt",
+        "lte",
+        "gt",
+        "gte",
+        "in",
+        "not_in",
+        "contains",
+        "is_null",
+        "is_not_null",
+    ] = "eq"
+    value: str | int | float | bool | list[str | int | float | bool] | None = None
+
+
+class QueryAggregation(BaseModel):
+    operation: Literal[
+        "count",
+        "count_distinct",
+        "sum",
+        "avg",
+        "min",
+        "max",
+        "median",
+        "p95",
+        "stddev",
+    ]
+    column: str | None = Field(
+        default=None,
+        description="Exact allowlisted source column. Only count may omit it to count rows.",
+    )
+    alias: str = Field(
+        description="Lowercase result name starting with a letter and containing only letters, digits, or underscores."
+    )
+
+
+class QueryOrder(BaseModel):
+    column: str = Field(description="Selected column or aggregation alias.")
+    direction: Literal["asc", "desc"] = "asc"
+
+
+class QueryVisualization(BaseModel):
+    type: Literal["line", "bar", "pie", "heatmap", "map"]
+    title: str | None = None
+    x_column: str | None = Field(default=None, description="Result column used for chart labels or heatmap x values.")
+    y_column: str | None = Field(default=None, description="Result column used for heatmap y values.")
+    value_columns: list[str] = Field(
+        default_factory=list,
+        description="One to five numeric result columns; pie, heatmap, and map accept at most one.",
+    )
+    latitude_column: str | None = None
+    longitude_column: str | None = None
+    label_column: str | None = None
+    x_label: str | None = None
+    y_label: str | None = None
+    value_label: str | None = None
+    low_label: str | None = None
+    high_label: str | None = None
+
+
+def model_value(value: BaseModel | dict[str, Any]) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    return value.model_dump(exclude_none=True)
+
+
+def model_values(values: list[BaseModel | dict[str, Any]]) -> list[dict[str, Any]]:
+    return [model_value(value) for value in values]
 
 
 @mcp.tool
@@ -217,6 +293,69 @@ def get_metric_definition(metric: str) -> dict:
         "label": METRICS[metric]["label"],
         "unit": METRICS[metric]["unit"],
     }
+
+
+@mcp.tool(
+    annotations={
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    }
+)
+def describe_data(
+    table: Literal[
+        "trip_observations",
+        "trip_probes",
+        "ridership_observations",
+        "api_request_observations",
+        "api_request_hourly",
+    ]
+    | None = None,
+) -> dict:
+    """Describe the allowlisted tables, columns, types, semantics, and structured-query limits. Use this only when the purpose-built analysis tools do not cover the question or when the user asks about available data. It never accepts SQL."""
+    return data.describe_data(table)
+
+
+@mcp.tool(
+    annotations={
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    }
+)
+def query_data(
+    table: Literal[
+        "trip_observations",
+        "trip_probes",
+        "ridership_observations",
+        "api_request_observations",
+        "api_request_hourly",
+    ],
+    columns: list[str] | None = None,
+    aggregations: list[QueryAggregation] | None = None,
+    filters: list[QueryFilter] | None = None,
+    group_by: list[str] | None = None,
+    order_by: list[QueryOrder] | None = None,
+    limit: int = 50,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    visualization: QueryVisualization | None = None,
+) -> dict:
+    """Run a bounded exploratory query when no purpose-built tool fully answers the user's AC Transit question. Prefer the specialized tools because they encode public metric methodology and are usually cheaper. This fallback accepts only an allowlisted table, exact schema columns, typed filters, approved aggregates, grouping, sorting, and an optional structured visualization; it never accepts SQL, expressions, joins, or object names. Every query is limited to 31 completed service dates, 200 result rows, the server byte cap, and read-only IAM. Call describe_data first if column semantics are uncertain."""
+    return data.query_data(
+        table=table,
+        columns=columns,
+        aggregations=model_values(aggregations or []),
+        filters=model_values(filters or []),
+        group_by=group_by,
+        order_by=model_values(order_by or []),
+        limit=limit,
+        start_date=start_date,
+        end_date=end_date,
+        visualization=model_value(visualization) if visualization else None,
+    )
 
 
 @mcp.custom_route("/health", methods=["GET"])

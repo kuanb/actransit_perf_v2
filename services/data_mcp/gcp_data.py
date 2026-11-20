@@ -34,6 +34,14 @@ from core import (
     route_group_source,
     system_metric_row,
 )
+from structured_query import (
+    build_artifacts,
+    compile_query,
+    describe_schema,
+    normalize_row,
+    resolve_query_dates,
+    validate_visualization,
+)
 
 
 PACIFIC = ZoneInfo("America/Los_Angeles")
@@ -57,6 +65,10 @@ SEGMENT_MAP_METRICS = {
     "p95_travel_time": ("95th-percentile stop-to-stop travel time", "p95_travel_time_s", "minutes"),
     "median_speed": ("Median stop-to-stop speed", "p50_speed_mps", "mph"),
 }
+
+
+def structured_log(event: str, **fields: Any) -> None:
+    print(json.dumps({"severity": "INFO", "event": event, **fields}, default=str), flush=True)
 
 
 class TransitData:
@@ -93,6 +105,183 @@ class TransitData:
 
     def daily_reports(self, dates: list[str]) -> list[dict[str, Any]]:
         return [self.read_json(f"stats/{service_date}.json") for service_date in dates]
+
+    def describe_data(self, table: str | None = None) -> dict[str, Any]:
+        schema = describe_schema(table)
+        rows = [
+            {
+                "table": item["name"],
+                "column": column["name"],
+                "type": column["type"],
+                "description": column["description"],
+            }
+            for item in schema["tables"]
+            for column in item["columns"]
+        ]
+        names = ", ".join(item["name"] for item in schema["tables"])
+        return tool_result(
+            answer_context=(
+                f"The structured read-only query interface exposes: {names}. "
+                "It accepts only allowlisted fields and operations, never SQL."
+            ),
+            timeframe=None,
+            charts=[],
+            tables=[
+                {
+                    "title": "Structured query tables",
+                    "columns": [
+                        {"key": "name", "label": "Table"},
+                        {"key": "description", "label": "Contents"},
+                        {"key": "deduplicated", "label": "Deduplicated"},
+                    ],
+                    "rows": [
+                        {
+                            "name": item["name"],
+                            "description": item["description"],
+                            "deduplicated": item["deduplicated"],
+                        }
+                        for item in schema["tables"]
+                    ],
+                },
+                {
+                    "title": f"{table or 'Available'} data schema",
+                    "columns": [
+                        {"key": "table", "label": "Table"},
+                        {"key": "column", "label": "Column"},
+                        {"key": "type", "label": "Type"},
+                        {"key": "description", "label": "Meaning"},
+                    ],
+                    "rows": rows,
+                }
+            ],
+            sources=[{"kind": "schema_registry", **schema["query_contract"]}],
+            warnings=[],
+        )
+
+    def query_data(
+        self,
+        table: str,
+        columns: list[str] | None = None,
+        aggregations: list[dict[str, Any]] | None = None,
+        filters: list[dict[str, Any]] | None = None,
+        group_by: list[str] | None = None,
+        order_by: list[dict[str, Any]] | None = None,
+        limit: int = 50,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        visualization: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        resolved = resolve_query_dates(start_date, end_date)
+        compiled = compile_query(
+            project_id=self.project_id,
+            table=table,
+            start_date=resolved.start_date,
+            end_date=resolved.end_date,
+            columns=columns,
+            aggregations=aggregations,
+            filters=filters,
+            group_by=group_by,
+            order_by=order_by,
+            limit=limit,
+        )
+        query_spec = {
+            "table": compiled.table,
+            "columns": compiled.columns,
+            "aggregations": compiled.aggregations,
+            "filters": compiled.filters,
+            "group_by": compiled.group_by,
+            "order_by": compiled.order_by,
+            "limit": compiled.limit,
+            "start_date": resolved.start_date,
+            "end_date": resolved.end_date,
+            "visualization": visualization,
+        }
+        if visualization:
+            validate_visualization(compiled.result_columns, visualization)
+        config = bigquery.QueryJobConfig(
+            maximum_bytes_billed=self.maximum_bytes_billed,
+            use_legacy_sql=False,
+            job_timeout_ms=15_000,
+            labels={"service": "analysis_mcp", "query_kind": "structured"},
+            query_parameters=[
+                (
+                    bigquery.ArrayQueryParameter(parameter.name, parameter.type, parameter.value)
+                    if parameter.array
+                    else bigquery.ScalarQueryParameter(parameter.name, parameter.type, parameter.value)
+                )
+                for parameter in compiled.parameters
+            ],
+        )
+        started = monotonic_time.monotonic()
+        try:
+            job = self.bigquery.query(compiled.sql, job_config=config)
+            result = job.result(timeout=20)
+            rows = [normalize_row(dict(row.items())) for row in result]
+        except Exception as exc:
+            structured_log(
+                "analysis_structured_query",
+                status="error",
+                query=query_spec,
+                error_type=type(exc).__name__,
+                duration_ms=round((monotonic_time.monotonic() - started) * 1000),
+            )
+            raise
+        structured_log(
+            "analysis_structured_query",
+            status="ok",
+            query=query_spec,
+            row_count=len(rows),
+            total_bytes_processed=int(getattr(job, "total_bytes_processed", 0) or 0),
+            total_bytes_billed=int(getattr(job, "total_bytes_billed", 0) or 0),
+            duration_ms=round((monotonic_time.monotonic() - started) * 1000),
+        )
+        charts, maps, artifact_warnings = build_artifacts(
+            compiled.table,
+            rows,
+            compiled.result_columns,
+            visualization,
+        )
+        warnings = [
+            (
+                "This is an exploratory warehouse query. Prefer the purpose-built analysis tools "
+                "when they cover the question because they encode the public metric methodology."
+            )
+        ]
+        if compiled.deduplicated:
+            warnings.append(
+                "Repeated live finalizations were reduced to one logical row per trip stop or probe before filtering and aggregation."
+            )
+        warnings.extend(artifact_warnings)
+        return tool_result(
+            answer_context=(
+                f"The structured query returned {len(rows)} row{'s' if len(rows) != 1 else ''} "
+                f"from {compiled.table} with result columns {', '.join(compiled.result_columns)}."
+            ),
+            timeframe=resolved.timeframe,
+            maps=maps,
+            charts=charts,
+            tables=[
+                {
+                    "title": f"Exploratory {compiled.table.replace('_', ' ')} query",
+                    "columns": [
+                        {"key": column, "label": column.replace("_", " ").title()}
+                        for column in compiled.result_columns
+                    ],
+                    "rows": rows,
+                }
+            ],
+            sources=[
+                {
+                    "kind": "bigquery_structured_query",
+                    "table": f"{self.project_id}.actransit.{compiled.table}",
+                    "start_date": resolved.start_date,
+                    "end_date": resolved.end_date,
+                    "deduplicated": compiled.deduplicated,
+                    "columns": compiled.result_columns,
+                }
+            ],
+            warnings=warnings,
+        )
 
     def compare_routes(
         self,

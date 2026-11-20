@@ -59,6 +59,7 @@ def parse_model_spec(value: str, default_location: str) -> ModelSpec:
 
 def load_tool_catalog(path: Path = MCP_SERVER_PATH) -> list[dict[str, Any]]:
     module = ast.parse(path.read_text())
+    model_schemas = _model_schemas(module)
     tools = []
     for node in module.body:
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -69,7 +70,7 @@ def load_tool_catalog(path: Path = MCP_SERVER_PATH) -> list[dict[str, Any]]:
         required: list[str] = []
         defaults = [None] * (len(node.args.args) - len(node.args.defaults)) + list(node.args.defaults)
         for argument, default in zip(node.args.args, defaults):
-            properties[argument.arg] = _annotation_schema(argument.annotation)
+            properties[argument.arg] = _annotation_schema(argument.annotation, model_schemas)
             if default is None:
                 required.append(argument.arg)
             else:
@@ -98,11 +99,64 @@ def _is_tool_decorator(node: ast.expr) -> bool:
     return isinstance(target, ast.Attribute) and target.attr == "tool"
 
 
-def _annotation_schema(node: ast.expr | None) -> dict[str, Any]:
+def _model_schemas(module: ast.Module) -> dict[str, dict[str, Any]]:
+    schemas: dict[str, dict[str, Any]] = {}
+    for node in module.body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+        if not any(isinstance(base, ast.Name) and base.id == "BaseModel" for base in node.bases):
+            continue
+        properties: dict[str, Any] = {}
+        required = []
+        for statement in node.body:
+            if not isinstance(statement, ast.AnnAssign) or not isinstance(statement.target, ast.Name):
+                continue
+            name = statement.target.id
+            schema = _annotation_schema(statement.annotation, schemas)
+            value = statement.value
+            if isinstance(value, ast.Call) and isinstance(value.func, ast.Name) and value.func.id == "Field":
+                keywords = {item.arg: item.value for item in value.keywords if item.arg}
+                if "description" in keywords:
+                    schema["description"] = ast.literal_eval(keywords["description"])
+                if "default" in keywords:
+                    default = ast.literal_eval(keywords["default"])
+                    if default is not None:
+                        schema["default"] = default
+                elif "default_factory" in keywords:
+                    factory = keywords["default_factory"]
+                    if isinstance(factory, ast.Name) and factory.id == "list":
+                        schema["default"] = []
+                elif not value.args:
+                    required.append(name)
+            elif value is None:
+                required.append(name)
+            else:
+                default = ast.literal_eval(value)
+                if default is not None:
+                    schema["default"] = default
+            properties[name] = schema
+        model_schema: dict[str, Any] = {
+            "type": "object",
+            "properties": properties,
+            "additionalProperties": False,
+        }
+        if required:
+            model_schema["required"] = required
+        schemas[node.name] = model_schema
+    return schemas
+
+
+def _annotation_schema(
+    node: ast.expr | None,
+    model_schemas: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     if node is None:
         return {}
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
-        variants = [_annotation_schema(node.left), _annotation_schema(node.right)]
+        variants = [
+            _annotation_schema(node.left, model_schemas),
+            _annotation_schema(node.right, model_schemas),
+        ]
         non_null = [item for item in variants if item.get("type") != "null"]
         return non_null[0] if len(non_null) == 1 else {"anyOf": variants}
     if isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name):
@@ -111,8 +165,13 @@ def _annotation_schema(node: ast.expr | None) -> dict[str, Any]:
             literals = [ast.literal_eval(item) for item in values]
             return {"type": _json_type(literals[0]), "enum": literals}
         if node.value.id == "list":
-            return {"type": "array", "items": _annotation_schema(node.slice)}
+            return {
+                "type": "array",
+                "items": _annotation_schema(node.slice, model_schemas),
+            }
     if isinstance(node, ast.Name):
+        if model_schemas and node.id in model_schemas:
+            return dict(model_schemas[node.id])
         return {"type": {"str": "string", "int": "integer", "float": "number", "bool": "boolean", "None": "null"}.get(node.id, "object")}
     if isinstance(node, ast.Constant) and node.value is None:
         return {"type": "null"}
