@@ -33,7 +33,7 @@ DEFAULT_MODELS = ",".join(
         "open:google/gemma-4-26b-a4b-it-maas",
         "open:openai/gpt-oss-120b-maas",
         "open:deepseek-ai/deepseek-v4.1-flash-maas",
-        "open:meta/llama-4-scout-17b-16e-instruct-maas",
+        "open:meta/llama-4-scout-17b-16e-instruct-maas@us-east5",
         "mistral:mistral-small-2503@us-central1",
         "open:xai/grok-4.7",
     ]
@@ -141,6 +141,12 @@ def main() -> int:
                         "expected_calls": turn.get("expected_calls") or [],
                         "answer": actual["answer"],
                         "trace": actual["trace"],
+                        "timeframes": actual.get("timeframes") or [],
+                        "returned_artifacts": {
+                            "map_count": len(actual.get("maps") or []),
+                            "chart_titles": [item.get("title") for item in actual.get("charts") or []],
+                            "table_titles": [item.get("title") for item in actual.get("tables") or []],
+                        },
                         "usage": actual["usage"],
                         "latency_seconds": actual["latency_seconds"],
                         "scores": scores,

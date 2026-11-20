@@ -174,6 +174,50 @@ class MergeResultsTest(unittest.TestCase):
         self.assertEqual(200, len(merged["charts"][0]["labels"]))
         self.assertEqual(250, len(merged["tables"][0]["rows"]))
 
+    def test_deduplicates_shared_rankings_and_keeps_both_trend_directions(self):
+        totals_chart = {
+            "type": "bar",
+            "title": "Highest totals",
+            "labels": ["1T", "6"],
+            "series": [{"name": "Dropped trips", "values": [28, 21]}],
+        }
+        totals_table = {
+            "title": "Highest totals",
+            "columns": [{"key": "route_id", "label": "Route"}],
+            "rows": [{"route_id": "1T"}, {"route_id": "6"}],
+        }
+        first = {
+            "charts": [
+                totals_chart,
+                {"type": "line", "title": "Routes that worsened most", "labels": ["1", "2"], "series": []},
+            ],
+            "tables": [
+                totals_table,
+                {"title": "Routes that worsened most", "rows": [{"route_id": "51A"}]},
+            ],
+        }
+        second = {
+            "charts": [
+                totals_chart,
+                {"type": "line", "title": "Routes that improved most", "labels": ["1", "2"], "series": []},
+            ],
+            "tables": [
+                totals_table,
+                {"title": "Routes that improved most", "rows": [{"route_id": "6"}]},
+            ],
+        }
+
+        merged = merge_tool_results([first, second])
+
+        self.assertEqual(
+            ["Highest totals", "Routes that worsened most", "Routes that improved most"],
+            [chart["title"] for chart in merged["charts"]],
+        )
+        self.assertEqual(
+            ["Highest totals", "Routes that worsened most", "Routes that improved most"],
+            [table["title"] for table in merged["tables"]],
+        )
+
     def test_same_period_from_multiple_tools_produces_one_notice(self):
         first = {
             "timeframe": {
@@ -358,10 +402,23 @@ class EvalCaseTest(unittest.TestCase):
         )
         turn = case["turns"][0]
         self.assertTrue(case["critical"])
-        self.assertEqual("rank_route_trends", turn["expected_calls"][0]["name"])
-        self.assertEqual("week", turn["expected_calls"][0]["arguments"]["period"])
-        self.assertIn("from 2", turn["answer_contains_all"])
-        self.assertIn("to 10", turn["answer_contains_all"])
+        self.assertEqual(
+            ["rank_route_trends", "rank_route_trends"],
+            [call["name"] for call in turn["expected_calls"]],
+        )
+        self.assertEqual(
+            {"worsened", "improved"},
+            {call["arguments"]["order"] for call in turn["expected_calls"]},
+        )
+        self.assertTrue(all(call["arguments"]["period"] == "week" for call in turn["expected_calls"]))
+        self.assertEqual(3, turn["required_artifacts"]["chart_count"])
+        self.assertEqual(3, turn["required_artifacts"]["tables"])
+        self.assertEqual(
+            {"start_date": "2026-10-12", "end_date": "2026-11-08"},
+            turn["expected_timeframe"],
+        )
+        self.assertIn("210", turn["answer_contains_all"])
+        self.assertIn("6", turn["answer_contains_all"])
         self.assertIn("cannot", turn["answer_forbidden"])
 
 

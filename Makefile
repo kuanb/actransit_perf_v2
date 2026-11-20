@@ -18,7 +18,7 @@ BUNCHING_VERSION := $(shell sed -nE 's/^[[:space:]]*bunchingMethodologyVersion[[
 AGENCY_KPI_VERSION := $(shell sed -nE 's/^[[:space:]]*agencyKPIMethodologyVersion[[:space:]]*=[[:space:]]*([0-9]+).*/\1/p' cmd/scraper/agency_kpi.go)
 PARALLEL ?= 2
 BUNCHING_VERIFY_PARALLEL ?= 16
-EVAL_MODELS ?= gemini:gemini-3.5-flash-lite,open:google/gemma-4-26b-a4b-it-maas,open:openai/gpt-oss-120b-maas,open:deepseek-ai/deepseek-v4.1-flash-maas,open:meta/llama-4-scout-17b-16e-instruct-maas,mistral:mistral-small-2503@us-central1,open:xai/grok-4.7
+EVAL_MODELS ?= gemini:gemini-3.5-flash-lite,open:google/gemma-4-26b-a4b-it-maas,open:openai/gpt-oss-120b-maas,open:deepseek-ai/deepseek-v4.1-flash-maas,open:meta/llama-4-scout-17b-16e-instruct-maas@us-east5,mistral:mistral-small-2503@us-central1,open:xai/grok-4.7
 EVAL_REPEATS ?= 1
 EVAL_REQUEST_TIMEOUT ?= 90
 

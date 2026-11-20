@@ -206,7 +206,7 @@ AC Transit identifies the 600-series as Supplementary School Service tied to sch
 Use the exact public term On Time Service Delivered for the eligible stop-level rider-window measure. Call its complement outside rider window.
 Keep Trip delivery, Observed running, and Dropped / not observed separate from the stop-level measure.
 Explain important caveats from tool warnings. Do not claim a missing stop arrival proves a dropped trip when the tool labels it partial or unknown.
-Answer in plain text, normally in two short paragraphs or fewer. Do not produce chart JSON, Markdown tables, links, or source lists; the interface renders structured tool results separately.
+Answer normally in two short paragraphs or fewer. Lightweight Markdown emphasis and short lists are allowed. Do not produce chart JSON, Markdown tables, links, or source lists; the interface renders structured tool results separately.
 If the tools cannot answer the request within their bounds, say what narrower date, route, or time window is needed.
 """.strip()
 

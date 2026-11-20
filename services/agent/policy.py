@@ -247,6 +247,8 @@ def merge_tool_results(results: list[dict[str, Any]]) -> dict[str, Any]:
     sources: list[dict[str, Any]] = []
     warnings: list[str] = []
     seen_sources: set[str] = set()
+    seen_tables: set[str] = set()
+    seen_charts: set[str] = set()
     total_chart_points = 0
 
     for result in results:
@@ -258,9 +260,14 @@ def merge_tool_results(results: list[dict[str, Any]]) -> dict[str, Any]:
         map_candidates.extend(result.get("maps") or [])
 
         for table in result.get("tables") or []:
-            if len(tables) >= 2:
+            normalized = {**table, "rows": list(table.get("rows") or [])[:250]}
+            key = json.dumps(normalized, sort_keys=True, default=str)
+            if key in seen_tables:
+                continue
+            if len(tables) >= 3:
                 break
-            tables.append({**table, "rows": list(table.get("rows") or [])[:250]})
+            seen_tables.add(key)
+            tables.append(normalized)
 
         for source in result.get("sources") or []:
             key = json.dumps(source, sort_keys=True, default=str)
@@ -300,9 +307,17 @@ def merge_tool_results(results: list[dict[str, Any]]) -> dict[str, Any]:
     for chart in chart_candidates:
         if len(charts) >= 3:
             break
+        key = json.dumps(
+            {key: value for key, value in chart.items() if key != "priority"},
+            sort_keys=True,
+            default=str,
+        )
+        if key in seen_charts:
+            continue
         remaining = 500 - total_chart_points
         if remaining <= 0:
             break
+        seen_charts.add(key)
         normalized = {key: value for key, value in chart.items() if key != "priority"}
         if chart.get("type") == "heatmap":
             cells = list(chart.get("cells") or [])[: min(168, remaining)]

@@ -43,11 +43,16 @@
       "id": "four_week_dropped_trip_route_trends",
       "critical": true,
       "turns": [{
-        "prompt": "Show me lines with the most dropped trips and the ones that have gotten most worse in this regard over the past 4 weeks.",
-        "expected_calls": [{"name": "rank_route_trends", "arguments": {"metric": "dropped_trips", "period": "week", "order": "worsened", "route_group": "regular"}}],
-        "answer_contains_all": ["1T", "28 trips", "51A", "from 2", "to 10"],
+        "prompt": "Over the past 4 weeks, which regular routes had the most dropped trips, which got worse, and which got better?",
+        "expected_calls": [
+          {"name": "rank_route_trends", "arguments": {"metric": "dropped_trips", "period": "week", "order": "worsened", "route_group": "regular"}},
+          {"name": "rank_route_trends", "arguments": {"metric": "dropped_trips", "period": "week", "order": "improved", "route_group": "regular"}}
+        ],
+        "expected_timeframe": {"start_date": "2026-10-12", "end_date": "2026-11-08"},
+        "required_artifacts": {"charts": ["bar", "line"], "chart_count": 3, "tables": 3},
+        "answer_contains_all": ["1T", "180", "210", "45", "6", "50"],
         "answer_forbidden": ["cannot", "can't", "impossible"],
-        "max_calls": 1
+        "max_calls": 2
       }]
     },
     {

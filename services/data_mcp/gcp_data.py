@@ -1155,7 +1155,7 @@ class TransitData:
                 },
                 {
                     "type": "line",
-                    "title": f"{METRICS[metric]['label']} by {period}",
+                    "title": f"Routes that {order} most: {METRICS[metric]['label']} by {period}",
                     "x_label": "Period start",
                     "labels": [item.start_date for item in periods],
                     "y_label": METRICS[metric]["unit"].title(),

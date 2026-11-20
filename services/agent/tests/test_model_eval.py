@@ -94,11 +94,20 @@ class ModelEvalTest(unittest.TestCase):
             "answer_contains_any": ["cannot"],
             "answer_contains_all": ["cannot", "that"],
             "answer_forbidden": ["delete from"],
-            "required_artifacts": {"charts": ["bar", "heatmap"]},
+            "required_artifacts": {"charts": ["bar", "heatmap"], "chart_count": 2, "tables": 1},
             "max_calls": 0,
         }
-        actual = {"answer": "I cannot do that.", "trace": [], "maps": [], "charts": [{"type": "bar"}, {"type": "heatmap"}]}
+        actual = {
+            "answer": "I cannot do that.",
+            "trace": [],
+            "maps": [],
+            "charts": [{"type": "bar"}, {"type": "heatmap"}],
+            "tables": [{}],
+        }
         self.assertTrue(score_turn(expected, actual)["passed"])
+        actual["tables"] = []
+        self.assertFalse(score_turn(expected, actual)["passed"])
+        actual["tables"] = [{}]
         actual["answer"] = "DELETE FROM observations"
         self.assertFalse(score_turn(expected, actual)["passed"])
 
@@ -117,6 +126,25 @@ class ModelEvalTest(unittest.TestCase):
 
         self.assertTrue(score_turn(expected, actual)["passed"])
         actual["answer"] = "Route 1T had 28 trips. Route 51A worsened."
+        self.assertFalse(score_turn(expected, actual)["passed"])
+
+    def test_score_checks_resolved_timeframe(self) -> None:
+        expected = {
+            "expected_calls": [],
+            "expected_timeframe": {"start_date": "2026-10-12", "end_date": "2026-11-08"},
+            "max_calls": 0,
+        }
+        actual = {
+            "answer": "Fixture",
+            "trace": [],
+            "maps": [],
+            "charts": [],
+            "tables": [],
+            "timeframes": [{"start_date": "2026-10-12", "end_date": "2026-11-08"}],
+        }
+
+        self.assertTrue(score_turn(expected, actual)["passed"])
+        actual["timeframes"][0]["start_date"] = "2026-10-13"
         self.assertFalse(score_turn(expected, actual)["passed"])
 
     def test_model_spec_supports_per_model_location(self) -> None:

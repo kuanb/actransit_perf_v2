@@ -65,7 +65,9 @@ GeoJSON for the current route patterns, every scheduled stop, stop-level delay,
 and stop-to-stop time or speed. The private MCP builds the SQL aggregates,
 geometry, and styling; the model only selects a fixed tool and summarizes its
 result. The browser keeps the numbered question chain and follow-up composer
-inside the analysis panel while rendering the latest structured answer.
+inside the analysis panel while preserving every answer and its structured
+maps, charts, tables, warnings, and sources for the active thread. Answer prose
+supports safe bold, italic, underline, code, and list formatting.
 Route service-profile answers include absolute scheduled and Dropped / not
 observed trip bars plus a 24-hour by 7-day heatmap keyed to scheduled trip starts.
 

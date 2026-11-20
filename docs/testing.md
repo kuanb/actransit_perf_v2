@@ -100,9 +100,12 @@ next run.
 The fixture rankings contain several routes with distinct numeric values. The
 critical four-week dropped-trip case checks the dedicated trend tool, its
 deterministic 28-day default, weekly granularity, regular-service scope, and
-numeric grounding for both the highest total and the largest first-to-last
-increase. It also rejects refusal language. Use `EVAL_REPEATS=3` or more to
-expose nondeterministic tool planning.
+numeric grounding for the highest total plus the largest first-to-last increase
+and decrease. The resolved timeframe itself is scored, so an off-by-one date
+range fails even when the model chose the right tool. It requires both trend directions and verifies that the merged
+response retains the deduplicated total, worsened, and improved charts and
+tables. It also rejects refusal language. Use `EVAL_REPEATS=3` or more to expose
+nondeterministic tool planning.
 
 Run the default comparison across Gemini 3.5 Flash-Lite, Gemma 4, gpt-oss 120B,
 DeepSeek V4.1 Flash, Llama 4 Scout, Mistral Small 3.1, and Grok 4.7 with

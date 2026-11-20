@@ -178,28 +178,70 @@ class FixtureGateway:
             result["answer_context"] = "On Time Service Delivered means an eligible scheduled stop was reached between one minute early and seven minutes late; the complement is outside rider window."
         elif name == "rank_route_trends":
             group = arguments.get("route_group", "regular")
+            order = arguments.get("order", "worsened")
+            total_rows = [
+                {"rank": 1, "route_id": "1T", "total_value": 180, "period_values": [55, 50, 40, 35]},
+                {"rank": 2, "route_id": "6", "total_value": 140, "period_values": [50, 40, 30, 20]},
+                {"rank": 3, "route_id": "210", "total_value": 120, "period_values": [20, 25, 30, 45]},
+                {"rank": 4, "route_id": "88", "total_value": 110, "period_values": [20, 22, 28, 40]},
+            ]
+            change_rows = (
+                [
+                    {"rank": 1, "route_id": "210", "first_value": 20, "last_value": 45, "absolute_change": 25, "period_values": [20, 25, 30, 45]},
+                    {"rank": 2, "route_id": "88", "first_value": 20, "last_value": 40, "absolute_change": 20, "period_values": [20, 22, 28, 40]},
+                ]
+                if order == "worsened"
+                else [
+                    {"rank": 1, "route_id": "6", "first_value": 50, "last_value": 20, "absolute_change": -30, "period_values": [50, 40, 30, 20]},
+                    {"rank": 2, "route_id": "1T", "first_value": 55, "last_value": 35, "absolute_change": -20, "period_values": [55, 50, 40, 35]},
+                ]
+            )
             result["answer_context"] = (
                 f"Fixture {group} route trend ranking for dropped trips. "
-                "Highest totals: 1T (28 trips), 72 (21 trips), 51A (20 trips). "
-                "Most worsened from first to last period: 51A (2 to 10, +8 trips), "
-                "72 (0 to 4, +4 trips; percentage change not meaningful), and 1T (7 to 9, +2 trips)."
+                "Highest totals: 1T (180 trips), 6 (140 trips), 210 (120 trips), and 88 (110 trips). "
+                + (
+                    "Most worsened from first to last period: 210 (20 to 45, +25 trips) and 88 (20 to 40, +20 trips)."
+                    if order == "worsened"
+                    else "Most improved from first to last period: 6 (50 to 20, -30 trips) and 1T (55 to 35, -20 trips)."
+                )
             )
-            result["tables"] = [
+            result["charts"] = [
                 {
-                    "title": "Highest total dropped trips",
-                    "rows": [
-                        {"rank": 1, "route_id": "1T", "total_value": 28, "period_values": [7, 6, 6, 9]},
-                        {"rank": 2, "route_id": "72", "total_value": 21, "period_values": [0, 8, 9, 4]},
-                        {"rank": 3, "route_id": "51A", "total_value": 20, "period_values": [2, 3, 5, 10]},
-                    ],
+                    "type": "bar",
+                    "title": "Highest totals: Dropped / not observed trips",
+                    "labels": [row["route_id"] for row in total_rows],
+                    "series": [{"name": "Dropped trips", "values": [row["total_value"] for row in total_rows]}],
                 },
                 {
-                    "title": "Most worsened dropped trips",
-                    "rows": [
-                        {"rank": 1, "route_id": "51A", "first_value": 2, "last_value": 10, "absolute_change": 8, "percentage_change": 400.0},
-                        {"rank": 2, "route_id": "72", "first_value": 0, "last_value": 4, "absolute_change": 4, "percentage_change": None},
-                        {"rank": 3, "route_id": "1T", "first_value": 7, "last_value": 9, "absolute_change": 2, "percentage_change": 28.6},
+                    "type": "line",
+                    "title": f"Routes that {order} most: Dropped / not observed trips by week",
+                    "labels": ["2026-10-12", "2026-10-19", "2026-10-26", "2026-11-02"],
+                    "series": [
+                        {"name": f"Route {row['route_id']}", "values": row["period_values"]}
+                        for row in change_rows
                     ],
+                },
+            ]
+            result["tables"] = [
+                {
+                    "title": "Highest total Dropped / not observed trips",
+                    "columns": [
+                        {"key": "rank", "label": "Rank"},
+                        {"key": "route_id", "label": "Route"},
+                        {"key": "total_value", "label": "Range total"},
+                    ],
+                    "rows": total_rows,
+                },
+                {
+                    "title": f"Routes that {order} most",
+                    "columns": [
+                        {"key": "rank", "label": "Rank"},
+                        {"key": "route_id", "label": "Route"},
+                        {"key": "first_value", "label": "First period"},
+                        {"key": "last_value", "label": "Last period"},
+                        {"key": "absolute_change", "label": "Absolute change"},
+                    ],
+                    "rows": change_rows,
                 },
             ]
         elif name == "rank_routes":
@@ -331,6 +373,13 @@ def score_turn(expected: dict[str, Any], actual: dict[str, Any]) -> dict[str, An
         wanted_args = wanted.get("arguments") or {}
         observed_args = observed.get("arguments") or {}
         argument_parts.extend(float(observed_args.get(key) == value) for key, value in wanted_args.items())
+    expected_timeframe = expected.get("expected_timeframe") or {}
+    actual_timeframes = actual.get("timeframes") or []
+    actual_timeframe = actual_timeframes[0] if actual_timeframes else {}
+    argument_parts.extend(
+        float(actual_timeframe.get(key) == value)
+        for key, value in expected_timeframe.items()
+    )
     arguments = statistics.mean(argument_parts) if argument_parts else selection
     answer = str(actual.get("answer") or "").lower()
     contains = [value.lower() for value in expected.get("answer_contains_any") or []]
@@ -348,6 +397,10 @@ def score_turn(expected: dict[str, Any], actual: dict[str, Any]) -> dict[str, An
     if "charts" in artifacts:
         chart_types = {str(item.get("type") or item.get("chart_type")) for item in actual.get("charts") or []}
         artifact_parts.append(float(set(artifacts["charts"]).issubset(chart_types)))
+    if "chart_count" in artifacts:
+        artifact_parts.append(float(len(actual.get("charts") or []) >= int(artifacts["chart_count"])))
+    if "tables" in artifacts:
+        artifact_parts.append(float(len(actual.get("tables") or []) >= int(artifacts["tables"])))
     artifact = statistics.mean(artifact_parts) if artifact_parts else 1.0
     efficiency = float(len(actual.get("trace") or []) <= int(expected.get("max_calls", 4)) and all(item.get("status") == "ok" for item in actual.get("trace") or []))
     weighted = 0.4 * selection + 0.25 * arguments + 0.2 * policy + 0.1 * artifact + 0.05 * efficiency

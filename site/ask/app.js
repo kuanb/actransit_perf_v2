@@ -202,9 +202,9 @@ async function submitQuestion(event) {
     threadQuestions.push(prompt);
     question.value = "";
     renderThreadState();
-    renderResponse(payload);
+    const answerTurn = renderResponse(payload, prompt, threadQuestions.length);
     renderStatus();
-    responseSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    answerTurn.scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (error) {
     showMessage(error.message);
   } finally {
@@ -214,16 +214,60 @@ async function submitQuestion(event) {
   }
 }
 
-function renderResponse(payload) {
+function renderResponse(payload, prompt, turnNumber) {
   responseSection.hidden = false;
   renderQuestionHistory();
-  renderTimeframes(payload.timeframes || []);
-  renderAnswer(payload.answer || "No answer was returned.");
-  renderWarnings(payload.warnings || []);
-  renderMaps(payload.maps || []);
-  renderCharts(payload.charts || []);
-  renderTables(payload.tables || []);
-  renderSources(payload.sources || []);
+  const history = document.getElementById("answer-history");
+  history.querySelectorAll(".answer-turn-latest").forEach(badge => badge.remove());
+
+  const turn = document.createElement("article");
+  turn.className = "answer-turn";
+  turn.setAttribute("aria-labelledby", `answer-turn-${turnNumber}-title`);
+
+  const heading = document.createElement("div");
+  heading.className = "answer-turn-heading";
+  const headingCopy = document.createElement("div");
+  const title = document.createElement("h3");
+  title.id = `answer-turn-${turnNumber}-title`;
+  title.textContent = `Answer ${turnNumber}`;
+  const questionCopy = document.createElement("p");
+  questionCopy.className = "answer-turn-question";
+  questionCopy.textContent = prompt;
+  headingCopy.append(title, questionCopy);
+  const latest = document.createElement("span");
+  latest.className = "answer-turn-latest";
+  latest.textContent = "Latest";
+  heading.append(headingCopy, latest);
+
+  const timeframes = element("div", "timeframes");
+  const answer = element("div", "answer");
+  const warnings = element("div", "warnings");
+  const maps = element("div", "map-grid");
+  const chartGrid = element("div", "chart-grid");
+  const tables = element("div", "table-stack");
+  const sourcesWrap = document.createElement("details");
+  sourcesWrap.className = "sources-wrap";
+  const sourcesSummary = document.createElement("summary");
+  sourcesSummary.textContent = "Data sources";
+  const sources = document.createElement("ul");
+  sourcesWrap.append(sourcesSummary, sources);
+  turn.append(heading, timeframes, answer, warnings, maps, chartGrid, tables, sourcesWrap);
+  history.appendChild(turn);
+
+  renderTimeframes(payload.timeframes || [], timeframes);
+  renderAnswer(payload.answer || "No answer was returned.", answer);
+  renderWarnings(payload.warnings || [], warnings);
+  renderMaps(payload.maps || [], maps);
+  renderCharts(payload.charts || [], chartGrid);
+  renderTables(payload.tables || [], tables);
+  renderSources(payload.sources || [], sourcesWrap, sources);
+  return turn;
+}
+
+function element(tagName, className) {
+  const node = document.createElement(tagName);
+  node.className = className;
+  return node;
 }
 
 function renderQuestionHistory() {
@@ -248,9 +292,7 @@ function renderQuestionHistory() {
   });
 }
 
-function renderTimeframes(timeframes) {
-  const wrap = document.getElementById("timeframes");
-  wrap.replaceChildren();
+function renderTimeframes(timeframes, wrap) {
   const timeframe = timeframes[0];
   if (!timeframe) return;
   const note = document.createElement("div");
@@ -259,19 +301,70 @@ function renderTimeframes(timeframes) {
   wrap.appendChild(note);
 }
 
-function renderAnswer(text) {
-  const wrap = document.getElementById("answer");
-  wrap.replaceChildren();
-  String(text).split(/\n\s*\n/).filter(Boolean).forEach(paragraph => {
-    const p = document.createElement("p");
-    p.textContent = paragraph.trim();
-    wrap.appendChild(p);
-  });
+function renderAnswer(text, wrap) {
+  const blocks = String(text).trim().split(/\n\s*\n/).filter(Boolean);
+  blocks.forEach(block => renderMarkdownBlock(wrap, block.trim()));
 }
 
-function renderWarnings(items) {
-  const wrap = document.getElementById("warnings");
-  wrap.replaceChildren();
+function renderMarkdownBlock(wrap, block) {
+  const lines = block.split("\n");
+  const unordered = lines.every(line => /^\s*[-*]\s+/.test(line));
+  const ordered = lines.every(line => /^\s*\d+[.)]\s+/.test(line));
+  if (unordered || ordered) {
+    const list = document.createElement(ordered ? "ol" : "ul");
+    lines.forEach(line => {
+      const item = document.createElement("li");
+      appendInlineMarkdown(item, line.replace(ordered ? /^\s*\d+[.)]\s+/ : /^\s*[-*]\s+/, ""));
+      list.appendChild(item);
+    });
+    wrap.appendChild(list);
+    return;
+  }
+
+  const paragraph = document.createElement("p");
+  lines.forEach((line, index) => {
+    if (index) paragraph.appendChild(document.createElement("br"));
+    appendInlineMarkdown(paragraph, line);
+  });
+  wrap.appendChild(paragraph);
+}
+
+function appendInlineMarkdown(parent, text) {
+  const patterns = [
+    { expression: /\*\*([^*]+)\*\*/, tag: "strong" },
+    { expression: /__([^_]+)__/, tag: "strong" },
+    { expression: /<u>([^<]+)<\/u>/i, tag: "u" },
+    { expression: /\+\+([^+]+)\+\+/, tag: "u" },
+    { expression: /`([^`]+)`/, tag: "code", literal: true },
+    { expression: /\*([^*]+)\*/, tag: "em" },
+    { expression: /_([^_]+)_/, tag: "em" },
+  ];
+  let remaining = String(text);
+  while (remaining) {
+    let selected = null;
+    patterns.forEach(pattern => {
+      const match = pattern.expression.exec(remaining);
+      if (match && (!selected || match.index < selected.match.index)) selected = { pattern, match };
+    });
+    if (!selected) {
+      parent.appendChild(document.createTextNode(remaining));
+      return;
+    }
+    if (selected.match.index) {
+      parent.appendChild(document.createTextNode(remaining.slice(0, selected.match.index)));
+    }
+    const node = document.createElement(selected.pattern.tag);
+    if (selected.pattern.literal) {
+      node.textContent = selected.match[1];
+    } else {
+      appendInlineMarkdown(node, selected.match[1]);
+    }
+    parent.appendChild(node);
+    remaining = remaining.slice(selected.match.index + selected.match[0].length);
+  }
+}
+
+function renderWarnings(items, wrap) {
   items.forEach(text => {
     const warning = document.createElement("div");
     warning.className = "warning";
@@ -280,11 +373,7 @@ function renderWarnings(items) {
   });
 }
 
-function renderMaps(items) {
-  mapResizeObservers.splice(0).forEach(observer => observer.disconnect());
-  mapInstances.splice(0).forEach(instance => instance.remove());
-  const wrap = document.getElementById("maps");
-  wrap.replaceChildren();
+function renderMaps(items, wrap) {
   const pendingMaps = [];
   items.slice(0, 3).forEach((spec, index) => {
     const card = document.createElement("article");
@@ -520,10 +609,7 @@ function extendMapBounds(bounds, coordinates) {
   coordinates.forEach(value => extendMapBounds(bounds, value));
 }
 
-function renderCharts(items) {
-  charts.splice(0).forEach(chart => chart.destroy());
-  const wrap = document.getElementById("charts");
-  wrap.replaceChildren();
+function renderCharts(items, wrap) {
   const colors = ["#165d8f", "#b13d58", "#1d7a5b", "#9a5a08", "#6b4c9a"];
   const visibleItems = items.slice(0, 3);
   const expandStandardChart = visibleItems.filter(spec => spec.type !== "heatmap").length === 1
@@ -644,10 +730,8 @@ function renderHeatmap(card, spec) {
   card.append(note, scroll, legend);
 }
 
-function renderTables(items) {
-  const wrap = document.getElementById("tables");
-  wrap.replaceChildren();
-  items.slice(0, 2).forEach(spec => {
+function renderTables(items, wrap) {
+  items.slice(0, 3).forEach(spec => {
     const section = document.createElement("section");
     section.className = "result-table";
     const title = document.createElement("h3");
@@ -680,10 +764,7 @@ function renderTables(items) {
   });
 }
 
-function renderSources(items) {
-  const wrap = document.getElementById("sources-wrap");
-  const list = document.getElementById("sources");
-  list.replaceChildren();
+function renderSources(items, wrap, list) {
   items.forEach(source => {
     const li = document.createElement("li");
     li.textContent = sourceLabel(source);
@@ -695,8 +776,9 @@ function renderSources(items) {
 function clearResponse() {
   responseSection.hidden = true;
   charts.splice(0).forEach(chart => chart.destroy());
+  mapResizeObservers.splice(0).forEach(observer => observer.disconnect());
   mapInstances.splice(0).forEach(instance => instance.remove());
-  document.getElementById("maps").replaceChildren();
+  document.getElementById("answer-history").replaceChildren();
   parentRequestID = null;
   followUpsRemaining = null;
   threadQuestions.splice(0);

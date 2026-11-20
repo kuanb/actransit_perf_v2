@@ -292,7 +292,8 @@ joins observations to current processed GTFS, slices the route shapes, and emits
 the final styled GeoJSON. The model receives only the map title, description,
 feature count, and metric label rather than raw coordinates. The browser renders
 up to three maps, three `line`, `bar`, or accessible 24-hour by 7-day `heatmap`
-charts, and two tables. Policy caps map payloads at 400 features and 3,500
+charts, and three tables. Duplicate artifacts from multiple tool calls are
+removed before those limits are applied. Policy caps map payloads at 400 features and 3,500
 coordinates total, chart payloads at 500 points or heatmap cells, and tables at
 250 rows each.
 
@@ -321,10 +322,10 @@ Each tool marks the timeframe as assumed or explicit and returns a human-readabl
 disclosure. Tool results covering the same period collapse into one notice; an
 answer that genuinely combines different periods receives one consolidated
 notice. The page retains a numbered list of every question in the active thread,
-moves the follow-up composer into that thread, and replaces the structured
-answer and notice on every turn. Starting a new question returns the composer to
-the opening panel, so users can see when they are continuing versus resetting
-context without accumulating stale alerts.
+moves the follow-up composer into that thread, and keeps each answer with its
+timeframe, warnings, maps, charts, tables, and sources. Answer prose renders a
+small safe subset of inline Markdown without accepting arbitrary HTML. Starting
+a new question clears the thread and returns the composer to the opening panel.
 
 ### Abuse and cost controls
 
@@ -374,9 +375,10 @@ a stop-delay map followed by a stop-to-stop section map. Both suites observe the
 normal cooldown and are deliberately excluded from CI.
 
 The managed-model comparison suite also includes the production four-week
-dropped-trip question as a critical case. It requires one `rank_route_trends`
-call using the deterministic 28-day default, weekly periods, regular-service
-scope, grounded total and change values, and no refusal language.
+dropped-trip question as a critical case. It requires separate worsened and
+improved `rank_route_trends` calls using the deterministic 28-day default,
+weekly periods, regular-service scope, grounded total and change values, all
+three deduplicated charts and tables, and no refusal language.
 
 Every accepted analysis turn is also archived as one JSON object in the private
 `transit-203605-analysis-chats` bucket. Object names use
