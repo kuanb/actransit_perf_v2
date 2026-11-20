@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from limiter import FirestoreRateLimiter, LimitConfig, RateLimitError
+from model_provider import create_model_provider
 from orchestrator import AnalysisAgent, MCPGateway
 from policy import eval_prompt_features, extend_conversation, follow_ups_remaining
 from recorder import ConversationRecorder, PublicConversationPublisher
@@ -34,6 +35,7 @@ class Settings:
     project_id: str
     mcp_url: str
     mcp_audience: str
+    model_provider: str
     model: str
     vertex_location: str
     allowed_origins: list[str]
@@ -54,7 +56,11 @@ class Settings:
             project_id=project_id,
             mcp_url=mcp_url,
             mcp_audience=os.environ.get("MCP_AUDIENCE", mcp_url.removesuffix("/mcp")),
-            model=os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite"),
+            model_provider=os.environ.get("ANALYSIS_MODEL_PROVIDER", "vertex_open"),
+            model=os.environ.get(
+                "ANALYSIS_MODEL",
+                "google/gemma-4-26b-a4b-it-maas",
+            ),
             vertex_location=os.environ.get("VERTEX_LOCATION", "global"),
             allowed_origins=[
                 value.strip()
@@ -108,10 +114,14 @@ class QueryBody(BaseModel):
 settings = Settings.from_env()
 limiter = FirestoreRateLimiter(settings.project_id, settings.limits)
 gateway = MCPGateway(settings.mcp_url, settings.mcp_audience)
-agent = AnalysisAgent(
+model_provider = create_model_provider(
+    settings.model_provider,
     settings.project_id,
     settings.vertex_location,
     settings.model,
+)
+agent = AnalysisAgent(
+    model_provider,
     gateway,
     settings.max_tool_calls,
 )
@@ -242,9 +252,13 @@ async def query(body: QueryBody) -> JSONResponse:
             conversation,
         )
         eval_trace = result.pop("_eval_trace", [])
+        model_usage = result.pop("_model_usage", {})
         structured_log(
             "analysis_eval_trace",
             policy_version="spatial-map-contract-v3",
+            model_provider=settings.model_provider,
+            model=settings.model,
+            model_usage=model_usage,
             request_id=body.request_id,
             route_scope=route_id,
             prompt_length=len(prompt),

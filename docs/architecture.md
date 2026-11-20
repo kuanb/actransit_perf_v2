@@ -222,11 +222,20 @@ to the same interface with `route_id` and its displayed `week_end` attached.
 Route context is enforced again in the agent policy; it is not merely prompt
 text that the model can override.
 
+The shared policy and MCP loop is model-independent. `ANALYSIS_MODEL_PROVIDER`
+selects either `vertex_open` for Vertex AI's OpenAI-compatible managed-model
+endpoint or `gemini` for the native Gemini SDK, while `ANALYSIS_MODEL` supplies
+the provider-specific model ID. Production defaults to
+`google/gemma-4-26b-a4b-it-maas`; setting the pair to `gemini` and
+`gemini-3.5-flash-lite` is the rollback path. Both adapters receive the same
+system instruction, conversation, tool schemas, compact tool results, and
+two-round/four-call limits.
+
 ```mermaid
 flowchart LR
     U[Report card or route page] -->|question + optional route/week context| A[Public analysis agent\nCloud Run]
     A --> L{Firestore limits\n20 s cooldown\n2 active\n10/session/day\n60 global/day}
-    L -->|accepted| V[Vertex AI\nGemini 3.5 Flash-Lite]
+    L -->|accepted| V[Vertex AI provider adapter\nGemma 4 default / Gemini rollback]
     V -->|named tool + typed parameters| P[Agent policy\nroute lock + 4-call cap]
     P -->|OIDC-authenticated MCP| M[Private FastMCP service\nCloud Run]
     M --> J[Published daily/weekly JSON\nGCS]
@@ -329,12 +338,13 @@ bytes, Cloud Run instances, and database permissions are all independently bound
 Status reads are cached for five seconds, and an instance rejects known
 cooldown or exhausted-budget traffic before another Firestore transaction.
 
-Gemini 3.5 Flash-Lite is the only expected material incremental charge. At
-roughly 10–30 questions/day and 2,000–6,000 input plus 300–700 output tokens per
-question across tool rounds, plan on about **$0.50–$3.50/month** at standard
-on-demand pricing. The 60-question daily global cap makes a sustained high month
-roughly **$3–$7** at those payload sizes. Cloud Run, Firestore, and BigQuery
-should remain in their free tiers for
+The managed model is the only expected material incremental charge. With Gemma
+4 26B at roughly 10–30 questions/day and 2,000–6,000 input plus 300–700 output
+tokens per question across tool rounds, plan on about **$0.15–$1.20/month** at
+the evaluator's pinned on-demand prices. The 60-question daily global cap makes
+a sustained high month roughly **$0.90–$2.40** at those payload sizes. Gemini
+3.5 Flash-Lite remains available as the higher-cost rollback. Cloud Run,
+Firestore, and BigQuery should remain in their free tiers for
 the expected 20–60 minutes/day of bursty use; GCS reads are negligible. Actual
 token counts and billing should be checked after the first week before raising
 the global cap.

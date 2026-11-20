@@ -18,8 +18,10 @@ BUNCHING_VERSION := $(shell sed -nE 's/^[[:space:]]*bunchingMethodologyVersion[[
 AGENCY_KPI_VERSION := $(shell sed -nE 's/^[[:space:]]*agencyKPIMethodologyVersion[[:space:]]*=[[:space:]]*([0-9]+).*/\1/p' cmd/scraper/agency_kpi.go)
 PARALLEL ?= 2
 BUNCHING_VERIFY_PARALLEL ?= 16
+EVAL_MODELS ?= gemini:gemini-3.5-flash-lite,open:openai/gpt-oss-120b-maas,open:google/gemma-4-26b-a4b-it-maas
+EVAL_REPEATS ?= 1
 
-.PHONY: tf-init tf-plan tf-apply tf-fmt build deploy release logs analysis-logs analysis-chat-logs analysis-eval-logs eval-analysis-route-groups eval-analysis-conversations invoke run-local test test-analysis smoke hooks-install backfill backfill-school-stats-history backfill-bunching backfill-bunching-history verify-bunching-history backfill-agency-kpis backfill-agency-kpis-history verify-agency-kpi-history
+.PHONY: tf-init tf-plan tf-apply tf-fmt build deploy release logs analysis-logs analysis-chat-logs analysis-eval-logs eval-analysis-route-groups eval-analysis-conversations eval-analysis-models invoke run-local test test-analysis smoke hooks-install backfill backfill-school-stats-history backfill-bunching backfill-bunching-history verify-bunching-history backfill-agency-kpis backfill-agency-kpis-history verify-agency-kpi-history
 
 tf-init:
 	cd infra && terraform init
@@ -107,6 +109,13 @@ eval-analysis-route-groups:
 eval-analysis-conversations:
 	@test -n "$(ANALYSIS_API_URL)" || (echo "usage: make eval-analysis-conversations ANALYSIS_API_URL=https://..." && exit 1)
 	python3 services/agent/evals/run_conversation_evals.py --api-url "$(ANALYSIS_API_URL)"
+
+eval-analysis-models:
+	python3 services/agent/evals/run_model_comparison.py \
+		--project "$(PROJECT_ID)" \
+		--models "$(EVAL_MODELS)" \
+		--repeats "$(EVAL_REPEATS)" \
+		--output-dir output/model-eval
 
 invoke:
 	curl -H "Authorization: Bearer $$(gcloud auth print-identity-token)" \

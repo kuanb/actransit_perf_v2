@@ -32,3 +32,13 @@ output "analysis_chat_bucket" {
   description = "Private UTC-partitioned public analysis conversation archive"
   value       = google_storage_bucket.analysis_chats.name
 }
+
+output "model_eval_workload_identity_provider" {
+  description = "Set this as the GCP_WORKLOAD_IDENTITY_PROVIDER GitHub Actions variable"
+  value       = google_iam_workload_identity_pool_provider.github.name
+}
+
+output "model_eval_service_account" {
+  description = "Set this as the GCP_MODEL_EVAL_SERVICE_ACCOUNT GitHub Actions variable"
+  value       = google_service_account.model_eval.email
+}

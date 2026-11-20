@@ -30,10 +30,21 @@ variable "analysis_enabled" {
   default     = false
 }
 
-variable "analysis_gemini_model" {
+variable "analysis_model_provider" {
   type        = string
-  description = "Vertex AI Gemini model used for bounded tool selection and response writing"
-  default     = "gemini-3.5-flash-lite"
+  description = "Analysis model API adapter: gemini or vertex_open"
+  default     = "vertex_open"
+
+  validation {
+    condition     = contains(["gemini", "vertex_open"], var.analysis_model_provider)
+    error_message = "analysis_model_provider must be gemini or vertex_open."
+  }
+}
+
+variable "analysis_model" {
+  type        = string
+  description = "Vertex AI model used for bounded tool selection and response writing"
+  default     = "google/gemma-4-26b-a4b-it-maas"
 }
 
 variable "analysis_allowed_origins" {
@@ -97,4 +108,10 @@ variable "analysis_bq_maximum_bytes_billed" {
   type        = number
   description = "BigQuery maximum bytes billed for each MCP query"
   default     = 104857600
+}
+
+variable "github_repository" {
+  type        = string
+  description = "GitHub owner/repository allowed to impersonate the model-eval service account"
+  default     = "kuanb/actransit_perf_v2"
 }

@@ -13,6 +13,7 @@ const responseSection = document.getElementById("response");
 const statusDot = document.getElementById("status-dot");
 const limitTitle = document.getElementById("limit-title");
 const limitCopy = document.getElementById("limit-copy");
+const modelLabel = document.getElementById("model-label");
 const charts = [];
 const mapInstances = [];
 const mapResizeObservers = [];
@@ -42,6 +43,7 @@ async function initialize() {
     const response = await fetch(CONFIG_URL, { cache: "no-store" });
     if (!response.ok) throw new Error("Analysis configuration is not available yet.");
     config = await response.json();
+    modelLabel.textContent = `Model · ${config.model_label || config.model || "not reported"}`;
     question.maxLength = config.max_prompt_chars || 500;
     await refreshStatus();
     statusTimer = window.setInterval(() => {

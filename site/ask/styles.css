@@ -185,6 +185,18 @@ body {
   gap: 8px;
 }
 
+.model-label {
+  margin-left: auto;
+  padding: 3px 8px;
+  border: 1px solid #99bdd2;
+  border-radius: 999px;
+  background: #fff;
+  color: #154b6d;
+  font-size: 10px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
 .status-dot {
   width: 9px;
   height: 9px;
@@ -617,6 +629,15 @@ body {
 
   .route-scope-actions {
     align-self: flex-start;
+  }
+
+  .limit-status {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .model-label {
+    margin-left: 17px;
   }
 
   #ask-button {

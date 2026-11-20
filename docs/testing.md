@@ -82,6 +82,74 @@ Successful future turns also produce a redacted public record for the static
 conversation-history page; private records created before the public notice are
 not backfilled.
 
+## Managed-model comparison eval
+
+`services/agent/evals/model_comparison_cases.json` is a deterministic suite built
+from the production policy and representative historical questions. It checks
+tool selection, required arguments, scope and service-group policy, expected
+map/chart artifacts, answer terminology, latency, token use, and estimated cost.
+The evaluator derives the tool descriptions and JSON schemas directly from
+`services/data_mcp/server.py`, then supplies fixture results instead of querying
+BigQuery. It calls the production `AnalysisAgent` and provider adapters, so the
+prompt, tool loop, provider request shape, and token accounting are the same code
+used by Cloud Run. This isolates model and interface behavior, avoids the public
+chatbot allowance, and makes MCP signature or description changes part of the
+next run.
+
+Run the default Gemini 3.5 Flash-Lite, gpt-oss 120B, and Gemma 4 comparison with
+Application Default Credentials that can call Vertex AI:
+
+```sh
+make eval-analysis-models EVAL_REPEATS=3
+```
+
+Override `EVAL_MODELS` with comma-separated `gemini:MODEL` or
+`open:PUBLISHER/MODEL` values. A non-global open-model endpoint can use
+`@LOCATION`, for example
+`open:meta/llama-4-scout-17b-16e-instruct-maas@us-east5`. Detailed per-turn
+records, a JSON summary, and a comparison CSV are written under
+`output/model-eval/`. Prices are estimates pinned in the evaluator with an
+as-of date; update them when Vertex pricing changes. During case development,
+pass `--case CASE_ID` directly to the Python runner to run only selected cases.
+
+`.github/workflows/model-eval.yml` exposes the same comparison through a manual
+GitHub Actions `workflow_dispatch`. It does not run on pushes or pull requests.
+Terraform creates a least-privilege evaluator service account and a GitHub OIDC
+Workload Identity provider, so the workflow does not need a service-account key.
+Open-model access must already be enabled once by a project administrator; the
+workflow identity can invoke enabled models but cannot procure new entitlements.
+After applying Terraform, set these repository Actions variables from the
+matching outputs:
+
+```sh
+cd infra
+terraform output -raw model_eval_workload_identity_provider
+terraform output -raw model_eval_service_account
+```
+
+Name the variables `GCP_WORKLOAD_IDENTITY_PROVIDER` and
+`GCP_MODEL_EVAL_SERVICE_ACCOUNT`. The workflow shows the comparison table in
+the run summary, uploads the detailed files for 30 days, and fails when a model
+has API errors or misses the requested overall or critical-case thresholds.
+After a provider API error or 30-second model-call timeout, the runner records
+that failure and skips further paid requests to the same model for that run.
+
+The production adapter is selected independently of the eval list. The default
+deployment uses:
+
+```text
+ANALYSIS_MODEL_PROVIDER=vertex_open
+ANALYSIS_MODEL=google/gemma-4-26b-a4b-it-maas
+```
+
+To roll back without changing the MCP, prompt, policy, or browser interface,
+use:
+
+```text
+ANALYSIS_MODEL_PROVIDER=gemini
+ANALYSIS_MODEL=gemini-3.5-flash-lite
+```
+
 ## Smoke test — `make smoke`
 
 Bash + `curl` + `gsutil` against the deployed Cloud Run service. **Run
@@ -147,10 +215,14 @@ hook updates land automatically when you `git pull`. Skip ad hoc with
 
 ## GitHub Actions CI
 
-`.github/workflows/test.yml` runs `go vet`, `go test ./... -race`, the Python
+.github/workflows/test.yml` runs `go vet`, `go test ./... -race`, the Python
 analysis tests, and Python bytecode compilation on every push to `main` and on
 every pull request. No GCP credentials are needed because unit tests are pure
 (per the boundary policy above) — the runner is a vanilla `ubuntu-latest`.
+
+The separate `model-eval.yml` workflow is manual and uses real Vertex calls
+against deterministic tools. It is intended for deliberate model, prompt,
+interface, or MCP comparisons rather than routine CI.
 
 `make smoke` is **not** wired into CI by design. It would require either
 a service account JSON key or a Workload Identity Federation setup, plus

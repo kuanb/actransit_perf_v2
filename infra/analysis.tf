@@ -1,11 +1,16 @@
 locals {
   analysis_agent_image_url = "${google_artifact_registry_repository.scraper.location}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.scraper.repository_id}/analysis-agent:${var.image_tag}"
   analysis_mcp_image_url   = "${google_artifact_registry_repository.scraper.location}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.scraper.repository_id}/analysis-data-mcp:${var.image_tag}"
+  analysis_model_label = lookup({
+    "gemini-3.5-flash-lite"          = "Gemini 3.5 Flash-Lite"
+    "google/gemma-4-26b-a4b-it-maas" = "Gemma 4 26B"
+  }, var.analysis_model, var.analysis_model)
 }
 
 resource "google_project_service" "analysis" {
   for_each = toset([
     "aiplatform.googleapis.com",
+    "cloudcommerceconsumerprocurement.googleapis.com",
     "firestore.googleapis.com",
   ])
 
@@ -135,8 +140,13 @@ resource "google_cloud_run_v2_service" "analysis_agent" {
       }
 
       env {
-        name  = "GEMINI_MODEL"
-        value = var.analysis_gemini_model
+        name  = "ANALYSIS_MODEL_PROVIDER"
+        value = var.analysis_model_provider
+      }
+
+      env {
+        name  = "ANALYSIS_MODEL"
+        value = var.analysis_model
       }
 
       env {
@@ -285,6 +295,9 @@ resource "google_storage_bucket_object" "analysis_config" {
   content = jsonencode({
     api_url            = google_cloud_run_v2_service.analysis_agent.uri
     cooldown_seconds   = var.analysis_cooldown_seconds
+    model              = var.analysis_model
+    model_label        = local.analysis_model_label
+    model_provider     = var.analysis_model_provider
     max_active_queries = var.analysis_max_active_queries
     max_follow_ups     = var.analysis_max_follow_ups
     max_prompt_chars   = var.analysis_max_prompt_chars
