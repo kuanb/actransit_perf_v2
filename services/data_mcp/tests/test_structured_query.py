@@ -62,6 +62,21 @@ class StructuredQueryCompilerTest(unittest.TestCase):
                 ],
             )
 
+    def test_column_named_source_does_not_resolve_to_the_cte_row(self):
+        compiled = compile_query(
+            "test-project",
+            "api_request_hourly",
+            "2026-11-19",
+            "2026-11-19",
+            columns=["source"],
+            aggregations=[{"operation": "sum", "column": "requests", "alias": "requests"}],
+            group_by=["source"],
+        )
+
+        self.assertIn("WITH bounded_rows AS", compiled.sql)
+        self.assertIn("FROM bounded_rows", compiled.sql)
+        self.assertNotIn("WITH source AS", compiled.sql)
+
     def test_rejects_unbounded_or_unsupported_shapes(self):
         with self.assertRaisesRegex(ValueError, "service_date filter"):
             compile_query(

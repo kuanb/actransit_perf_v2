@@ -372,14 +372,14 @@ def compile_query(
             ") = 1"
         )
     sql = (
-        "WITH source AS (\n"
+        "WITH bounded_rows AS (\n"
         f"  SELECT {source_columns}\n"
         f"  FROM `{project_id}.actransit.{table}`\n"
         "  WHERE service_date BETWEEN @start_date AND @end_date"
         f"{dedupe}\n"
         ")\n"
         f"SELECT {', '.join(select_parts)}\n"
-        "FROM source"
+        "FROM bounded_rows"
     )
     if where_parts:
         sql += "\nWHERE " + " AND ".join(where_parts)
