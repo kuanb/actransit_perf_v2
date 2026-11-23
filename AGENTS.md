@@ -191,6 +191,21 @@ defaulting to `v1`. Pass `TAG=` to override either default (e.g.
 `make release TAG=hotfix1` for a friendly name, or `make deploy TAG=abc1234`
 to ship infra at a specific build).
 
+The Make targets preserve the live Cloud Run value of `ANALYSIS_ENABLED` by
+default. This prevents a normal release from disabling the public interface or
+undoing an active kill switch. Use `make deploy ANALYSIS_ENABLED=false` to
+disable it and `make deploy ANALYSIS_ENABLED=true` to re-enable it. A missing
+analysis service resolves to `false`, matching Terraform's safe default for a
+new environment.
+
+Terraform apply is interactive by default. Agents or other non-interactive
+runners must review `make tf-plan TAG=<sha>` and then use
+`make deploy TAG=<sha> AUTO_APPROVE=1` only when the deploy is authorized. If
+`make release` successfully builds all three images but apply fails at the
+confirmation prompt, do not rerun the builds: deploy the already-pushed SHA
+with that command. A normal release builds three images serially, so rebuilding
+unnecessarily is the expensive part of this failure mode.
+
 After deploy, `make smoke` hits the live service end-to-end.
 
 ## Diagnostic commands worth keeping handy

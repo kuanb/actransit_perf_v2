@@ -2,6 +2,7 @@ PROJECT_ID := transit-203605
 REGION     := us-west1
 REPO       := actransit-scraper
 SERVICE    := actransit-scraper
+AGENT_SERVICE := actransit-analysis-agent
 IMAGE      := $(REGION)-docker.pkg.dev/$(PROJECT_ID)/$(REPO)/scraper
 AGENT_IMAGE := $(REGION)-docker.pkg.dev/$(PROJECT_ID)/$(REPO)/analysis-agent
 MCP_IMAGE   := $(REGION)-docker.pkg.dev/$(PROJECT_ID)/$(REPO)/analysis-data-mcp
@@ -21,6 +22,9 @@ BUNCHING_VERIFY_PARALLEL ?= 16
 EVAL_MODELS ?= gemini:gemini-3.5-flash-lite,open:google/gemma-4-26b-a4b-it-maas,open:openai/gpt-oss-120b-maas,open:deepseek-ai/deepseek-v4.1-flash-maas,open:meta/llama-4-scout-17b-16e-instruct-maas@us-east5,mistral:mistral-small-2503@us-central1,open:xai/grok-4.7
 EVAL_REPEATS ?= 1
 EVAL_REQUEST_TIMEOUT ?= 90
+ANALYSIS_ENABLED ?= preserve
+AUTO_APPROVE ?= false
+TERRAFORM_APPLY_FLAGS := $(if $(filter 1 true yes,$(AUTO_APPROVE)),-auto-approve)
 
 .PHONY: tf-init tf-plan tf-apply tf-fmt build deploy release logs analysis-logs analysis-chat-logs analysis-eval-logs analysis-query-logs eval-analysis-route-groups eval-analysis-conversations eval-analysis-models invoke run-local test test-analysis smoke hooks-install backfill backfill-school-stats-history backfill-bunching backfill-bunching-history verify-bunching-history backfill-agency-kpis backfill-agency-kpis-history verify-agency-kpi-history
 
@@ -34,8 +38,19 @@ tf-plan:
 	  case "$$IMG" in *@*) echo "ERROR: live image is digest-pinned (no tag). Pass TAG= explicitly." && exit 1;; esac; \
 	  T="$${IMG##*:}"; fi; \
 	test -n "$$T" || (echo "ERROR: no TAG= and couldn't read currently-deployed tag" && exit 1); \
-	echo "==> planning against $$T"; \
-	cd infra && terraform plan -var "image_tag=$$T"
+	if [ "$(ANALYSIS_ENABLED)" = "preserve" ]; then \
+	  if ROWS=$$(gcloud run services describe $(AGENT_SERVICE) --region=$(REGION) \
+	    --flatten='spec.template.spec.containers[0].env' \
+	    --format='csv[no-heading](spec.template.spec.containers.env.name,spec.template.spec.containers.env.value)' 2>/dev/null); then \
+	    A=$$(printf '%s\n' "$$ROWS" | awk -F, '$$1 == "ANALYSIS_ENABLED" { print $$2; exit }'); \
+	    test -n "$$A" || (echo "ERROR: live analysis service has no ANALYSIS_ENABLED value" && exit 1); \
+	  else A=false; fi; \
+	else A="$(ANALYSIS_ENABLED)"; fi; \
+	case "$$A" in true|false) ;; *) echo "ERROR: ANALYSIS_ENABLED must be preserve, true, or false" && exit 1;; esac; \
+	echo "==> planning against $$T (analysis_enabled=$$A)"; \
+	cd infra && terraform plan \
+	  -var "image_tag=$$T" \
+	  -var "analysis_enabled=$$A"
 
 tf-apply: deploy
 
@@ -71,8 +86,19 @@ deploy:
 	  || (echo "ERROR: analysis agent tag '$$T' missing — run 'make build TAG=$$T' first" && exit 1); \
 	gcloud artifacts docker tags list $(MCP_IMAGE) --format='value(TAG)' | grep -qx "$$T" \
 	  || (echo "ERROR: analysis MCP tag '$$T' missing — run 'make build TAG=$$T' first" && exit 1); \
-	echo "==> deploying $$T"; \
-	cd infra && terraform apply -var "image_tag=$$T"
+	if [ "$(ANALYSIS_ENABLED)" = "preserve" ]; then \
+	  if ROWS=$$(gcloud run services describe $(AGENT_SERVICE) --region=$(REGION) \
+	    --flatten='spec.template.spec.containers[0].env' \
+	    --format='csv[no-heading](spec.template.spec.containers.env.name,spec.template.spec.containers.env.value)' 2>/dev/null); then \
+	    A=$$(printf '%s\n' "$$ROWS" | awk -F, '$$1 == "ANALYSIS_ENABLED" { print $$2; exit }'); \
+	    test -n "$$A" || (echo "ERROR: live analysis service has no ANALYSIS_ENABLED value" && exit 1); \
+	  else A=false; fi; \
+	else A="$(ANALYSIS_ENABLED)"; fi; \
+	case "$$A" in true|false) ;; *) echo "ERROR: ANALYSIS_ENABLED must be preserve, true, or false" && exit 1;; esac; \
+	echo "==> deploying $$T (analysis_enabled=$$A)"; \
+	cd infra && terraform apply $(TERRAFORM_APPLY_FLAGS) \
+	  -var "image_tag=$$T" \
+	  -var "analysis_enabled=$$A"
 
 # release builds + deploys at the auto-derived tag. If the working tree is
 # dirty, prompts before proceeding so you don't accidentally ship uncommitted

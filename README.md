@@ -140,6 +140,7 @@ required APIs enabled, and a Terraform state bucket at
 make tf-init                # only the first time
 make release                # build + deploy at HEAD's git SHA (use this for code changes)
 make deploy                 # terraform apply at the currently-running tag (infra-only changes)
+make tf-plan TAG=<sha>      # preview the exact image tag and analysis kill-switch state
 make build                  # just build (rare; use release instead)
 make invoke                 # curl /scrape with your identity token
 make logs                   # recent Cloud Run logs
@@ -152,6 +153,19 @@ make backfill-school-stats-history # build school reports for every indexed serv
 
 `make deploy` refuses to run if the tag isn't in Artifact Registry, so you
 can't accidentally deploy a tag whose build hasn't finished pushing.
+
+The deploy targets preserve the live Cloud Run value of `ANALYSIS_ENABLED` by
+default, so a normal release neither disables the public interface nor defeats
+an active kill switch. Use `make deploy ANALYSIS_ENABLED=false` to disable it or
+`make deploy ANALYSIS_ENABLED=true` to re-enable it. If the analysis service
+does not exist yet, deploy defaults it to `false`, matching Terraform's safe
+default for a new environment.
+
+Terraform confirmation remains interactive by default. For an authorized
+non-interactive deploy, first inspect `make tf-plan TAG=<sha>`, then run
+`make deploy TAG=<sha> AUTO_APPROVE=1`. If `make release` finishes all three
+Cloud Builds but fails or loses its terminal during Terraform apply, do not
+rebuild: rerun that deploy command with the SHA printed by the release.
 
 ### Versioning
 
@@ -250,6 +264,7 @@ per query. Follow-ups retain only the bounded prior question, narrative answer,
 and timeframe for one hour; every turn consumes the normal cooldown and daily
 allowances. All are Terraform variables except the tool-call and response-size
 caps, which are service environment settings.
-The Terraform default leaves the public kill switch off for the first deploy;
-enable it only after the private MCP and route-scoped browser flow pass smoke
-checks.
+The raw Terraform default leaves the public kill switch off for a new
+environment; the production Make targets preserve the live state. Activate the
+interface in a new environment only after the private MCP and route-scoped
+browser flow pass smoke checks.
