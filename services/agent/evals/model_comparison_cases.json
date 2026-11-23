@@ -155,10 +155,20 @@
       "id": "segment_slowdown_and_catchup_single_call",
       "critical": true,
       "turns": [{
-        "prompt": "Show me the section of Route 51A with the greatest slowdown and the section where the most catch-up occurs.",
+        "prompt": "Show me the section of route 51A that leads to the most performance issues - greatest slowdown/increase in falling out of sync with schedule. Show me the section also where the most catch up occurs.",
         "expected_calls": [{"name": "get_route_segment_performance_map", "arguments": {"route_id": "51A", "metric": "median_schedule_loss"}}],
-        "required_artifacts": {"maps": 2, "charts": ["line"], "chart_count": 2},
+        "expected_timeframe": {"start_date": "2026-10-12", "end_date": "2026-11-08"},
+        "required_artifacts": {
+          "maps": 2,
+          "map_targets": ["segment"],
+          "map_title_terms": ["greatest slowdown", "greatest catch-up"],
+          "charts": ["line"],
+          "chart_count": 2,
+          "chart_x_label_terms": ["distance"]
+        },
         "answer_contains_any": ["catch-up", "caught up", "recovered"],
+        "answer_contains_all": ["slowdown", "2.1", "2.5"],
+        "answer_forbidden": ["technical error", "narrower time window", "highest median travel time"],
         "max_calls": 1
       }]
     },

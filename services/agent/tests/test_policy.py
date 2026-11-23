@@ -464,6 +464,26 @@ class EvalCaseTest(unittest.TestCase):
         self.assertEqual(2, spatial["turns"][1]["minimum_map_count"])
         self.assertIn("catch up", spatial["turns"][1]["prompt"])
 
+    def test_conversation_eval_covers_original_route_51a_failure(self):
+        path = Path(__file__).resolve().parents[1] / "evals" / "conversation_cases.json"
+        cases = json.loads(path.read_text())
+
+        case = next(
+            item
+            for item in cases
+            if item["id"] == "route_51a_default_window_schedule_change_regression"
+        )
+        turn = case["turns"][0]
+        self.assertIsNone(case["scope"]["route_id"])
+        self.assertIn("falling out of sync with schedule", turn["prompt"])
+        self.assertEqual(28, turn["required_timeframe_days"])
+        self.assertEqual(
+            {"slowdown": "positive", "catchup": "negative"},
+            turn["required_map_metric_signs"],
+        )
+        self.assertEqual(2, turn["minimum_numeric_x_chart_count"])
+        self.assertIn("highest median travel time", turn["forbidden_answer_terms"])
+
     def test_model_eval_covers_four_week_route_trends_as_critical(self):
         path = Path(__file__).resolve().parents[1] / "evals" / "model_comparison_cases.json"
         suite = json.loads(path.read_text())

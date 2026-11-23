@@ -22,6 +22,7 @@ BUNCHING_VERIFY_PARALLEL ?= 16
 EVAL_MODELS ?= gemini:gemini-3.5-flash-lite,open:google/gemma-4-26b-a4b-it-maas,open:openai/gpt-oss-120b-maas,open:deepseek-ai/deepseek-v4.1-flash-maas,open:meta/llama-4-scout-17b-16e-instruct-maas@us-east5,mistral:mistral-small-2503@us-central1,open:xai/grok-4.7
 EVAL_REPEATS ?= 1
 EVAL_REQUEST_TIMEOUT ?= 90
+EVAL_CASE ?=
 ANALYSIS_ENABLED ?= preserve
 AUTO_APPROVE ?= false
 TERRAFORM_APPLY_FLAGS := $(if $(filter 1 true yes,$(AUTO_APPROVE)),-auto-approve)
@@ -140,7 +141,7 @@ eval-analysis-route-groups:
 
 eval-analysis-conversations:
 	@test -n "$(ANALYSIS_API_URL)" || (echo "usage: make eval-analysis-conversations ANALYSIS_API_URL=https://..." && exit 1)
-	python3 services/agent/evals/run_conversation_evals.py --api-url "$(ANALYSIS_API_URL)"
+	python3 services/agent/evals/run_conversation_evals.py --api-url "$(ANALYSIS_API_URL)" $(if $(EVAL_CASE),--case "$(EVAL_CASE)")
 
 eval-analysis-models:
 	python3 services/agent/evals/run_model_comparison.py \
@@ -148,7 +149,7 @@ eval-analysis-models:
 		--models "$(EVAL_MODELS)" \
 		--repeats "$(EVAL_REPEATS)" \
 		--request-timeout "$(EVAL_REQUEST_TIMEOUT)" \
-		--output-dir output/model-eval
+		--output-dir output/model-eval $(if $(EVAL_CASE),--case "$(EVAL_CASE)")
 
 invoke:
 	curl -H "Authorization: Bearer $$(gcloud auth print-identity-token)" \

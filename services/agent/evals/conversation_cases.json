@@ -35,5 +35,33 @@
         "required_chart_types": ["line"]
       }
     ]
+  },
+  {
+    "id": "route_51a_default_window_schedule_change_regression",
+    "scope": {"route_id": null, "week_end": null},
+    "turns": [
+      {
+        "prompt": "Show me the section of route 51A that leads to the most performance issues - greatest slowdown/increase in falling out of sync with schedule. Show me the section also where the most catch up occurs.",
+        "minimum_map_count": 2,
+        "required_map_targets": ["segment"],
+        "required_map_title_terms": ["greatest slowdown", "greatest catch-up"],
+        "required_map_metric_signs": {"slowdown": "positive", "catchup": "negative"},
+        "minimum_chart_count": 2,
+        "required_chart_types": ["line"],
+        "required_chart_x_label_terms": ["distance"],
+        "minimum_numeric_x_chart_count": 2,
+        "required_timeframe_days": 28,
+        "required_timeframe_basis": "four_week_period_ending_yesterday",
+        "require_assumed_timeframe": true,
+        "required_answer_terms": ["slowdown"],
+        "required_answer_any_terms": ["catch-up", "catch up", "recovered"],
+        "forbidden_answer_terms": [
+          "technical error",
+          "narrower time window",
+          "highest median travel time",
+          "travel times often represent"
+        ]
+      }
+    ]
   }
 ]

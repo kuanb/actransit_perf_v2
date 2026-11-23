@@ -1,4 +1,5 @@
 import io
+import os
 import sys
 import unittest
 import zipfile
@@ -104,6 +105,18 @@ def processed_route() -> dict:
             },
         },
     }
+
+
+class ConfigurationTest(unittest.TestCase):
+    def test_default_query_budget_supports_four_week_spatial_analysis(self):
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch.object(gcp_data.storage, "Client", create=True),
+            patch.object(gcp_data.bigquery, "Client", create=True),
+        ):
+            transit = TransitData()
+
+        self.assertEqual(512 * 1024 * 1024, transit.maximum_bytes_billed)
 
 
 class GTFSTemplateTest(unittest.TestCase):

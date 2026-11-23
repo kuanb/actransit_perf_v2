@@ -223,6 +223,7 @@ are intentionally not part of CI:
 ```sh
 make eval-analysis-route-groups ANALYSIS_API_URL=https://actransit-analysis-agent-komsnvluna-uw.a.run.app
 make eval-analysis-conversations ANALYSIS_API_URL=https://actransit-analysis-agent-komsnvluna-uw.a.run.app
+make eval-analysis-conversations ANALYSIS_API_URL=https://actransit-analysis-agent-komsnvluna-uw.a.run.app EVAL_CASE=route_51a_default_window_schedule_change_regression
 make analysis-eval-logs
 ```
 

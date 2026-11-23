@@ -11,6 +11,7 @@ EVAL_DIR = Path(__file__).resolve().parents[1] / "evals"
 sys.path.insert(0, str(EVAL_DIR))
 
 from model_eval import ManagedModelRunner, ModelSpec, load_tool_catalog, parse_model_spec, score_turn, summarize
+from run_conversation_evals import validate_turn
 
 
 class LoopBoundAgent:
@@ -123,6 +124,79 @@ class ModelEvalTest(unittest.TestCase):
         actual["answer"] = "DELETE FROM observations"
         self.assertFalse(score_turn(expected, actual)["passed"])
 
+    def test_score_checks_focused_map_titles_and_distance_axis(self) -> None:
+        expected = {
+            "expected_calls": [],
+            "required_artifacts": {
+                "maps": 2,
+                "map_targets": ["segment"],
+                "map_title_terms": ["greatest slowdown", "greatest catch-up"],
+                "chart_x_label_terms": ["distance"],
+            },
+            "max_calls": 0,
+        }
+        actual = {
+            "answer": "Fixture",
+            "trace": [],
+            "maps": [
+                {"title": "Greatest slowdown", "style": {"target": "segment"}},
+                {"title": "Greatest catch-up", "style": {"target": "segment"}},
+            ],
+            "charts": [{"x_label": "Distance from origin (miles)"}],
+            "tables": [],
+        }
+
+        self.assertTrue(score_turn(expected, actual)["passed"])
+        actual["charts"][0]["x_label"] = "Stop sequence"
+        self.assertFalse(score_turn(expected, actual)["passed"])
+
+    def test_live_eval_validates_schedule_change_signs_window_and_distance_charts(self) -> None:
+        turn = {
+            "minimum_map_count": 2,
+            "required_map_targets": ["segment"],
+            "required_map_metric_signs": {"slowdown": "positive", "catchup": "negative"},
+            "minimum_chart_count": 2,
+            "required_chart_types": ["line"],
+            "required_chart_x_label_terms": ["distance"],
+            "minimum_numeric_x_chart_count": 2,
+            "required_timeframe_days": 28,
+            "required_timeframe_basis": "four_week_period_ending_yesterday",
+            "require_assumed_timeframe": True,
+            "required_answer_terms": ["slowdown"],
+            "required_answer_any_terms": ["catch-up", "recovered"],
+            "forbidden_answer_terms": ["technical error"],
+        }
+        payload = {
+            "answer": "The greatest slowdown added 2.1 minutes; buses recovered 2.5 minutes in the catch-up zone.",
+            "maps": [
+                {
+                    "style": {"target": "segment"},
+                    "geojson": {"features": [{"properties": {"highlight_kind": "slowdown", "metric_value": 2.1}}]},
+                },
+                {
+                    "style": {"target": "segment"},
+                    "geojson": {"features": [{"properties": {"highlight_kind": "catchup", "metric_value": -2.5}}]},
+                },
+            ],
+            "charts": [
+                {"type": "line", "x_label": "Distance (miles)", "labels": ["A"], "x_values": [1.0]},
+                {"type": "line", "x_label": "Distance (miles)", "labels": ["B"], "x_values": [1.0]},
+            ],
+            "timeframes": [{
+                "start_date": "2026-10-12",
+                "end_date": "2026-11-08",
+                "basis": "four_week_period_ending_yesterday",
+                "assumed": True,
+            }],
+        }
+
+        self.assertEqual([], validate_turn(turn, payload))
+        payload["maps"][1]["geojson"]["features"][0]["properties"]["metric_value"] = 2.5
+        self.assertIn(
+            "missing negative map metric for highlight kind: catchup",
+            validate_turn(turn, payload),
+        )
+
     def test_score_requires_every_numeric_grounding_token(self) -> None:
         expected = {
             "expected_calls": [],
@@ -221,6 +295,25 @@ class ModelEvalTest(unittest.TestCase):
                     self.assertIn(call["name"], catalog, case["id"])
                     properties = catalog[call["name"]]["input_schema"]["properties"]
                     self.assertTrue(set(call.get("arguments") or {}).issubset(properties), case["id"])
+
+    def test_segment_regression_case_uses_original_prompt_and_four_week_contract(self) -> None:
+        suite = json.loads((EVAL_DIR / "model_comparison_cases.json").read_text())
+        case = next(
+            item
+            for item in suite["cases"]
+            if item["id"] == "segment_slowdown_and_catchup_single_call"
+        )
+        turn = case["turns"][0]
+
+        self.assertIn("falling out of sync with schedule", turn["prompt"])
+        self.assertEqual(
+            {"start_date": "2026-10-12", "end_date": "2026-11-08"},
+            turn["expected_timeframe"],
+        )
+        self.assertEqual(2, turn["required_artifacts"]["maps"])
+        self.assertEqual(["segment"], turn["required_artifacts"]["map_targets"])
+        self.assertIn("distance", turn["required_artifacts"]["chart_x_label_terms"])
+        self.assertIn("highest median travel time", turn["answer_forbidden"])
 
 
 if __name__ == "__main__":

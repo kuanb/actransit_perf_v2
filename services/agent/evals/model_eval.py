@@ -236,7 +236,20 @@ class FixtureGateway:
                     {**result["maps"][0], "title": f"Route {route}: greatest slowdown", "style": {"target": "segment"}},
                     {**result["maps"][0], "title": f"Route {route}: greatest catch-up", "style": {"target": "segment"}},
                 ]
-                result["charts"] = [{"type": "line"}, {"type": "line"}]
+                result["charts"] = [
+                    {
+                        "type": "line",
+                        "x_label": "Distance from the representative origin (miles)",
+                        "labels": ["First → Second"],
+                        "x_values": [1.0],
+                    },
+                    {
+                        "type": "line",
+                        "x_label": "Distance from the representative origin (miles)",
+                        "labels": ["Third → Fourth"],
+                        "x_values": [1.0],
+                    },
+                ]
                 result["warnings"] = ["Stop-to-stop data cannot isolate a particular turn or intersection."]
         elif name == "get_metric_definition":
             result["answer_context"] = "On Time Service Delivered means an eligible scheduled stop was reached between one minute early and seven minutes late; the complement is outside rider window."
@@ -458,11 +471,29 @@ def score_turn(expected: dict[str, Any], actual: dict[str, Any]) -> dict[str, An
     artifacts = expected.get("required_artifacts") or {}
     if "maps" in artifacts:
         artifact_parts.append(float(len(actual.get("maps") or []) >= int(artifacts["maps"])))
+    if "map_targets" in artifacts:
+        map_targets = {
+            str((item.get("style") or {}).get("target"))
+            for item in actual.get("maps") or []
+        }
+        artifact_parts.append(float(set(artifacts["map_targets"]).issubset(map_targets)))
+    if "map_title_terms" in artifacts:
+        map_titles = [str(item.get("title") or "").lower() for item in actual.get("maps") or []]
+        artifact_parts.extend(
+            float(any(term.lower() in title for title in map_titles))
+            for term in artifacts["map_title_terms"]
+        )
     if "charts" in artifacts:
         chart_types = {str(item.get("type") or item.get("chart_type")) for item in actual.get("charts") or []}
         artifact_parts.append(float(set(artifacts["charts"]).issubset(chart_types)))
     if "chart_count" in artifacts:
         artifact_parts.append(float(len(actual.get("charts") or []) >= int(artifacts["chart_count"])))
+    if "chart_x_label_terms" in artifacts:
+        x_labels = [str(item.get("x_label") or "").lower() for item in actual.get("charts") or []]
+        artifact_parts.extend(
+            float(any(term.lower() in label for label in x_labels))
+            for term in artifacts["chart_x_label_terms"]
+        )
     if "tables" in artifacts:
         artifact_parts.append(float(len(actual.get("tables") or []) >= int(artifacts["tables"])))
     artifact = statistics.mean(artifact_parts) if artifact_parts else 1.0
