@@ -324,7 +324,7 @@ function renderMarkdownBlock(wrap, block) {
   const paragraph = document.createElement("p");
   lines.forEach((line, index) => {
     if (index) paragraph.appendChild(document.createElement("br"));
-    appendInlineMarkdown(paragraph, line);
+    appendInlineMarkdown(paragraph, line.replace(/\\\s*$/, ""));
   });
   wrap.appendChild(paragraph);
 }
@@ -339,7 +339,7 @@ function appendInlineMarkdown(parent, text) {
     { expression: /\*([^*]+)\*/, tag: "em" },
     { expression: /_([^_]+)_/, tag: "em" },
   ];
-  let remaining = String(text);
+  let remaining = normalizeInlineMarkdown(text);
   while (remaining) {
     let selected = null;
     patterns.forEach(pattern => {
@@ -362,6 +362,12 @@ function appendInlineMarkdown(parent, text) {
     parent.appendChild(node);
     remaining = remaining.slice(selected.match.index + selected.match[0].length);
   }
+}
+
+function normalizeInlineMarkdown(text) {
+  return String(text)
+    .replace(/\$\s*\\(?:rightarrow|to)\s*\$/gi, "→")
+    .replace(/\\(?:rightarrow|to)\b/gi, "→");
 }
 
 function renderWarnings(items, wrap) {
@@ -414,7 +420,7 @@ function renderMaps(items, wrap) {
       initializeAnalysisMap(instance, spec, index);
       window.requestAnimationFrame(() => {
         instance.resize();
-        fitAnalysisMap(instance, spec.geojson);
+        fitAnalysisMap(instance, spec.geojson, spec.fit);
       });
     });
     if (typeof ResizeObserver !== "undefined") {
@@ -429,8 +435,11 @@ function renderMaps(items, wrap) {
 function initializeAnalysisMap(instance, spec, mapIndex) {
   const sourceID = `analysis-map-source-${mapIndex}`;
   const routeLayer = `analysis-map-route-${mapIndex}`;
+  const focusHaloLayer = `analysis-map-focus-halo-${mapIndex}`;
   const segmentLayer = `analysis-map-segments-${mapIndex}`;
   const stopLayer = `analysis-map-stops-${mapIndex}`;
+  const focusStopLabelLayer = `analysis-map-focus-stop-labels-${mapIndex}`;
+  const annotationLayer = `analysis-map-annotations-${mapIndex}`;
   const terminalLayer = `analysis-map-terminals-${mapIndex}`;
   const terminalLabelLayer = `analysis-map-terminal-labels-${mapIndex}`;
   const style = spec.style || {};
@@ -445,14 +454,33 @@ function initializeAnalysisMap(instance, spec, mapIndex) {
     paint: { "line-color": "#40515d", "line-width": 3.5, "line-opacity": 0.55 },
   });
   instance.addLayer({
+    id: focusHaloLayer,
+    type: "line",
+    source: sourceID,
+    filter: [
+      "all",
+      ["==", ["get", "feature_kind"], "segment"],
+      ["==", ["get", "is_focus"], true],
+    ],
+    layout: { "line-cap": "round", "line-join": "round" },
+    paint: {
+      "line-color": ["coalesce", ["get", "highlight_color"], "#c92a2a"],
+      "line-width": 20,
+      "line-opacity": 0.22,
+      "line-blur": 2,
+    },
+  });
+  instance.addLayer({
     id: segmentLayer,
     type: "line",
     source: sourceID,
     filter: ["==", ["get", "feature_kind"], "segment"],
     layout: { "line-cap": "round", "line-join": "round" },
     paint: {
-      "line-color": target === "segment" ? mapColorExpression(style) : "#40515d",
-      "line-width": target === "segment" ? 7 : 3,
+      "line-color": target === "segment"
+        ? ["case", ["has", "highlight_color"], ["get", "highlight_color"], mapColorExpression(style)]
+        : "#40515d",
+      "line-width": target === "segment" ? (style.focus_only ? 9 : 7) : 3,
       "line-opacity": target === "segment" ? 0.9 : 0.5,
     },
   });
@@ -467,6 +495,48 @@ function initializeAnalysisMap(instance, spec, mapIndex) {
       "circle-opacity": 0.92,
       "circle-stroke-color": "#26343d",
       "circle-stroke-width": target === "stop" ? 1.25 : 1.5,
+    },
+  });
+  instance.addLayer({
+    id: focusStopLabelLayer,
+    type: "symbol",
+    source: sourceID,
+    filter: [
+      "all",
+      ["==", ["get", "feature_kind"], "stop"],
+      ["==", ["get", "is_focus"], true],
+    ],
+    layout: {
+      "text-field": ["get", "name"],
+      "text-size": 11,
+      "text-font": ["Open Sans Semibold", "Arial Unicode MS Bold"],
+      "text-variable-anchor": ["top", "bottom", "left", "right"],
+      "text-radial-offset": 0.8,
+      "text-justify": "auto",
+    },
+    paint: {
+      "text-color": "#26343d",
+      "text-halo-color": "rgba(255, 255, 255, 0.95)",
+      "text-halo-width": 1.5,
+    },
+  });
+  instance.addLayer({
+    id: annotationLayer,
+    type: "symbol",
+    source: sourceID,
+    filter: ["==", ["get", "feature_kind"], "annotation"],
+    layout: {
+      "text-field": ["get", "label"],
+      "text-size": 12,
+      "text-font": ["Open Sans Bold", "Arial Unicode MS Bold"],
+      "text-anchor": "bottom",
+      "text-offset": [0, -0.8],
+      "text-allow-overlap": true,
+    },
+    paint: {
+      "text-color": "#26343d",
+      "text-halo-color": "rgba(255, 255, 255, 0.98)",
+      "text-halo-width": 2,
     },
   });
   instance.addLayer({
@@ -534,7 +604,7 @@ function initializeAnalysisMap(instance, spec, mapIndex) {
     instance.getCanvas().style.cursor = "";
     popup.remove();
   });
-  fitAnalysisMap(instance, spec.geojson);
+  fitAnalysisMap(instance, spec.geojson, spec.fit);
 }
 
 function mapColorExpression(style) {
@@ -594,10 +664,21 @@ function buildMapPopup(properties, fields) {
   return wrap;
 }
 
-function fitAnalysisMap(instance, geojson) {
+function fitAnalysisMap(instance, geojson, fit) {
   const bounds = new mapboxgl.LngLatBounds();
-  (geojson?.features || []).forEach(feature => extendMapBounds(bounds, feature.geometry?.coordinates));
-  if (!bounds.isEmpty()) instance.fitBounds(bounds, { padding: 42, duration: 0, maxZoom: 14 });
+  const features = geojson?.features || [];
+  const focused = fit?.property
+    ? features.filter(feature => feature.properties?.[fit.property] === fit.value)
+    : [];
+  (focused.length ? focused : features)
+    .forEach(feature => extendMapBounds(bounds, feature.geometry?.coordinates));
+  if (!bounds.isEmpty()) {
+    instance.fitBounds(bounds, {
+      padding: Number(fit?.padding || 42),
+      duration: 0,
+      maxZoom: Number(fit?.max_zoom || 14),
+    });
+  }
 }
 
 function extendMapBounds(bounds, coordinates) {
@@ -627,6 +708,12 @@ function renderCharts(items, wrap) {
       wrap.appendChild(card);
       return;
     }
+    if (spec.note) {
+      const note = document.createElement("p");
+      note.className = "chart-note";
+      note.textContent = spec.note;
+      card.appendChild(note);
+    }
     const chartWrap = document.createElement("div");
     chartWrap.className = "chart-wrap";
     const canvas = document.createElement("canvas");
@@ -636,19 +723,29 @@ function renderCharts(items, wrap) {
     card.appendChild(chartWrap);
     wrap.appendChild(card);
     const isPie = spec.type === "pie";
+    const numericX = Array.isArray(spec.x_values)
+      && spec.x_values.length === (spec.labels || []).length;
+    const xTicks = Array.isArray(spec.x_ticks) ? spec.x_ticks : [];
+    const xTickValues = xTicks.map(tick => Number(tick.value)).filter(Number.isFinite);
     const instance = new Chart(canvas, {
       type: isPie ? "pie" : spec.type === "bar" ? "bar" : "line",
       data: {
-        labels: spec.labels || [],
+        labels: numericX ? undefined : (spec.labels || []),
         datasets: (spec.series || []).map((series, index) => ({
           label: series.name,
-          data: series.values,
-          borderColor: colors[(chartIndex + index) % colors.length],
+          data: numericX
+            ? spec.x_values.map((x, valueIndex) => ({ x, y: series.values[valueIndex] }))
+            : series.values,
+          borderColor: spec.diverging ? "#607580" : colors[(chartIndex + index) % colors.length],
           backgroundColor: isPie
             ? (spec.labels || []).map((_, colorIndex) => `${colors[(chartIndex + colorIndex) % colors.length]}cc`)
             : `${colors[(chartIndex + index) % colors.length]}99`,
+          pointBackgroundColor: spec.diverging
+            ? (series.values || []).map(value => value > 0 ? "#c92a2a" : value < 0 ? "#2b8a3e" : "#607580")
+            : undefined,
+          pointBorderColor: spec.diverging ? "#ffffff" : undefined,
           borderWidth: 2,
-          pointRadius: spec.type === "bar" ? 0 : 2,
+          pointRadius: spec.type === "bar" ? 0 : spec.diverging ? 4 : 2,
           tension: 0.15,
         })),
       },
@@ -656,10 +753,40 @@ function renderCharts(items, wrap) {
         responsive: true,
         maintainAspectRatio: false,
         interaction: { mode: "index", intersect: false },
-        plugins: { legend: { position: "bottom" } },
+        plugins: {
+          legend: { position: "bottom" },
+          tooltip: numericX ? {
+            callbacks: {
+              title: items => spec.point_labels?.[items[0]?.dataIndex] || "Route section",
+            },
+          } : undefined,
+        },
         scales: isPie ? undefined : {
-          x: { title: { display: Boolean(spec.x_label), text: spec.x_label } },
-          y: { beginAtZero: spec.type === "bar", title: { display: Boolean(spec.y_label), text: spec.y_label } },
+          x: {
+            type: numericX ? "linear" : undefined,
+            min: numericX && xTickValues.length ? Math.min(...xTickValues) : undefined,
+            max: numericX && xTickValues.length ? Math.max(...xTickValues) : undefined,
+            title: { display: Boolean(spec.x_label), text: spec.x_label },
+            afterBuildTicks: numericX && xTicks.length
+              ? scale => { scale.ticks = xTicks.map(tick => ({ value: Number(tick.value) })); }
+              : undefined,
+            ticks: numericX ? {
+              autoSkip: true,
+              maxTicksLimit: 12,
+              minRotation: 35,
+              maxRotation: 55,
+              callback: value => {
+                const tick = xTicks.find(item => Number(item.value) === Number(value));
+                if (!tick) return `${Number(value).toFixed(1)} mi`;
+                const label = String(tick.label || "Stop");
+                return [`${label.slice(0, 24)}${label.length > 24 ? "…" : ""}`, `${Number(value).toFixed(1)} mi`];
+              },
+            } : undefined,
+          },
+          y: {
+            beginAtZero: Boolean(spec.include_zero) || spec.type === "bar",
+            title: { display: Boolean(spec.y_label), text: spec.y_label },
+          },
         },
       },
     });

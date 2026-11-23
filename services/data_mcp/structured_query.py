@@ -249,9 +249,9 @@ def resolve_query_dates(
     assumed = start_date is None and end_date is None
     if assumed:
         start_date, end_date = default_analysis_window(today)
-        basis = "seven_day_period_ending_yesterday"
+        basis = "four_week_period_ending_yesterday"
         disclosure = (
-            "No timeframe was provided, so this exploratory query uses the seven-day period "
+            "No timeframe was provided, so this exploratory query uses the four-week period "
             f"ending yesterday: {start_date} through {end_date}."
         )
     else:

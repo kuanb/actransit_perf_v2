@@ -152,6 +152,17 @@
       }]
     },
     {
+      "id": "segment_slowdown_and_catchup_single_call",
+      "critical": true,
+      "turns": [{
+        "prompt": "Show me the section of Route 51A with the greatest slowdown and the section where the most catch-up occurs.",
+        "expected_calls": [{"name": "get_route_segment_performance_map", "arguments": {"route_id": "51A", "metric": "median_schedule_loss"}}],
+        "required_artifacts": {"maps": 2, "charts": ["line"], "chart_count": 2},
+        "answer_contains_any": ["catch-up", "caught up", "recovered"],
+        "max_calls": 1
+      }]
+    },
+    {
       "id": "metric_definition",
       "turns": [{
         "prompt": "What does On Time Service Delivered mean?",

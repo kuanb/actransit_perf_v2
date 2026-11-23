@@ -75,7 +75,7 @@ class TransitData:
     def __init__(self) -> None:
         self.project_id = os.environ.get("PROJECT_ID", "transit-203605")
         self.bucket_name = os.environ.get("CACHE_BUCKET", f"{self.project_id}-actransit-cache")
-        self.maximum_bytes_billed = int(os.environ.get("BQ_MAXIMUM_BYTES_BILLED", str(100 * 1024 * 1024)))
+        self.maximum_bytes_billed = int(os.environ.get("BQ_MAXIMUM_BYTES_BILLED", str(512 * 1024 * 1024)))
         self.storage = storage.Client(project=self.project_id)
         self.bucket = self.storage.bucket(self.bucket_name)
         self.bigquery = bigquery.Client(project=self.project_id, location=os.environ.get("BQ_LOCATION", "us-west1"))
@@ -577,38 +577,92 @@ class TransitData:
                 "to_stop_id": to_stop_id,
                 "to_stop_name": (stops.get(to_stop_id) or {}).get("stop_name") or to_stop_id,
                 "metric_value": round(value, 1),
-                "metric_display": format_map_value(value, unit),
+                "metric_display": (
+                    f"{value:+.1f} min"
+                    if metric.endswith("schedule_loss")
+                    else format_map_value(value, unit)
+                ),
                 "observations": int(row.get("observations") or 0),
             }
+            if metric.endswith("schedule_loss"):
+                normalized["change_kind"] = (
+                    "Falling behind"
+                    if value > 0
+                    else "Catching up"
+                    if value < 0
+                    else "No change"
+                )
             grouped[direction].append(normalized)
             ranked.append(normalized)
         if not ranked:
             raise ValueError(f"Route {route_id} has no mapped segment observations in the selected period")
 
         style = map_style(metric, [row["metric_value"] for row in ranked])
-        maps = [
-            build_segment_performance_map(
-                route_id,
-                route,
-                direction,
-                grouped[direction],
-                label,
-                style,
-                100 - index,
+        charts = [
+            chart
+            for direction in sorted(grouped)
+            if (
+                chart := build_segment_profile_chart(
+                    route_id,
+                    route,
+                    direction,
+                    grouped[direction],
+                    label,
+                    unit,
+                )
             )
-            for index, direction in enumerate(sorted(grouped))
         ]
-        reverse = metric != "median_speed"
-        ranked.sort(key=lambda row: row["metric_value"], reverse=reverse)
-        leaders = ", ".join(
-            f"{row['direction_name']}, {row['from_stop_name']} to {row['to_stop_name']} ({row['metric_display']})"
-            for row in ranked[:5]
-        )
+        extra_warnings = []
+        if metric == "median_schedule_loss":
+            slowdowns = sorted(
+                (row for row in ranked if row["metric_value"] > 0),
+                key=lambda row: row["metric_value"],
+                reverse=True,
+            )
+            catchups = sorted(
+                (row for row in ranked if row["metric_value"] < 0),
+                key=lambda row: row["metric_value"],
+            )
+            maps = []
+            contexts = []
+            if slowdowns:
+                maps.append(build_segment_hotspot_map(route_id, route, slowdowns[0], "slowdown", 100))
+                contexts.append(f"Greatest median schedule loss: {segment_context(slowdowns[0])}")
+            else:
+                contexts.append("No section had a positive median schedule change")
+            if catchups:
+                maps.append(build_segment_hotspot_map(route_id, route, catchups[0], "catchup", 99))
+                contexts.append(f"Greatest median catch-up: {segment_context(catchups[0])}")
+            else:
+                contexts.append("No section had a negative median schedule change")
+                extra_warnings.append(
+                    "No section had a negative median schedule change in the selected period, so no catch-up hotspot map is shown."
+                )
+            ranked_rows = slowdowns[:10] + catchups[:10]
+            answer_context = f"Route {route_id}. " + ". ".join(contexts) + "."
+        else:
+            maps = [
+                build_segment_performance_map(
+                    route_id,
+                    route,
+                    direction,
+                    grouped[direction],
+                    label,
+                    style,
+                    100 - index,
+                )
+                for index, direction in enumerate(sorted(grouped))
+            ]
+            reverse = metric != "median_speed"
+            ranked.sort(key=lambda row: row["metric_value"], reverse=reverse)
+            ranked_rows = ranked[:20]
+            leaders = ", ".join(segment_context(row) for row in ranked[:5])
+            answer_context = f"Route {route_id} {label.lower()} is most notable on {leaders}."
         return tool_result(
-            answer_context=f"Route {route_id} {label.lower()} is most notable on {leaders}.",
+            answer_context=answer_context,
             timeframe=resolved.timeframe,
             maps=maps,
-            charts=[],
+            charts=charts,
             tables=[
                 {
                     "title": f"Route {route_id} stop-to-stop {label.lower()}",
@@ -616,10 +670,15 @@ class TransitData:
                         {"key": "direction_name", "label": "Direction"},
                         {"key": "from_stop_name", "label": "From"},
                         {"key": "to_stop_name", "label": "To"},
+                        *(
+                            [{"key": "change_kind", "label": "Schedule change"}]
+                            if metric.endswith("schedule_loss")
+                            else []
+                        ),
                         {"key": "metric_display", "label": label},
                         {"key": "observations", "label": "Observed trips"},
                     ],
-                    "rows": ranked[:20],
+                    "rows": ranked_rows,
                 }
             ],
             sources=[
@@ -627,8 +686,10 @@ class TransitData:
                 processed_gtfs_source(route_id, route),
             ],
             warnings=resolved.warnings
+            + extra_warnings
             + [
                 "Sections run between consecutive scheduled stops. These observations cannot isolate delay at a particular turn or intersection inside a section.",
+                "Schedule change is the change in arrival delay from one stop to the next: positive values mean the bus fell further behind, while negative values mean it caught up.",
                 "Longer sections naturally have longer absolute travel times; time added versus schedule or median speed is better for comparing differently sized sections.",
                 "Map geometry and stop locations use the current processed GTFS feed; the performance values use the selected service dates.",
             ],
@@ -639,12 +700,7 @@ class TransitData:
         start_date: str | None,
         end_date: str | None,
     ):
-        resolved = resolve_daily_dates(self.published_dates(), start_date, end_date)
-        start = date.fromisoformat(str(resolved.timeframe["start_date"]))
-        end = date.fromisoformat(str(resolved.timeframe["end_date"]))
-        if (end - start).days > 6:
-            raise ValueError("Route maps are limited to seven calendar days")
-        return resolved
+        return resolve_daily_dates(self.published_dates(), start_date, end_date)
 
     def query_stop_map_stats(
         self,
@@ -1405,7 +1461,7 @@ class TransitData:
             start_date, end_date = default_analysis_window()
             assumed = True
             disclosure = (
-                "No timeframe was provided, so this hourly profile uses the seven-day period ending yesterday: "
+                "No timeframe was provided, so this hourly profile uses the four-week period ending yesterday: "
                 f"{start_date} through {end_date}."
             )
             rows = self.query_hourly_profile(route_id, start_date, end_date)
@@ -1450,7 +1506,7 @@ class TransitData:
                 "start_date": start_date,
                 "end_date": end_date,
                 "assumed": assumed,
-                "basis": "seven_day_period_ending_yesterday" if assumed else "user_supplied_or_interpreted_dates",
+                "basis": "four_week_period_ending_yesterday" if assumed else "user_supplied_or_interpreted_dates",
                 "disclosure": disclosure,
             },
             charts=[
@@ -2064,6 +2120,224 @@ def build_segment_performance_map(
             {"property": "observations", "label": "Observed trips"},
         ],
     }
+
+
+def segment_context(row: dict[str, Any]) -> str:
+    return (
+        f"{row['direction_name']}, {row['from_stop_name']} → {row['to_stop_name']} "
+        f"({row['metric_display']})"
+    )
+
+
+def build_segment_hotspot_map(
+    route_id: str,
+    route: dict[str, Any],
+    row: dict[str, Any],
+    hotspot_kind: str,
+    priority: int,
+) -> dict[str, Any]:
+    direction_id = int(row["direction_id"])
+    route_features, _ = route_direction_features(route_id, route, direction_id)
+    coordinates = route_pair_geometries(route, direction_id).get(
+        (row["from_stop_id"], row["to_stop_id"])
+    )
+    stops = route.get("stops") or {}
+    if not coordinates:
+        from_stop = stops[row["from_stop_id"]]
+        to_stop = stops[row["to_stop_id"]]
+        coordinates = [
+            [float(from_stop["lon"]), float(from_stop["lat"])],
+            [float(to_stop["lon"]), float(to_stop["lat"])],
+        ]
+    color = "#c92a2a" if hotspot_kind == "slowdown" else "#2b8a3e"
+    kind_label = "Greatest slowdown" if hotspot_kind == "slowdown" else "Greatest catch-up"
+    features = [
+        *route_features,
+        {
+            "type": "Feature",
+            "geometry": {"type": "LineString", "coordinates": coordinates},
+            "properties": {
+                "feature_kind": "segment",
+                "is_focus": True,
+                "has_metric": True,
+                "highlight_kind": hotspot_kind,
+                "highlight_color": color,
+                "name": f"{row['from_stop_name']} → {row['to_stop_name']}",
+                **row,
+            },
+        },
+    ]
+    for role, stop_id, stop_name in (
+        ("from", row["from_stop_id"], row["from_stop_name"]),
+        ("to", row["to_stop_id"], row["to_stop_name"]),
+    ):
+        stop = stops[stop_id]
+        features.append(
+            {
+                "type": "Feature",
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [float(stop["lon"]), float(stop["lat"])],
+                },
+                "properties": {
+                    "feature_kind": "stop",
+                    "is_focus": True,
+                    "focus_role": role,
+                    "name": stop_name,
+                },
+            }
+        )
+    features.append(
+        {
+            "type": "Feature",
+            "geometry": {
+                "type": "Point",
+                "coordinates": coordinates[len(coordinates) // 2],
+            },
+            "properties": {
+                "feature_kind": "annotation",
+                "is_focus": True,
+                "label": f"{kind_label}\n{row['metric_display']}",
+            },
+        }
+    )
+    return {
+        "priority": priority,
+        "title": (
+            f"Route {route_id}: {kind_label.lower()} — "
+            f"{row['from_stop_name']} → {row['to_stop_name']}"
+        ),
+        "description": (
+            f"{row['direction_name']}. The highlighted stop-to-stop section is buffered for emphasis; "
+            "the surrounding line shows the current scheduled route pattern."
+        ),
+        "geojson": {"type": "FeatureCollection", "features": features},
+        "style": {
+            "target": "segment",
+            "property": "metric_value",
+            "stops": [
+                {
+                    "value": row["metric_value"],
+                    "color": color,
+                    "label": f"{kind_label}: {row['metric_display']}",
+                }
+            ],
+            "no_data_color": "#a8b2bd",
+            "value_label": "Median change in schedule delay",
+            "focus_only": True,
+        },
+        "fit": {
+            "property": "is_focus",
+            "value": True,
+            "padding": 88,
+            "max_zoom": 15.5,
+        },
+        "popup_fields": [
+            {"property": "from_stop_name", "label": "From"},
+            {"property": "to_stop_name", "label": "To"},
+            {"property": "metric_display", "label": "Median schedule change"},
+            {"property": "observations", "label": "Observed trips"},
+        ],
+    }
+
+
+def build_segment_profile_chart(
+    route_id: str,
+    route: dict[str, Any],
+    direction_id: int,
+    stats: list[dict[str, Any]],
+    label: str,
+    unit: str,
+) -> dict[str, Any] | None:
+    stop_times = representative_direction_stop_times(route, direction_id)
+    if len(stop_times) < 2:
+        return None
+    rows = {
+        (row["from_stop_id"], row["to_stop_id"]): row
+        for row in stats
+    }
+    stops = route.get("stops") or {}
+    x_values = []
+    point_labels = []
+    values = []
+    for previous, current in zip(stop_times, stop_times[1:]):
+        pair = (str(previous.get("stop_id")), str(current.get("stop_id")))
+        row = rows.get(pair)
+        if not row:
+            continue
+        start_distance = float(previous.get("dist_along_route_m") or 0)
+        end_distance = float(current.get("dist_along_route_m") or start_distance)
+        x_values.append(round((start_distance + end_distance) / 2 / 1609.344, 2))
+        point_labels.append(f"{row['from_stop_name']} → {row['to_stop_name']}")
+        values.append(row["metric_value"])
+    if not values:
+        return None
+    x_ticks = []
+    for stop_time in stop_times:
+        stop_id = str(stop_time.get("stop_id"))
+        stop = stops.get(stop_id) or {}
+        x_ticks.append(
+            {
+                "value": round(float(stop_time.get("dist_along_route_m") or 0) / 1609.344, 2),
+                "label": stop.get("stop_name") or stop_id,
+            }
+        )
+    direction_name = route_direction_details(route, direction_id)["name"]
+    schedule_change = "versus schedule" in label.lower()
+    return {
+        "type": "line",
+        "priority": 90,
+        "title": f"Route {route_id}: {direction_name} — {label.lower()} by route distance",
+        "x_label": "Distance from the representative origin (miles)",
+        "y_label": "Minutes (+ falling behind, − catching up)" if schedule_change else unit.title(),
+        "labels": point_labels,
+        "x_values": x_values,
+        "x_ticks": x_ticks,
+        "point_labels": point_labels,
+        "include_zero": schedule_change,
+        "diverging": schedule_change,
+        "series": [{"name": label, "values": values}],
+        "note": (
+            "Each point is a stop-to-stop section positioned by its midpoint along the current representative GTFS pattern."
+        ),
+    }
+
+
+def representative_direction_stop_times(
+    route: dict[str, Any],
+    direction_id: int,
+) -> list[dict[str, Any]]:
+    trips = [
+        trip
+        for trip in (route.get("trips") or {}).values()
+        if int(trip.get("direction_id") or 0) == direction_id
+        and len(trip.get("stop_times") or []) >= 2
+    ]
+    if not trips:
+        return []
+    direction = route_direction_details(route, direction_id)
+    endpoint_matches = [
+        trip
+        for trip in trips
+        if str(trip["stop_times"][0].get("stop_id")) == direction.get("origin_stop_id")
+        and str(trip["stop_times"][-1].get("stop_id")) == direction.get("destination_stop_id")
+    ]
+    candidates = endpoint_matches or trips
+    sequence_counts = Counter(
+        tuple(str(stop_time.get("stop_id")) for stop_time in trip.get("stop_times") or [])
+        for trip in candidates
+    )
+    selected_sequence = sorted(
+        sequence_counts,
+        key=lambda sequence: (-sequence_counts[sequence], -len(sequence), sequence),
+    )[0]
+    selected = next(
+        trip
+        for trip in candidates
+        if tuple(str(stop_time.get("stop_id")) for stop_time in trip.get("stop_times") or [])
+        == selected_sequence
+    )
+    return list(selected.get("stop_times") or [])
 
 
 def route_pair_geometries(

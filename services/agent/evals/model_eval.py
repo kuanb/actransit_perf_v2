@@ -206,7 +206,7 @@ class FixtureGateway:
         arguments: dict[str, Any],
     ) -> dict[str, Any]:
         end_date = arguments.get("end_date") or (self.evaluation_date - timedelta(days=1)).isoformat()
-        default_days = 27 if name == "rank_route_trends" else 6
+        default_days = 0 if name == "list_scheduled_arrivals" else 27
         start_date = arguments.get("start_date") or (date.fromisoformat(end_date) - timedelta(days=default_days)).isoformat()
         timeframe = {"start_date": start_date, "end_date": end_date, "assumed": not arguments.get("start_date")}
         route = arguments.get("route_id") or "the system"
@@ -231,7 +231,12 @@ class FixtureGateway:
                 },
             }]
             if name == "get_route_segment_performance_map":
-                result["answer_context"] += " These are stop-to-stop sections and cannot isolate a particular turn or intersection."
+                result["answer_context"] += " Greatest slowdown: First → Second (+2.1 min). Greatest catch-up: Third → Fourth (-2.5 min). These are stop-to-stop sections and cannot isolate a particular turn or intersection."
+                result["maps"] = [
+                    {**result["maps"][0], "title": f"Route {route}: greatest slowdown", "style": {"target": "segment"}},
+                    {**result["maps"][0], "title": f"Route {route}: greatest catch-up", "style": {"target": "segment"}},
+                ]
+                result["charts"] = [{"type": "line"}, {"type": "line"}]
                 result["warnings"] = ["Stop-to-stop data cannot isolate a particular turn or intersection."]
         elif name == "get_metric_definition":
             result["answer_context"] = "On Time Service Delivered means an eligible scheduled stop was reached between one minute early and seven minutes late; the complement is outside rider window."

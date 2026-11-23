@@ -107,7 +107,7 @@ variable "analysis_max_follow_ups" {
 variable "analysis_bq_maximum_bytes_billed" {
   type        = number
   description = "BigQuery maximum bytes billed for each MCP query"
-  default     = 104857600
+  default     = 536870912
 }
 
 variable "github_repository" {

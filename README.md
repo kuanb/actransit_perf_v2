@@ -63,17 +63,19 @@ allowlisted table schema and accepts table, columns, typed filters, approved
 aggregates, grouping, ordering, and visualization instructions. It never accepts
 SQL, expressions, joins, arbitrary object names, or write operations. Every
 warehouse query has a mandatory completed-service-date partition, a 31-day and
-200-row cap, parameterized values, the existing 100 MiB billing limit, and the
+200-row cap, parameterized values, a 512 MiB billing limit, and the
 MCP service account's read-only IAM.
 Responses carry structured text, maps, charts, tables, data sources, and the exact
-timeframe used. Route deep dives can return multiple Mapbox maps with bounded
-GeoJSON for the current route patterns, every scheduled stop, stop-level delay,
-and stop-to-stop time or speed. The private MCP builds the SQL aggregates,
+timeframe used. Route deep dives can return Mapbox maps with bounded GeoJSON for
+the current route patterns, every scheduled stop, stop-level delay, and focused
+stop-to-stop slowdown and catch-up sections. Distance-profile charts place those
+sections along the representative route pattern. The private MCP builds the SQL aggregates,
 geometry, and styling; the model selects a typed tool and summarizes its result.
 The browser keeps the numbered question chain and follow-up composer
 inside the analysis panel while preserving every answer and its structured
 maps, charts, tables, warnings, and sources for the active thread. Answer prose
-supports safe bold, italic, underline, code, and list formatting.
+supports safe bold, italic, underline, code, list formatting, and the common
+`\rightarrow` arrow notation emitted by analysis models.
 Route service-profile answers include absolute scheduled and Dropped / not
 observed trip bars plus a 24-hour by 7-day heatmap keyed to scheduled trip starts.
 Exploratory results can also request bounded line, bar, pie, heatmap, or point-map

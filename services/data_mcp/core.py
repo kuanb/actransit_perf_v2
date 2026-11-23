@@ -188,16 +188,16 @@ def resolve_daily_dates(
         window_start, window_end = default_analysis_window(today)
         chosen = [value for value in ordered if window_start <= value <= window_end]
         if not chosen:
-            raise ValueError("No published reports exist in the default seven-day period")
-        if len(chosen) < 7:
+            raise ValueError("No published reports exist in the default four-week period")
+        if len(chosen) < 28:
             warnings.append(
-                "The default seven-day period includes dates without a published report; only published service dates were analyzed."
+                "The default four-week period includes dates without a published report; only published service dates were analyzed."
             )
         disclosure = (
-            "No timeframe was provided, so this analysis uses the seven-day period ending yesterday: "
+            "No timeframe was provided, so this analysis uses the four-week period ending yesterday: "
             f"{window_start} through {window_end}."
         )
-        basis = "seven_day_period_ending_yesterday"
+        basis = "four_week_period_ending_yesterday"
         timeframe_start = window_start
         timeframe_end = window_end
     else:
@@ -240,7 +240,7 @@ def resolve_daily_dates(
 def default_analysis_window(today: date | None = None) -> tuple[str, str]:
     current = today or datetime.now(PACIFIC).date()
     end = current - timedelta(days=1)
-    start = end - timedelta(days=6)
+    start = end - timedelta(days=27)
     return start.isoformat(), end.isoformat()
 
 

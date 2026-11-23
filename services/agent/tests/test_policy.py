@@ -1,6 +1,7 @@
 import json
 import sys
 import unittest
+from datetime import date
 from pathlib import Path
 
 
@@ -107,6 +108,20 @@ class ScopePolicyTest(unittest.TestCase):
         self.assertEqual("regular", trend_arguments["route_group"])
         self.assertEqual("week", trend_arguments["period"])
         self.assertEqual("worsened", trend_arguments["order"])
+
+    def test_four_week_prompt_repairs_partial_model_date_range(self):
+        arguments, timeframe = prepare_tool_call(
+            "get_route_segment_performance_map",
+            {"route_id": "51A", "start_date": "2026-10-24"},
+            None,
+            None,
+            "Can you try again and consider the last month of data?",
+            date(2026, 11, 23),
+        )
+
+        self.assertEqual("2026-10-26", arguments["start_date"])
+        self.assertEqual("2026-11-22", arguments["end_date"])
+        self.assertIsNone(timeframe)
 
     def test_multi_period_change_prompt_exposes_only_the_trend_ranking(self):
         prompt = "Which lines have gotten most worse over the past 4 weeks?"
@@ -297,6 +312,28 @@ class MergeResultsTest(unittest.TestCase):
         self.assertEqual(7, len(merged["charts"][1]["y_labels"]))
         self.assertNotIn("priority", merged["charts"][0])
 
+    def test_caps_route_profile_metadata_with_chart_points(self):
+        result = {
+            "charts": [
+                {
+                    "type": "line",
+                    "labels": [f"section {value}" for value in range(250)],
+                    "x_values": list(range(250)),
+                    "point_labels": [f"stop {value}" for value in range(250)],
+                    "x_ticks": [{"value": value, "label": f"stop {value}"} for value in range(250)],
+                    "series": [{"name": "Schedule change", "values": list(range(250))}],
+                }
+            ]
+        }
+
+        chart = merge_tool_results([result])["charts"][0]
+
+        self.assertEqual(200, len(chart["labels"]))
+        self.assertEqual(200, len(chart["x_values"]))
+        self.assertEqual(200, len(chart["point_labels"]))
+        self.assertEqual(200, len(chart["x_ticks"]))
+        self.assertEqual(200, len(chart["series"][0]["values"]))
+
     def test_merges_multiple_maps_and_caps_total_coordinate_count(self):
         result = {
             "maps": [
@@ -424,6 +461,8 @@ class EvalCaseTest(unittest.TestCase):
         spatial = next(case for case in cases if case["id"] == "route_51a_spatial_deep_dive")
         self.assertEqual(["stop"], spatial["turns"][0]["required_map_targets"])
         self.assertEqual(["segment"], spatial["turns"][1]["required_map_targets"])
+        self.assertEqual(2, spatial["turns"][1]["minimum_map_count"])
+        self.assertIn("catch up", spatial["turns"][1]["prompt"])
 
     def test_model_eval_covers_four_week_route_trends_as_critical(self):
         path = Path(__file__).resolve().parents[1] / "evals" / "model_comparison_cases.json"

@@ -15,8 +15,7 @@ mcp = FastMCP(
     "AC Transit performance data",
     instructions=(
         "Read-only, bounded tools for published AC Transit performance reports and observations. "
-        "When dates are omitted, tools use the seven-day period ending yesterday in America/Los_Angeles. "
-        "Route trend rankings instead default to the 28-day period ending yesterday. "
+        "When dates are omitted, tools use the four-week period ending yesterday in America/Los_Angeles. "
         "Route comparisons are service-group aware: regular Local/Rapid/Tempo, 600-series Supplementary "
         "School Service, 800-series All Nighter, and lettered Transbay routes must be analyzed separately. "
         "Prefer purpose-built tools. Use the structured query fallback only for supported questions those tools "
@@ -116,7 +115,7 @@ def compare_routes(
     start_date: str | None = None,
     end_date: str | None = None,
 ) -> dict:
-    """Compare two to five routes from the same service group using one approved metric and at most 31 calendar days. Mixed regular, 600-series school, 800-series All Nighter, and Transbay comparisons are rejected. Dates default to seven days ending yesterday."""
+    """Compare two to five routes from the same service group using one approved metric and at most 31 calendar days. Mixed regular, 600-series school, 800-series All Nighter, and Transbay comparisons are rejected. Dates default to four weeks ending yesterday."""
     return data.compare_routes(route_ids, metric, start_date, end_date)
 
 
@@ -126,7 +125,7 @@ def get_route_performance(
     start_date: str | None = None,
     end_date: str | None = None,
 ) -> dict:
-    """Summarize one route across rider-window, trip-delivery, delay, speed, bunching, and gap metrics. Dates default to seven days ending yesterday."""
+    """Summarize one route across rider-window, trip-delivery, delay, speed, bunching, and gap metrics. Dates default to four weeks ending yesterday."""
     return data.get_route_performance(route_id, start_date, end_date)
 
 
@@ -138,7 +137,7 @@ def get_route_delay_map(
     end_date: str | None = None,
     direction_id: int | None = None,
 ) -> dict:
-    """Return one styled GeoJSON map per route direction, named by its representative current GTFS endpoints and marked with start/end terminals, with stops colored by median delay, 95th-percentile delay, or delay variability. Use for questions about where buses fall behind schedule or where reliability changes along a route. Dates default to seven days ending yesterday and are limited to seven calendar days."""
+    """Return one styled GeoJSON map per route direction, named by its representative current GTFS endpoints and marked with start/end terminals, with stops colored by median delay, 95th-percentile delay, or delay variability. Use for questions about where buses fall behind schedule or where reliability changes along a route. Dates default to four weeks ending yesterday and are limited to 31 calendar days."""
     return data.get_route_delay_map(route_id, metric, start_date, end_date, direction_id)
 
 
@@ -156,7 +155,7 @@ def get_route_segment_performance_map(
     end_date: str | None = None,
     direction_id: int | None = None,
 ) -> dict:
-    """Return one styled GeoJSON map per route direction, named by its representative current GTFS endpoints and marked with start/end terminals, with stop-to-stop sections colored by time added versus schedule, observed travel time, or speed. Use for questions about slow sections or where buses spend or lose time. The data cannot isolate a particular turn or intersection. Dates default to seven days ending yesterday and are limited to seven calendar days."""
+    """Return stop-to-stop route performance with styled GeoJSON and distance-profile charts. Median schedule loss returns one focused map for the greatest slowdown and one for the greatest catch-up; negative schedule change means catch-up, so do not substitute travel time for catch-up. Other metrics return one map per direction. The data cannot isolate a particular turn or intersection. Dates default to four weeks ending yesterday and are limited to 31 calendar days."""
     return data.get_route_segment_performance_map(
         route_id,
         metric,
@@ -172,7 +171,7 @@ def get_route_service_profile(
     start_date: str | None = None,
     end_date: str | None = None,
 ) -> dict:
-    """Return daily absolute scheduled and Dropped / not observed trip counts plus a 24-hour by 7-day heatmap of dropped trips grouped by scheduled start time. Use this for questions about how many trips did not run by day or which hours and weekdays have the worst trip delivery. Dates default to seven days ending yesterday and are limited to 31 calendar days."""
+    """Return daily absolute scheduled and Dropped / not observed trip counts plus a 24-hour by 7-day heatmap of dropped trips grouped by scheduled start time. Use this for questions about how many trips did not run by day or which hours and weekdays have the worst trip delivery. Dates default to four weeks ending yesterday and are limited to 31 calendar days."""
     return data.get_route_service_profile(route_id, start_date, end_date)
 
 
@@ -181,7 +180,7 @@ def get_system_performance(
     start_date: str | None = None,
     end_date: str | None = None,
 ) -> dict:
-    """Summarize systemwide service delivery, delay, speed, bunching, and gap metrics. Dates default to seven days ending yesterday."""
+    """Summarize systemwide service delivery, delay, speed, bunching, and gap metrics. Dates default to four weeks ending yesterday."""
     return data.get_system_performance(start_date, end_date)
 
 
@@ -204,7 +203,7 @@ def rank_routes(
     limit: int = 10,
     route_group: Literal["regular", "school", "all_nighter", "transbay"] = "regular",
 ) -> dict:
-    """Rank at most ten routes within one service group using an approved metric. Defaults to regular Local/Rapid/Tempo routes; 600-series school, 800-series All Nighter, and Transbay routes require their own separate ranking. Dates default to seven days ending yesterday."""
+    """Rank at most ten routes within one service group using an approved metric. Defaults to regular Local/Rapid/Tempo routes; 600-series school, 800-series All Nighter, and Transbay routes require their own separate ranking. Dates default to four weeks ending yesterday."""
     return data.rank_routes(metric, start_date, end_date, order, limit, route_group)
 
 
@@ -237,7 +236,7 @@ def get_route_time_profile(
     start_date: str | None = None,
     end_date: str | None = None,
 ) -> dict:
-    """Return a route's bounded hourly delay or observed-arrival profile. Dates default to seven days ending yesterday."""
+    """Return a route's bounded hourly delay or observed-arrival profile. Dates default to four weeks ending yesterday."""
     return data.get_route_time_profile(route_id, metric, start_date, end_date)
 
 
@@ -343,7 +342,7 @@ def query_data(
     end_date: str | None = None,
     visualization: QueryVisualization | None = None,
 ) -> dict:
-    """Run a bounded exploratory query when no purpose-built tool fully answers the user's AC Transit question. Prefer the specialized tools because they encode public metric methodology and are usually cheaper. This fallback accepts only an allowlisted table, exact schema columns, typed filters, approved aggregates, grouping, sorting, and an optional structured visualization; it never accepts SQL, expressions, joins, or object names. Every query is limited to 31 completed service dates, 200 result rows, the server byte cap, and read-only IAM. Call describe_data first if column semantics are uncertain."""
+    """Run a bounded exploratory query when no purpose-built tool fully answers the user's AC Transit question. Prefer the specialized tools because they encode public metric methodology and are usually cheaper. This fallback accepts only an allowlisted table, exact schema columns, typed filters, approved aggregates, grouping, sorting, and an optional structured visualization; it never accepts SQL, expressions, joins, or object names. Every query is limited to 31 completed service dates, 200 result rows, the server byte cap, and read-only IAM; dates default to four weeks ending yesterday. Call describe_data first if column semantics are uncertain."""
     return data.query_data(
         table=table,
         columns=columns,

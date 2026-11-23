@@ -51,6 +51,8 @@ def prepare_tool_call(
     arguments: dict[str, Any],
     route_id: str | None,
     week_end: str | None,
+    prompt: str | None = None,
+    today: date | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any] | None]:
     if tool_name not in allowed_tool_names(route_id):
         raise ValueError(f"Tool {tool_name} is not available in this analysis scope")
@@ -86,6 +88,15 @@ def prepare_tool_call(
             raise ValueError("Route-scoped exploratory queries allow at most nine additional filters")
         filters.append({"column": "route_id", "operator": "eq", "value": route_id})
         prepared["filters"] = filters
+
+    if prompt and re.search(
+        r"\b(?:last|past|previous|prior)\s+(?:(?:4|four)\s+weeks?|(?:one\s+)?month|28\s+days?)\b",
+        prompt,
+        re.IGNORECASE,
+    ) and tool_name not in {"describe_data", "get_metric_definition", "list_scheduled_arrivals"}:
+        end = (today or date.today()) - timedelta(days=1)
+        prepared["start_date"] = (end - timedelta(days=27)).isoformat()
+        prepared["end_date"] = end.isoformat()
 
     context_timeframe = None
     if week_end and not any(prepared.get(key) for key in ("start_date", "end_date", "service_date")):
@@ -349,6 +360,12 @@ def merge_tool_results(results: list[dict[str, Any]]) -> dict[str, Any]:
         else:
             labels = list(chart.get("labels") or [])[: min(200, remaining)]
             normalized["labels"] = labels
+            if "x_values" in chart:
+                normalized["x_values"] = list(chart.get("x_values") or [])[: len(labels)]
+            if "point_labels" in chart:
+                normalized["point_labels"] = list(chart.get("point_labels") or [])[: len(labels)]
+            if "x_ticks" in chart:
+                normalized["x_ticks"] = list(chart.get("x_ticks") or [])[:200]
             normalized["series"] = []
             for series in (chart.get("series") or [])[:5]:
                 normalized["series"].append(

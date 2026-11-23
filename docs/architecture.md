@@ -315,11 +315,13 @@ removed before those limits are applied. Policy caps map payloads at 400 feature
 coordinates total, chart payloads at 500 points or heatmap cells, and tables at
 250 rows each.
 
-Map analysis is limited to seven calendar days and uses only deduplicated,
-non-stale observed arrivals. Each direction is a separate map. Stop maps include
-the current scheduled route patterns and every stop in that direction, including
-no-data stops. Section maps color the shape between consecutive scheduled stops.
-They can identify a slow section or time added versus schedule, but cannot
+Map analysis is limited to 31 calendar days and uses only deduplicated,
+non-stale observed arrivals. Stop maps use one map per direction and include the
+current scheduled route patterns and every stop in that direction, including
+no-data stops. General section maps color the shape between consecutive scheduled stops.
+Median schedule-change analysis instead returns focused slowdown and catch-up
+hotspot maps plus distance-profile charts for each representative direction.
+It can identify a slow section or time added versus schedule, but cannot
 attribute that time to one turn, signal, or intersection within the section.
 
 ### Missing timeframe policy
@@ -329,12 +331,12 @@ does not provide a complete timeframe:
 
 | Question shape | Default |
 |---|---|
-| route comparison, route summary, snapshot ranking, or system summary | seven calendar days ending yesterday in Pacific time |
+| route comparison, route summary, snapshot ranking, or system summary | 28 calendar days ending yesterday in Pacific time |
 | route trend ranking | 28 calendar days ending yesterday in Pacific time |
-| hourly route profile | seven calendar days ending yesterday in Pacific time |
-| route stop or section map | seven calendar days ending yesterday in Pacific time |
+| hourly route profile | 28 calendar days ending yesterday in Pacific time |
+| route stop or section map | 28 calendar days ending yesterday in Pacific time |
 | scheduled-arrival list | 06:00–10:00 Pacific yesterday |
-| structured-query fallback | seven completed service dates ending yesterday in Pacific time |
+| structured-query fallback | 28 completed service dates ending yesterday in Pacific time |
 | question opened from a route page | the Sunday–Saturday week displayed on that page; arrival lists use its ending service date |
 
 Each tool marks the timeframe as assumed or explicit and returns a human-readable

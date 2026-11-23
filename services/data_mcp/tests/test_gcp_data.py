@@ -449,7 +449,18 @@ class RouteMapTest(unittest.TestCase):
                 "p50_travel_time_s": 360,
                 "p95_travel_time_s": 600,
                 "p50_speed_mps": 4.0,
-            }
+            },
+            {
+                "direction_id": 1,
+                "from_stop_id": "b",
+                "to_stop_id": "a",
+                "observations": 12,
+                "p50_schedule_loss_s": -60,
+                "p95_schedule_loss_s": 120,
+                "p50_travel_time_s": 300,
+                "p95_travel_time_s": 540,
+                "p50_speed_mps": 4.5,
+            },
         ]
 
         result = transit.get_route_segment_performance_map(
@@ -459,11 +470,11 @@ class RouteMapTest(unittest.TestCase):
             "2026-11-08",
         )
 
-        self.assertEqual(1, len(result["maps"]))
+        self.assertEqual(2, len(result["maps"]))
         map_result = result["maps"][0]
         self.assertEqual("segment", map_result["style"]["target"])
         self.assertEqual(
-            "Route 1T: First → Second — median time added versus schedule by section",
+            "Route 1T: greatest slowdown — First → Second",
             map_result["title"],
         )
         segment = next(
@@ -473,11 +484,20 @@ class RouteMapTest(unittest.TestCase):
         )
         self.assertGreaterEqual(len(segment["geometry"]["coordinates"]), 2)
         self.assertEqual(1.5, segment["properties"]["metric_value"])
+        self.assertTrue(segment["properties"]["is_focus"])
         self.assertTrue(
             any(
-                feature["properties"]["feature_kind"] == "terminal"
+                feature["properties"]["feature_kind"] == "annotation"
                 for feature in map_result["geojson"]["features"]
             )
+        )
+        self.assertEqual("is_focus", map_result["fit"]["property"])
+        self.assertEqual(2, len(result["charts"]))
+        self.assertEqual([0.62], result["charts"][0]["x_values"])
+        self.assertIn("Greatest median catch-up", result["answer_context"])
+        self.assertEqual(
+            ["Falling behind", "Catching up"],
+            [row["change_kind"] for row in result["tables"][0]["rows"]],
         )
 
     def test_direction_name_uses_most_common_current_gtfs_terminals(self):
@@ -505,12 +525,18 @@ class RouteMapTest(unittest.TestCase):
         self.assertEqual("a", direction["origin_stop_id"])
         self.assertEqual("b", direction["destination_stop_id"])
 
-    def test_maps_reject_more_than_seven_calendar_days(self):
+    def test_maps_allow_31_calendar_days_and_reject_more(self):
         transit = self.transit()
-        transit.published_dates = lambda: ["2026-11-01", "2026-11-08"]
+        transit.published_dates = lambda: [
+            (date(2026, 10, 9) + timedelta(days=offset)).isoformat()
+            for offset in range(31)
+        ]
 
-        with self.assertRaisesRegex(ValueError, "seven calendar days"):
-            transit.get_route_delay_map("1T", start_date="2026-11-01", end_date="2026-11-08")
+        resolved = transit.resolve_map_dates("2026-10-09", "2026-11-08")
+
+        self.assertEqual(31, len(resolved.dates))
+        with self.assertRaisesRegex(ValueError, "31 calendar days"):
+            transit.resolve_map_dates("2026-10-08", "2026-11-08")
 
     def test_spatial_query_uses_only_selected_published_dates(self):
         class FakeParameter:

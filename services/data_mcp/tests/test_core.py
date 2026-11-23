@@ -1,6 +1,6 @@
 import sys
 import unittest
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 
@@ -21,19 +21,22 @@ from core import (
 
 
 class ResolveDatesTest(unittest.TestCase):
-    def test_defaults_to_seven_days_ending_yesterday_and_discloses_assumption(self):
-        dates = [f"2026-10-{day:02d}" for day in range(1, 11)]
+    def test_defaults_to_four_weeks_ending_yesterday_and_discloses_assumption(self):
+        dates = [
+            (date(2026, 9, 13) + timedelta(days=offset)).isoformat()
+            for offset in range(28)
+        ]
         resolved = resolve_daily_dates(dates, None, None, date(2026, 10, 11))
 
-        self.assertEqual([f"2026-10-{day:02d}" for day in range(4, 11)], resolved.dates)
-        self.assertEqual("2026-10-04", resolved.timeframe["start_date"])
+        self.assertEqual(dates, resolved.dates)
+        self.assertEqual("2026-09-13", resolved.timeframe["start_date"])
         self.assertEqual("2026-10-10", resolved.timeframe["end_date"])
         self.assertTrue(resolved.timeframe["assumed"])
-        self.assertIn("seven-day period ending yesterday", resolved.timeframe["disclosure"])
+        self.assertIn("four-week period ending yesterday", resolved.timeframe["disclosure"])
 
-    def test_default_window_is_seven_calendar_days(self):
+    def test_default_window_is_28_calendar_days(self):
         self.assertEqual(
-            ("2026-10-29", "2026-11-04"),
+            ("2026-10-08", "2026-11-04"),
             default_analysis_window(date(2026, 11, 5)),
         )
 

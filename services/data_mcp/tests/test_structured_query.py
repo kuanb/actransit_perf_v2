@@ -103,7 +103,7 @@ class StructuredQueryCompilerTest(unittest.TestCase):
     def test_date_scope_defaults_and_caps_completed_days(self):
         resolved = resolve_query_dates(None, None, date(2026, 11, 20))
 
-        self.assertEqual(("2026-11-13", "2026-11-19"), (resolved.start_date, resolved.end_date))
+        self.assertEqual(("2026-10-23", "2026-11-19"), (resolved.start_date, resolved.end_date))
         self.assertTrue(resolved.timeframe["assumed"])
         with self.assertRaisesRegex(ValueError, "31 calendar days"):
             resolve_query_dates("2026-10-01", "2026-11-01", date(2026, 11, 20))

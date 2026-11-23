@@ -539,6 +539,13 @@ body {
   font-size: 14px;
 }
 
+.chart-note {
+  margin: -6px 0 10px;
+  color: #58707d;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .chart-wrap {
   position: relative;
   height: 280px;
