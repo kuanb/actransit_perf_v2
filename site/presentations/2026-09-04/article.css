@@ -44,6 +44,8 @@ h1 { max-width: 1020px; margin: 0; font-size: clamp(45px, 7vw, 78px); letter-spa
 .table-wrap table { width: 100%; min-width: 820px; border-collapse: collapse; font-size: 14px; line-height: 1.4; }
 .compact-table { width: min(900px, 100%); }
 .compact-table table { min-width: 680px; }
+.timeline-table td:first-child { width: 145px; white-space: nowrap; }
+.timeline-table td:last-child { width: 220px; }
 th, td { padding: 14px 15px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
 th { color: var(--muted); background: #f1ece3; font-size: 11px; letter-spacing: .045em; text-transform: uppercase; }
 tbody tr:last-child td { border-bottom: 0; }

@@ -1,0 +1,11 @@
+day_type,period,scheduled_trips,observed_running,dropped_not_observed,observed_pct
+weekday,morning,1056,809,247,76.6
+weekday,midday,1320,1044,276,79.1
+weekday,afternoon,1056,755,301,71.5
+weekday,evening,880,597,283,67.8
+weekday,owl,550,344,206,62.5
+weekend,morning,432,318,114,73.6
+weekend,midday,540,387,153,71.7
+weekend,afternoon,432,254,178,58.8
+weekend,evening,360,174,186,48.3
+weekend,owl,216,121,95,56
